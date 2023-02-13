@@ -12,6 +12,9 @@ if ! command -v wget > /dev/null 2>&1; then
 fi
 echo "deb http://download.proxmox.com/debian/pve buster pve-no-subscription" > /etc/apt/sources.list.d/pve-install-repo.list
 wget http://download.proxmox.com/debian/proxmox-release-bullseye.gpg -O /etc/apt/trusted.gpg.d/proxmox-release-bullseye.gpg
+wget http://download.proxmox.com/debian/proxmox-release-buster.gpg -O /etc/apt/trusted.gpg.d/proxmox-release-buster.gpg
+apt-key add /etc/apt/trusted.gpg.d/proxmox-release-buster.gpg
+apt-key add /etc/apt/trusted.gpg.d/proxmox-release-bullseye.gpg
 apt-get update
 apt-get install debian-keyring debian-archive-keyring -y
 apt-get update
