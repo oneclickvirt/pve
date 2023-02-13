@@ -16,6 +16,7 @@ fi
 curl -L https://raw.githubusercontent.com/spiritLHLS/one-click-installation-script/main/check_sudo.sh -o check_sudo.sh && chmod +x check_sudo.sh && bash check_sudo.sh > /dev/null 2>&1
 # sysctl -w net.ipv6.conf.all.disable_ipv6=1
 # sysctl -w net.ipv6.conf.default.disable_ipv6=1
+
 # 修改 /etc/hosts
 ip=$(curl -s ipv4.ip.sb)
 line_number=$(tac /etc/hosts | grep -n "^127\.0\.0\.1" | head -n 1 | awk -F: '{print $1}')
@@ -26,6 +27,18 @@ ip_address=$(hostname -i)
 if grep -q "^$ip_address" /etc/hosts && ! grep -q "$hostname" /etc/hosts; then
   sed -i "/^$ip_address/s/^/#/" /etc/hosts
 fi
+# 修改 /etc/cloud/templates/hosts.debian.tmpl
+ip=$(curl -s ipv4.ip.sb)
+line_number=$(tac /etc/cloud/templates/hosts.debian.tmpl | grep -n "^127\.0\.0\.1" | head -n 1 | awk -F: '{print $1}')
+sed -i "${line_number} a $ip pve.proxmox.com pve" /etc/cloud/templates/hosts.debian.tmpl
+sed -i '/127.0.0.1 localhost/d' /etc/cloud/templates/hosts.debian.tmpl
+hostname=$(cat /etc/hostname)
+ip_address=$(hostname -i)
+if grep -q "^$ip_address" /etc/cloud/templates/hosts.debian.tmpl && ! grep -q "$hostname" /etc/cloud/templates/hosts.debian.tmpl; then
+  sed -i "/^$ip_address/s/^/#/" /etc/cloud/templates/hosts.debian.tmpl
+fi
+
+# 再次预检查 
 apt-get install gnupg -y
 if ! nc -z localhost 7789; then
   iptables -A INPUT -p tcp --dport 7789 -j ACCEPT
