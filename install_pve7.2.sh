@@ -10,6 +10,13 @@ fi
 if ! command -v wget > /dev/null 2>&1; then
       apt-get install -y wget
 fi
+if ! command -v curl > /dev/null 2>&1; then
+      apt-get install -y curl
+fi
+
+ip=$(curl -s ip.sb)
+echo "$ip pve.proxmox.com pve" >> /etc/hosts
+
 version=$(lsb_release -cs)
 if [ "$version" == "jessie" ]; then
   repo_url="deb https://mirrors.tuna.tsinghua.edu.cn/proxmox/debian/pve jessie pve-no-subscription"
@@ -27,6 +34,7 @@ else
 fi
 # echo "deb http://download.proxmox.com/debian/pve buster pve-no-subscription" > /etc/apt/sources.list.d/pve-install-repo.list
 echo "$repo_url" >> /etc/apt/sources.list
+
 apt-get update
 apt-get install debian-keyring debian-archive-keyring -y
 apt-get autoremove
