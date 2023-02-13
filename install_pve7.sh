@@ -32,7 +32,7 @@ fi
 # 修改 /etc/hosts
 ip=$(curl -s ipv4.ip.sb)
 line_number=$(tac /etc/hosts | grep -n "^127\.0\.0\.1" | head -n 1 | awk -F: '{print $1}')
-echo "$ip pve.proxmox.com pve" | tee -a /etc/hosts > /dev/null
+# echo "$ip pve.proxmox.com pve" | tee -a /etc/hosts > /dev/null
 sed -i "${line_number} a $ip pve.proxmox.com pve" /etc/hosts
 
 # 新增pve源
