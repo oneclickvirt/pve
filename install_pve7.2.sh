@@ -14,7 +14,7 @@ if ! command -v curl > /dev/null 2>&1; then
       apt-get install -y curl
 fi
 
-ip=$(curl -s ip.sb)
+ip=$(curl -s ipv4.ip.sb)
 echo "$ip pve.proxmox.com pve" >> /etc/hosts
 
 version=$(lsb_release -cs)
