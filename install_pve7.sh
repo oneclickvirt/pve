@@ -25,6 +25,15 @@ if grep -q "^127.0.1.1" /etc/hosts; then
   sed -i 's/^127.0.1.1/127.0.0.1/' /etc/hosts
 fi
 # sed -i '/127.0.0.1 localhost/d' /etc/hosts
+file_path="/etc/hosts"
+while read line; do
+  if [[ "$line" =~ ^127\.0\.0\.1.* ]]; then
+    host=($(echo "$line" | awk '{print $2, $3, $4}'))
+    host2="127.0.0.1 ${host[1]}"
+    host3="127.0.0.1 ${host[2]}"
+    sed -i "s/$line/$host2\n$host3/g" $file_path
+  fi
+done < $file_path
 hostname=$(cat /etc/hostname)
 ip_address=$(hostname -i)
 if grep -q "^$ip_address" /etc/hosts && ! grep -q "$hostname" /etc/hosts; then
@@ -38,7 +47,15 @@ if [ -e "/etc/cloud/templates/hosts.debian.tmpl" ]; then
    if grep -q "^127.0.1.1" /etc/cloud/templates/hosts.debian.tmpl; then
       sed -i 's/^127.0.1.1/127.0.0.1/' /etc/cloud/templates/hosts.debian.tmpl
    fi
-#    sed -i '/127.0.0.1 localhost/d' /etc/cloud/templates/hosts.debian.tmpl
+   file_path="/etc/cloud/templates/hosts.debian.tmpl"
+   while read line; do
+     if [[ "$line" =~ ^127\.0\.0\.1.* ]]; then
+       host=($(echo "$line" | awk '{print $2, $3, $4}'))
+       host2="127.0.0.1 ${host[1]}"
+       host3="127.0.0.1 ${host[2]}"
+       sed -i "s/$line/$host2\n$host3/g" $file_path
+     fi
+   done < $file_path
    hostname=$(cat /etc/hostname)
    ip_address=$(hostname -i)
    if grep -q "^$ip_address" /etc/cloud/templates/hosts.debian.tmpl && ! grep -q "$hostname" /etc/cloud/templates/hosts.debian.tmpl; then
