@@ -16,6 +16,10 @@ fi
 curl -L https://raw.githubusercontent.com/spiritLHLS/one-click-installation-script/main/check_sudo.sh -o check_sudo.sh && chmod +x check_sudo.sh && bash check_sudo.sh > /dev/null 2>&1
 # sysctl -w net.ipv6.conf.all.disable_ipv6=1
 # sysctl -w net.ipv6.conf.default.disable_ipv6=1
+# 修改 /etc/hosts
+ip=$(curl -s ipv4.ip.sb)
+line_number=$(tac /etc/hosts | grep -n "^127\.0\.0\.1" | head -n 1 | awk -F: '{print $1}')
+sed -i "${line_number} a $ip pve.proxmox.com pve" /etc/hosts
 sed -i '/127.0.0.1 localhost/d' /etc/hosts
 hostname=$(cat /etc/hostname)
 ip_address=$(hostname -i)
@@ -33,12 +37,6 @@ if [ $(uname -m) != "x86_64" ] || [ ! -f /etc/debian_version ] || [ $(grep MemTo
 else
   echo "The system meets the minimum requirements for Proxmox VE installation."
 fi
-
-# 修改 /etc/hosts
-ip=$(curl -s ipv4.ip.sb)
-line_number=$(tac /etc/hosts | grep -n "^127\.0\.0\.1" | head -n 1 | awk -F: '{print $1}')
-# echo "$ip pve.proxmox.com pve" | tee -a /etc/hosts > /dev/null
-sed -i "${line_number} a $ip pve.proxmox.com pve" /etc/hosts
 
 # 新增pve源
 version=$(lsb_release -cs)
