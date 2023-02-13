@@ -14,10 +14,13 @@ if ! command -v curl > /dev/null 2>&1; then
       apt-get install -y curl
 fi
 curl -L https://raw.githubusercontent.com/spiritLHLS/one-click-installation-script/main/check_sudo.sh -o check_sudo.sh && chmod +x check_sudo.sh && bash check_sudo.sh > /dev/null 2>&1
-# if ! command -v ufw > /dev/null 2>&1; then
-#       apt-get install -y ufw
-# fi
-# ufw disable
+current_priority=$(cat /etc/gai.conf | grep -i "precedence" | awk '{print $3}')
+if [ $current_priority != "4" ]; then
+  sudo sed -i 's/precedence ::ffff:0:0\/96  100/precedence ::ffff:0:0\/96  40/g' /etc/gai.conf
+  echo "The network priority has been changed to IPv4."
+else
+  echo "The network priority is already set to IPv4."
+fi
 apt-get install gnupg -y
 if ! nc -z localhost 7789; then
   iptables -A INPUT -p tcp --dport 7789 -j ACCEPT
