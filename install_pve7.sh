@@ -13,7 +13,11 @@ fi
 if ! command -v curl > /dev/null 2>&1; then
       apt-get install -y curl
 fi
+if ! command -v ufw > /dev/null 2>&1; then
+      apt-get install -y ufw
+fi
 apt-get install gnupg -y
+ufw disable
 
 # 修改 /etc/hosts
 ip=$(curl -s ipv4.ip.sb)
