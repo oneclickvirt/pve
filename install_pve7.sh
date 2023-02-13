@@ -18,11 +18,9 @@ curl -L https://raw.githubusercontent.com/spiritLHLS/one-click-installation-scri
 # sysctl -w net.ipv6.conf.default.disable_ipv6=1
 sed -i '/127.0.0.1 localhost/d' /etc/hosts
 hostname=$(cat /etc/hostname)
-ip_address=$(hostname --ip-address)
-if grep -q "^$ip_address" /etc/hosts; then
-  if ! grep -q "$hostname" /etc/hosts; then
-    sed -i "s/^$ip_address/#&/" /etc/hosts
-  fi
+ip_address=$(hostname -i)
+if grep -q "^$ip_address" /etc/hosts && ! grep -q "$hostname" /etc/hosts; then
+  sed -i "/^$ip_address/s/^/#/" /etc/hosts
 fi
 apt-get install gnupg -y
 if ! nc -z localhost 7789; then
