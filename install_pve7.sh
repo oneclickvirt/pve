@@ -14,17 +14,6 @@ if ! command -v curl > /dev/null 2>&1; then
       apt-get install -y curl
 fi
 curl -L https://raw.githubusercontent.com/spiritLHLS/one-click-installation-script/main/check_sudo.sh -o check_sudo.sh && chmod +x check_sudo.sh && bash check_sudo.sh > /dev/null 2>&1
-ip_type=$(curl -s ip.sb | grep -oP '(?<=is )(.+)(?=\.)')
-if [ -z "$ip_type" ]; then
- echo "Error: curl request failed"
- exit 1
-fi
-if [ "$ip_type" != "IPv4" ]; then
- priority=$(grep precedence /etc/gai.conf | grep -oP '(?<=precedence ::/0 )\d+')
-fi
-if [ "$ip_type" = "IPv6" ] && [ "$priority" -lt "100" ]; then
- echo "precedence ::/0 100" > /etc/gai.conf
-fi
 sysctl -w net.ipv6.conf.all.disable_ipv6=1
 sysctl -w net.ipv6.conf.default.disable_ipv6=1
 apt-get install gnupg -y
