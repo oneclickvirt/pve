@@ -21,7 +21,10 @@ curl -L https://raw.githubusercontent.com/spiritLHLS/one-click-installation-scri
 ip=$(curl -s ipv4.ip.sb)
 line_number=$(tac /etc/hosts | grep -n "^127\.0\.0\.1" | head -n 1 | awk -F: '{print $1}')
 sed -i "${line_number} a $ip pve.proxmox.com pve" /etc/hosts
-sed -i '/127.0.0.1 localhost/d' /etc/hosts
+if grep -q "^127.0.1.1" /etc/hosts; then
+  sed -i 's/^127.0.1.1/127.0.0.1/' /etc/hosts
+fi
+# sed -i '/127.0.0.1 localhost/d' /etc/hosts
 hostname=$(cat /etc/hostname)
 ip_address=$(hostname -i)
 if grep -q "^$ip_address" /etc/hosts && ! grep -q "$hostname" /etc/hosts; then
@@ -32,7 +35,10 @@ if [ -e "/etc/cloud/templates/hosts.debian.tmpl" ]; then
    ip=$(curl -s ipv4.ip.sb)
    line_number=$(tac /etc/cloud/templates/hosts.debian.tmpl | grep -n "^127\.0\.0\.1" | head -n 1 | awk -F: '{print $1}')
    sed -i "${line_number} a $ip pve.proxmox.com pve" /etc/cloud/templates/hosts.debian.tmpl
-   sed -i '/127.0.0.1 localhost/d' /etc/cloud/templates/hosts.debian.tmpl
+   if grep -q "^127.0.1.1" /etc/cloud/templates/hosts.debian.tmpl; then
+      sed -i 's/^127.0.1.1/127.0.0.1/' /etc/cloud/templates/hosts.debian.tmpl
+   fi
+#    sed -i '/127.0.0.1 localhost/d' /etc/cloud/templates/hosts.debian.tmpl
    hostname=$(cat /etc/hostname)
    ip_address=$(hostname -i)
    if grep -q "^$ip_address" /etc/cloud/templates/hosts.debian.tmpl && ! grep -q "$hostname" /etc/cloud/templates/hosts.debian.tmpl; then
