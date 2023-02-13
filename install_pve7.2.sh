@@ -1,6 +1,8 @@
 #!/bin/bash
+#from https://github.com/spiritLHLS/pve
+# pve 7.2
 
-# Check if running as root
+
 if [ "$(id -u)" != "0" ]; then
    echo "This script must be run as root" 1>&2
    exit 1
