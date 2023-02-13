@@ -22,6 +22,12 @@ if ! nc -z localhost 7789; then
   iptables -A INPUT -p tcp --dport 7789 -j ACCEPT
   iptables-save > /etc/iptables.rules
 fi
+if [ $(uname -m) != "x86_64" ] || [ ! -f /etc/debian_version ] || [ $(grep MemTotal /proc/meminfo | awk '{print $2}') -lt 2000000 ] || [ $(grep -c ^processor /proc/cpuinfo) -lt 2 ] || [ $(ping -c 3 google.com > /dev/null 2>&1; echo $?) -ne 0 ]; then
+  echo "Error: This system does not meet the minimum requirements for Proxmox VE installation."
+  exit 1
+else
+  echo "The system meets the minimum requirements for Proxmox VE installation."
+fi
 
 # 修改 /etc/hosts
 ip=$(curl -s ipv4.ip.sb)
@@ -55,7 +61,8 @@ if [ $? -ne 0 ]; then
    apt-get install debian-keyring debian-archive-keyring -y
    apt-get update && apt-get full-upgrade
 fi
-apt-get -y install proxmox-ve postfix open-iscsi
+apt-get -y install postfix open-iscsi
+apt-get -y install proxmox-ve 
 
 # 检查pve
 result=$(journalctl -xe | grep "/etc/pve/local/pve-ssl.key: failed to load local private key (key_file or key) at /usr/share/perl5/PVE/APIServer/AnyEvent.pm line")
