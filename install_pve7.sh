@@ -51,9 +51,10 @@ echo "$repo_url" >> /etc/apt/sources.list
 
 # 下载pve
 apt-get update && apt-get full-upgrade
-apt-get install debian-keyring debian-archive-keyring -y
-apt-get autoremove
-apt-get update
+if [ $? -ne 0 ]; then
+   apt-get install debian-keyring debian-archive-keyring -y
+   apt-get update && apt-get full-upgrade
+fi
 apt-get -y install proxmox-ve postfix open-iscsi
 
 # 检查pve
