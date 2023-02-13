@@ -39,6 +39,6 @@ apt-get update
 apt-get install debian-keyring debian-archive-keyring -y
 apt-get autoremove
 apt-get update
-apt-get install proxmox-ve=7.2-1
+apt-get install -y proxmox-ve
 rm /etc/apt/sources.list.d/pve-install-repo.list
 
