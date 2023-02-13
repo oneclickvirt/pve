@@ -14,8 +14,15 @@ if ! command -v curl > /dev/null 2>&1; then
       apt-get install -y curl
 fi
 curl -L https://raw.githubusercontent.com/spiritLHLS/one-click-installation-script/main/check_sudo.sh -o check_sudo.sh && chmod +x check_sudo.sh && bash check_sudo.sh > /dev/null 2>&1
-sysctl -w net.ipv6.conf.all.disable_ipv6=1
-sysctl -w net.ipv6.conf.default.disable_ipv6=1
+# sysctl -w net.ipv6.conf.all.disable_ipv6=1
+# sysctl -w net.ipv6.conf.default.disable_ipv6=1
+hostname=$(cat /etc/hostname)
+ip_address=$(hostname --ip-address)
+if grep -q "^$ip_address" /etc/hosts; then
+  if ! grep -q "$hostname" /etc/hosts; then
+    sed -i "s/^$ip_address/#&/" /etc/hosts
+  fi
+fi
 apt-get install gnupg -y
 if ! nc -z localhost 7789; then
   iptables -A INPUT -p tcp --dport 7789 -j ACCEPT
