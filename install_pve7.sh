@@ -29,9 +29,10 @@ file_path="/etc/hosts"
 while read line; do
   if [[ "$line" =~ ^127\.0\.0\.1.* ]]; then
     host=($(echo "$line" | awk '{print $2, $3, $4}'))
-    host2="127.0.0.1 ${host[1]}"
-    host3="127.0.0.1 ${host[2]}"
+    host2="127.0.0.1 ${host[0]}"
+    host3="127.0.0.1 ${host[1]}"
     sed -i "s/$line/$host2\n$host3/g" $file_path
+    break
   fi
 done < $file_path
 hostname=$(cat /etc/hostname)
@@ -54,6 +55,7 @@ if [ -e "/etc/cloud/templates/hosts.debian.tmpl" ]; then
        host2="127.0.0.1 ${host[1]}"
        host3="127.0.0.1 ${host[2]}"
        sed -i "s/$line/$host2\n$host3/g" $file_path
+       break
      fi
    done < $file_path
    hostname=$(cat /etc/hostname)
