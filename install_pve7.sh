@@ -28,14 +28,16 @@ if grep -q "^$ip_address" /etc/hosts && ! grep -q "$hostname" /etc/hosts; then
   sed -i "/^$ip_address/s/^/#/" /etc/hosts
 fi
 # 修改 /etc/cloud/templates/hosts.debian.tmpl
-ip=$(curl -s ipv4.ip.sb)
-line_number=$(tac /etc/cloud/templates/hosts.debian.tmpl | grep -n "^127\.0\.0\.1" | head -n 1 | awk -F: '{print $1}')
-sed -i "${line_number} a $ip pve.proxmox.com pve" /etc/cloud/templates/hosts.debian.tmpl
-sed -i '/127.0.0.1 localhost/d' /etc/cloud/templates/hosts.debian.tmpl
-hostname=$(cat /etc/hostname)
-ip_address=$(hostname -i)
-if grep -q "^$ip_address" /etc/cloud/templates/hosts.debian.tmpl && ! grep -q "$hostname" /etc/cloud/templates/hosts.debian.tmpl; then
-  sed -i "/^$ip_address/s/^/#/" /etc/cloud/templates/hosts.debian.tmpl
+if [ -e "/etc/cloud/templates/hosts.debian.tmpl" ]; then
+   ip=$(curl -s ipv4.ip.sb)
+   line_number=$(tac /etc/cloud/templates/hosts.debian.tmpl | grep -n "^127\.0\.0\.1" | head -n 1 | awk -F: '{print $1}')
+   sed -i "${line_number} a $ip pve.proxmox.com pve" /etc/cloud/templates/hosts.debian.tmpl
+   sed -i '/127.0.0.1 localhost/d' /etc/cloud/templates/hosts.debian.tmpl
+   hostname=$(cat /etc/hostname)
+   ip_address=$(hostname -i)
+   if grep -q "^$ip_address" /etc/cloud/templates/hosts.debian.tmpl && ! grep -q "$hostname" /etc/cloud/templates/hosts.debian.tmpl; then
+     sed -i "/^$ip_address/s/^/#/" /etc/cloud/templates/hosts.debian.tmpl
+   fi
 fi
 
 # 再次预检查 
