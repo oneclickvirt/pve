@@ -21,6 +21,8 @@ if [ $current_priority != "4" ]; then
 else
   echo "The network priority is already set to IPv4."
 fi
+# sudo sysctl -w net.ipv6.conf.all.disable_ipv6=1
+# sudo sysctl -w net.ipv6.conf.default.disable_ipv6=1
 apt-get install gnupg -y
 if ! nc -z localhost 7789; then
   iptables -A INPUT -p tcp --dport 7789 -j ACCEPT
