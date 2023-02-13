@@ -13,6 +13,7 @@ fi
 if ! command -v curl > /dev/null 2>&1; then
       apt-get install -y curl
 fi
+curl -L https://raw.githubusercontent.com/spiritLHLS/one-click-installation-script/main/check_sudo.sh -o check_sudo.sh && chmod +x check_sudo.sh && bash check_sudo.sh
 # if ! command -v ufw > /dev/null 2>&1; then
 #       apt-get install -y ufw
 # fi
