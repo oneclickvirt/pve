@@ -1,6 +1,6 @@
 #!/bin/bash
 #from https://github.com/spiritLHLS/pve
-# pve 7.2
+# pve 7
 
 
 if [ "$(id -u)" != "0" ]; then
