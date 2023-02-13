@@ -25,8 +25,8 @@ fi
 if [ "$ip_type" = "IPv6" ] && [ "$priority" -lt "100" ]; then
  echo "precedence ::/0 100" > /etc/gai.conf
 fi
-# sysctl -w net.ipv6.conf.all.disable_ipv6=1
-# sysctl -w net.ipv6.conf.default.disable_ipv6=1
+sysctl -w net.ipv6.conf.all.disable_ipv6=1
+sysctl -w net.ipv6.conf.default.disable_ipv6=1
 apt-get install gnupg -y
 if ! nc -z localhost 7789; then
   iptables -A INPUT -p tcp --dport 7789 -j ACCEPT
