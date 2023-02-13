@@ -48,3 +48,15 @@ apt-get autoremove
 apt-get update
 apt-get -y install proxmox-ve postfix open-iscsi
 
+# 检查pve
+if ! nc -z localhost 7789; then
+  iptables -A INPUT -p tcp --dport 7789 -j ACCEPT
+  iptables-save > /etc/iptables.rules
+fi
+result=$(journalctl -xe | grep "/etc/pve/local/pve-ssl.key: failed to load local private key (key_file or key) at /usr/share/perl5/PVE/APIServer/AnyEvent.pm line")
+if [ -n "$result" ]; then
+  pvecm createcert
+  systemctl restart pve-manager
+fi
+
+
