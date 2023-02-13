@@ -10,12 +10,23 @@ fi
 if ! command -v wget > /dev/null 2>&1; then
       apt-get install -y wget
 fi
+version=$(lsb_release -cs)
+if [ "$version" == "jessie" ]; then
+  repo_url="deb https://mirrors.tuna.tsinghua.edu.cn/proxmox/debian/pve jessie pve-no-subscription"
+elif [ "$version" == "stretch" ]; then
+  repo_url="deb https://mirrors.tuna.tsinghua.edu.cn/proxmox/debian/pve stretch pve-no-subscription"
+elif [ "$version" == "buster" ]; then
+  repo_url="deb https://mirrors.tuna.tsinghua.edu.cn/proxmox/debian/pve buster pve-no-subscription"
+elif [ "$version" == "bullseye" ]; then
+  repo_url="deb https://mirrors.tuna.tsinghua.edu.cn/proxmox/debian/pve bullseye pve-no-subscription"
+  wget http://download.proxmox.com/debian/proxmox-release-bullseye.gpg -O /etc/apt/trusted.gpg.d/proxmox-release-bullseye.gpg
+  apt-key add /etc/apt/trusted.gpg.d/proxmox-release-bullseye.gpg
+else
+  echo "Error: Unsupported Debian version"
+  exit 1
+fi
 # echo "deb http://download.proxmox.com/debian/pve buster pve-no-subscription" > /etc/apt/sources.list.d/pve-install-repo.list
-echo "deb http://download.proxmox.com/debian/pve buster pve-no-subscription" >> /etc/apt/sources.list
-wget http://download.proxmox.com/debian/proxmox-release-bullseye.gpg -O /etc/apt/trusted.gpg.d/proxmox-release-bullseye.gpg
-apt-key add /etc/apt/trusted.gpg.d/proxmox-release-bullseye.gpg
-# wget http://download.proxmox.com/debian/proxmox-release-buster.gpg -O /etc/apt/trusted.gpg.d/proxmox-release-buster.gpg
-# apt-key add /etc/apt/trusted.gpg.d/proxmox-release-buster.gpg
+echo "$repo_url" >> /etc/apt/sources.list
 apt-get update
 apt-get install debian-keyring debian-archive-keyring -y
 apt-get autoremove
