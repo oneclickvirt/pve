@@ -2,7 +2,7 @@
 #from https://github.com/spiritLHLS/pve
 # pve 7
 
-
+# 前置环境安装
 if [ "$(id -u)" != "0" ]; then
    echo "This script must be run as root" 1>&2
    exit 1
@@ -15,11 +15,13 @@ if ! command -v curl > /dev/null 2>&1; then
 fi
 apt-get install gnupg -y
 
+# 修改 /etc/hosts
 ip=$(curl -s ipv4.ip.sb)
 line_number=$(tac /etc/hosts | grep -n "^127\.0\.0\.1" | head -n 1 | awk -F: '{print $1}')
 echo "$ip pve.proxmox.com pve" | tee -a /etc/hosts > /dev/null
 sed -i "${line_number} a $ip pve.proxmox.com pve" /etc/hosts
 
+# 新增pve源
 version=$(lsb_release -cs)
 if [ "$version" == "jessie" ]; then
   repo_url="deb https://mirrors.tuna.tsinghua.edu.cn/proxmox/debian/pve jessie pve-no-subscription"
@@ -37,13 +39,12 @@ else
   echo "Error: Unsupported Debian version"
   exit 1
 fi
-# echo "deb http://download.proxmox.com/debian/pve buster pve-no-subscription" > /etc/apt/sources.list.d/pve-install-repo.list
 echo "$repo_url" >> /etc/apt/sources.list
 
+# 下载pve
 apt-get update && apt-get full-upgrade
 apt-get install debian-keyring debian-archive-keyring -y
 apt-get autoremove
 apt-get update
 apt-get -y install proxmox-ve postfix open-iscsi
-# rm /etc/apt/sources.list.d/pve-install-repo.list
 
