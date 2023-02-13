@@ -13,6 +13,7 @@ fi
 if ! command -v curl > /dev/null 2>&1; then
       apt-get install -y curl
 fi
+apt-get install gnupg -y
 
 ip=$(curl -s ipv4.ip.sb)
 line_number=$(tac /etc/hosts | grep -n "^127\.0\.0\.1" | head -n 1 | awk -F: '{print $1}')
