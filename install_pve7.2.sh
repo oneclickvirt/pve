@@ -15,7 +15,9 @@ if ! command -v curl > /dev/null 2>&1; then
 fi
 
 ip=$(curl -s ipv4.ip.sb)
-echo "$ip pve.proxmox.com pve" >> /etc/hosts
+line_number=$(tac /etc/hosts | grep -n "^127\.0\.0\.1" | head -n 1 | awk -F: '{print $1}')
+echo "$ip pve.proxmox.com pve" | tee -a /etc/hosts > /dev/null
+sed -i "${line_number} a $ip pve.proxmox.com pve" /etc/hosts
 
 version=$(lsb_release -cs)
 if [ "$version" == "jessie" ]; then
@@ -24,6 +26,8 @@ elif [ "$version" == "stretch" ]; then
   repo_url="deb https://mirrors.tuna.tsinghua.edu.cn/proxmox/debian/pve stretch pve-no-subscription"
 elif [ "$version" == "buster" ]; then
   repo_url="deb https://mirrors.tuna.tsinghua.edu.cn/proxmox/debian/pve buster pve-no-subscription"
+  wget https://github.com/spiritLHLS/pve/raw/main/gpg/proxmox-release-buster.gpg -O /etc/apt/trusted.gpg.d/proxmox-release-buster.gpg
+  apt-key add /etc/apt/trusted.gpg.d/proxmox-release-buster.gpg
 elif [ "$version" == "bullseye" ]; then
   repo_url="deb https://mirrors.tuna.tsinghua.edu.cn/proxmox/debian/pve bullseye pve-no-subscription"
   wget http://download.proxmox.com/debian/proxmox-release-bullseye.gpg -O /etc/apt/trusted.gpg.d/proxmox-release-bullseye.gpg
@@ -35,10 +39,10 @@ fi
 # echo "deb http://download.proxmox.com/debian/pve buster pve-no-subscription" > /etc/apt/sources.list.d/pve-install-repo.list
 echo "$repo_url" >> /etc/apt/sources.list
 
-apt-get update
+apt-get update && apt-get full-upgrade
 apt-get install debian-keyring debian-archive-keyring -y
 apt-get autoremove
 apt-get update
-apt-get install -y proxmox-ve
-rm /etc/apt/sources.list.d/pve-install-repo.list
+apt-get -y install proxmox-ve postfix open-iscsi
+# rm /etc/apt/sources.list.d/pve-install-repo.list
 
