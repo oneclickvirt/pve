@@ -74,7 +74,7 @@ apt-get -y install proxmox-ve
 
 # 打印安装后的信息
 url="https://${ip}:8006/"
-_green "安装完毕，请打开HTTPS网页 {$url}"
+_green "安装完毕，请打开HTTPS网页 $url"
 _green "用户名、密码就是服务器所使用的用户名、密码"
 
 
