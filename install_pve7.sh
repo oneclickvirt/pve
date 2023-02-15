@@ -25,6 +25,27 @@ curl -L https://raw.githubusercontent.com/spiritLHLS/one-click-installation-scri
 # sysctl -w net.ipv6.conf.all.disable_ipv6=1
 # sysctl -w net.ipv6.conf.default.disable_ipv6=1
 
+## China_IP
+if [[ -z "${CN}" ]]; then
+  if [[ $(curl -m 10 -s https://ipapi.co/json | grep 'China') != "" ]]; then
+      _yellow "根据ipapi.co提供的信息，当前IP可能在中国"
+      read -e -r -p "是否选用中国镜像完成安装? [Y/n] " input
+      case $input in
+          [yY][eE][sS] | [yY])
+              echo "使用中国镜像"
+              CN=true
+          ;;
+          [nN][oO] | [nN])
+              echo "不使用中国镜像"
+          ;;
+          *)
+              echo "使用中国镜像"
+              CN=true
+          ;;
+      esac
+  fi
+fi
+
 # 修改 /etc/hosts
 hostnamectl set-hostname pve
 ip=$(curl -s ipv4.ip.sb)
@@ -45,21 +66,18 @@ else
 fi
 
 # 新增pve源
-version=$(lsb_release -cs)
-if [ "$version" == "jessie" ]; then
-  repo_url="deb https://mirrors.tuna.tsinghua.edu.cn/proxmox/debian/pve jessie pve-no-subscription"
-elif [ "$version" == "stretch" ]; then
-  repo_url="deb https://mirrors.tuna.tsinghua.edu.cn/proxmox/debian/pve stretch pve-no-subscription"
-elif [ "$version" == "buster" ]; then
-  repo_url="deb https://mirrors.tuna.tsinghua.edu.cn/proxmox/debian/pve buster pve-no-subscription"
-  wget https://github.com/spiritLHLS/pve/raw/main/gpg/proxmox-release-buster.gpg -O /etc/apt/trusted.gpg.d/proxmox-release-buster.gpg
-  apt-key add /etc/apt/trusted.gpg.d/proxmox-release-buster.gpg
-elif [ "$version" == "bullseye" ]; then
-  repo_url="deb https://mirrors.tuna.tsinghua.edu.cn/proxmox/debian/pve bullseye pve-no-subscription"
-else
-  _red "Error: Unsupported Debian version"
-  exit 1
-fi
+case $(lsb_release -cs) in
+  jessie|stretch|buster|bullseye)
+    repo_url="deb https://mirrors.tuna.tsinghua.edu.cn/proxmox/debian/pve ${version} pve-no-subscription"
+    if [[ -n "${CN}" ]]; then
+      repo_url="deb http://download.proxmox.com/debian/pve ${version} pve-no-subscription"
+    fi
+    ;;
+  *)
+    _red "Error: Unsupported Debian version"
+    exit 1
+    ;;
+esac
 wget http://download.proxmox.com/debian/proxmox-release-bullseye.gpg -O /etc/apt/trusted.gpg.d/proxmox-release-bullseye.gpg
 apt-key add /etc/apt/trusted.gpg.d/proxmox-release-bullseye.gpg
 echo "$repo_url" >> /etc/apt/sources.list
