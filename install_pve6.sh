@@ -56,7 +56,9 @@ apt -y install proxmox-ve postfix open-iscsi
 
 # 检测是否安装成功
 url="https://${ip}:8006/"
-if curl --output /dev/null --silent --head --fail "$url"; then
+echo "安装完毕，请打开HTTPS网页 {$url}"
+echo "用户名、密码就是服务器所使用的用户名、密码"
+if curl --output /dev/null --silent --insecure --head --fail "$url"; then
   echo "安装成功"
 else
   echo "安装失败"
