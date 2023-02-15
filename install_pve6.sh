@@ -26,6 +26,27 @@ ip=$(curl -s ipv4.ip.sb)
 echo "127.0.0.1 localhost.localdomain localhost" | tee -a /etc/hosts
 echo "${ip} pve.proxmox.com pve" | tee -a /etc/hosts
 
+## China_IP
+if [[ -z "${CN}" ]]; then
+  if [[ $(curl -m 10 -s https://ipapi.co/json | grep 'China') != "" ]]; then
+      _yellow "根据ipapi.co提供的信息，当前IP可能在中国"
+      read -e -r -p "是否选用中国镜像完成安装? [Y/n] " input
+      case $input in
+          [yY][eE][sS] | [yY])
+              echo "使用中国镜像"
+              CN=true
+          ;;
+          [nN][oO] | [nN])
+              echo "不使用中国镜像"
+          ;;
+          *)
+              echo "使用中国镜像"
+              CN=true
+          ;;
+      esac
+  fi
+fi
+
 # 再次预检查 
 apt-get install gnupg -y
 if [ $(uname -m) != "x86_64" ] || [ ! -f /etc/debian_version ] || [ $(grep MemTotal /proc/meminfo | awk '{print $2}') -lt 2000000 ] || [ $(grep -c ^processor /proc/cpuinfo) -lt 2 ] || [ $(ping -c 3 google.com > /dev/null 2>&1; echo $?) -ne 0 ]; then
@@ -36,19 +57,18 @@ else
 fi
 
 # 新增pve源
-version=$(lsb_release -cs)
-if [ "$version" == "jessie" ]; then
-  repo_url="deb https://mirrors.tuna.tsinghua.edu.cn/proxmox/debian/pve jessie pve-no-subscription"
-elif [ "$version" == "stretch" ]; then
-  repo_url="deb https://mirrors.tuna.tsinghua.edu.cn/proxmox/debian/pve stretch pve-no-subscription"
-elif [ "$version" == "buster" ]; then
-  repo_url="deb https://mirrors.tuna.tsinghua.edu.cn/proxmox/debian/pve buster pve-no-subscription"
-elif [ "$version" == "bullseye" ]; then
-  repo_url="deb https://mirrors.tuna.tsinghua.edu.cn/proxmox/debian/pve bullseye pve-no-subscription"
-else
-  _red "Error: Unsupported Debian version"
-  exit 1
-fi
+case $(lsb_release -cs) in
+  jessie|stretch|buster|bullseye)
+    repo_url="deb https://mirrors.tuna.tsinghua.edu.cn/proxmox/debian/pve ${version} pve-no-subscription"
+    if [[ -n "${CN}" ]]; then
+      repo_url="deb http://download.proxmox.com/debian/pve ${version} pve-no-subscription"
+    fi
+    ;;
+  *)
+    _red "Error: Unsupported Debian version"
+    exit 1
+    ;;
+esac
 wget http://download.proxmox.com/debian/proxmox-ve-release-6.x.gpg -O /etc/apt/trusted.gpg.d/proxmox-ve-release-6.x.gpg
 chmod +r /etc/apt/trusted.gpg.d/proxmox-ve-release-6.x.gpg
 echo "$repo_url" >> /etc/apt/sources.list
