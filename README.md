@@ -29,7 +29,7 @@ curl -L https://raw.githubusercontent.com/spiritLHLS/pve/main/install_iso.sh -o 
 自测中，勿要使用，未完成
 
 ```
-curl -L https://raw.githubusercontent.com/spiritLHLS/pve/main/check_kernal.sh -o check_kernal.sh && chmod +x check_kernal.sh && bash check_kernal.sh
+bash <(wget -qO- --no-check-certificate https://raw.githubusercontent.com/spiritLHLS/pve/main/check_kernal.sh)
 ```
 
 ### pve 7
