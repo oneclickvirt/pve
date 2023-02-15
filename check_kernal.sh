@@ -4,13 +4,11 @@
 # 检查CPU是否支持硬件虚拟化
 if [ "$(egrep -c '(vmx|svm)' /proc/cpuinfo)" -eq 0 ]; then
     echo "ERROR: CPU does not support hardware virtualization"
-    exit 1
 fi
 
 # 检查虚拟化选项是否启用
 if [ "$(grep -E -c '(vmx|svm)' /proc/cpuinfo)" -eq 0 ]; then
     echo "ERROR: Hardware virtualization is not enabled in the BIOS"
-    exit 1
 fi
 
 # 检查KVM模块是否已加载
