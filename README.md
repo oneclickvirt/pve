@@ -1,5 +1,7 @@
 # PVE
 
+只适配Debian且Ubuntu未测试
+
 ### pve 6
 
 apt源版本为6.4-15
