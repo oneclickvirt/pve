@@ -13,6 +13,7 @@ if [ "$(id -u)" != "0" ]; then
    _red "This script must be run as root" 1>&2
    exit 1
 fi
+apt-get update -y
 if ! command -v wget > /dev/null 2>&1; then
       apt-get install -y wget
 fi
