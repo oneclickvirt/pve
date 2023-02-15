@@ -42,3 +42,6 @@ fi
 
 # 升级内核
 update-grub
+
+# 打印信息
+_green "请执行reboot启用新内核"
