@@ -2,9 +2,15 @@
 #from https://github.com/spiritLHLS/pve
 # pve 7
 
+# 打印信息
+_red() { echo -e "\033[31m\033[01m$@\033[0m"; }
+_green() { echo -e "\033[32m\033[01m$@\033[0m"; }
+_yellow() { echo -e "\033[33m\033[01m$@\033[0m"; }
+_blue() { echo -e "\033[36m\033[01m$@\033[0m"; }
+
 # 前置环境安装
 if [ "$(id -u)" != "0" ]; then
-   echo "This script must be run as root" 1>&2
+   _red "This script must be run as root" 1>&2
    exit 1
 fi
 if ! command -v wget > /dev/null 2>&1; then
@@ -22,7 +28,7 @@ echo "${ip} pve.proxmox.com pve" | tee -a /etc/hosts
 # 再次预检查 
 apt-get install gnupg -y
 if [ $(uname -m) != "x86_64" ] || [ ! -f /etc/debian_version ] || [ $(grep MemTotal /proc/meminfo | awk '{print $2}') -lt 2000000 ] || [ $(grep -c ^processor /proc/cpuinfo) -lt 2 ] || [ $(ping -c 3 google.com > /dev/null 2>&1; echo $?) -ne 0 ]; then
-  echo "Error: This system does not meet the minimum requirements for Proxmox VE installation."
+  _red "Error: This system does not meet the minimum requirements for Proxmox VE installation."
   exit 1
 else
   echo "The system meets the minimum requirements for Proxmox VE installation."
@@ -39,7 +45,7 @@ elif [ "$version" == "buster" ]; then
 elif [ "$version" == "bullseye" ]; then
   repo_url="deb https://mirrors.tuna.tsinghua.edu.cn/proxmox/debian/pve bullseye pve-no-subscription"
 else
-  echo "Error: Unsupported Debian version"
+  _red "Error: Unsupported Debian version"
   exit 1
 fi
 wget http://download.proxmox.com/debian/proxmox-ve-release-6.x.gpg -O /etc/apt/trusted.gpg.d/proxmox-ve-release-6.x.gpg
@@ -54,14 +60,9 @@ if [ $? -ne 0 ]; then
 fi
 apt -y install proxmox-ve postfix open-iscsi
 
-# 检测是否安装成功
+# 打印安装后的信息
 url="https://${ip}:8006/"
-echo "安装完毕，请打开HTTPS网页 {$url}"
-echo "用户名、密码就是服务器所使用的用户名、密码"
-if curl -L --output /dev/null --silent --insecure --head --fail "$url"; then
-  echo "安装成功"
-else
-  echo "安装失败"
-fi
+_green "安装完毕，请打开HTTPS网页 {$url}"
+_green "用户名、密码就是服务器所使用的用户名、密码"
 
 
