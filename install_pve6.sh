@@ -15,3 +15,51 @@ if ! command -v curl > /dev/null 2>&1; then
 fi
 curl -L https://raw.githubusercontent.com/spiritLHLS/one-click-installation-script/main/check_sudo.sh -o check_sudo.sh && chmod +x check_sudo.sh && bash check_sudo.sh > /dev/null 2>&1
 hostnamectl set-hostname pve
+ip=$(curl -s ipv4.ip.sb)
+echo "127.0.0.1 localhost.localdomain localhost" | tee -a /etc/hosts
+echo "${ip} pve.proxmox.com pve" | tee -a /etc/hosts
+
+# 再次预检查 
+apt-get install gnupg -y
+if [ $(uname -m) != "x86_64" ] || [ ! -f /etc/debian_version ] || [ $(grep MemTotal /proc/meminfo | awk '{print $2}') -lt 2000000 ] || [ $(grep -c ^processor /proc/cpuinfo) -lt 2 ] || [ $(ping -c 3 google.com > /dev/null 2>&1; echo $?) -ne 0 ]; then
+  echo "Error: This system does not meet the minimum requirements for Proxmox VE installation."
+  exit 1
+else
+  echo "The system meets the minimum requirements for Proxmox VE installation."
+fi
+
+# 新增pve源
+version=$(lsb_release -cs)
+if [ "$version" == "jessie" ]; then
+  repo_url="deb https://mirrors.tuna.tsinghua.edu.cn/proxmox/debian/pve jessie pve-no-subscription"
+elif [ "$version" == "stretch" ]; then
+  repo_url="deb https://mirrors.tuna.tsinghua.edu.cn/proxmox/debian/pve stretch pve-no-subscription"
+elif [ "$version" == "buster" ]; then
+  repo_url="deb https://mirrors.tuna.tsinghua.edu.cn/proxmox/debian/pve buster pve-no-subscription"
+elif [ "$version" == "bullseye" ]; then
+  repo_url="deb https://mirrors.tuna.tsinghua.edu.cn/proxmox/debian/pve bullseye pve-no-subscription"
+else
+  echo "Error: Unsupported Debian version"
+  exit 1
+fi
+wget http://download.proxmox.com/debian/proxmox-ve-release-6.x.gpg -O /etc/apt/trusted.gpg.d/proxmox-ve-release-6.x.gpg
+chmod +r /etc/apt/trusted.gpg.d/proxmox-ve-release-6.x.gpg
+echo "$repo_url" >> /etc/apt/sources.list
+
+# 下载pve
+apt-get update && apt-get full-upgrade
+if [ $? -ne 0 ]; then
+   apt-get install debian-keyring debian-archive-keyring -y
+   apt-get update && apt-get full-upgrade
+fi
+apt -y install proxmox-ve postfix open-iscsi
+
+# 检测是否安装成功
+url="https://${ip}:8006/"
+if curl --output /dev/null --silent --head --fail "$url"; then
+  echo "安装成功"
+else
+  echo "安装失败"
+fi
+
+
