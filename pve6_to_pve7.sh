@@ -8,6 +8,9 @@ _green() { echo -e "\033[32m\033[01m$@\033[0m"; }
 _yellow() { echo -e "\033[33m\033[01m$@\033[0m"; }
 _blue() { echo -e "\033[36m\033[01m$@\033[0m"; }
 
+# 删除企业源
+rm -rf /etc/apt/sources.list.d/pve-enterprise.list
+
 # 检测是否可升级
 output=$(pve6to7)
 if echo "$output" | grep -q "FAILURES: 0" > /dev/null 2>&1; then
@@ -17,7 +20,6 @@ else
   _red "不支持升级PVE7"
   exit 1
 fi
-
 
 # 升级PVE7
 apt update && apt dist-upgrade -y
