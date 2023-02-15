@@ -53,10 +53,10 @@ chmod +r /etc/apt/trusted.gpg.d/proxmox-ve-release-6.x.gpg
 echo "$repo_url" >> /etc/apt/sources.list
 
 # 下载pve
-apt-get update && apt-get full-upgrade
+apt-get update -y && apt-get full-upgrade -y
 if [ $? -ne 0 ]; then
    apt-get install debian-keyring debian-archive-keyring -y
-   apt-get update && apt-get full-upgrade
+   apt-get update -y && apt-get full-upgrade -y
 fi
 apt -y install proxmox-ve postfix open-iscsi
 
