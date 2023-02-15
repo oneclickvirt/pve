@@ -2,6 +2,12 @@
 
 只适配Debian且Ubuntu未测试
 
+系统要求：Debian 8+
+
+硬件要求：2核2G内存x86_64架构服务器
+
+可开KVM的硬件要求：VM-X或AMD-V支持
+
 ### 检测硬件环境
 
 检测环境是否可嵌套虚拟化KVM类型的服务器
@@ -10,7 +16,7 @@
 bash <(wget -qO- --no-check-certificate https://raw.githubusercontent.com/spiritLHLS/pve/main/check_kernal.sh)
 ```
 
-### pve 6
+### pve6
 
 apt源版本为6.4-15
 
@@ -42,7 +48,7 @@ curl -L https://raw.githubusercontent.com/spiritLHLS/pve/main/install_iso.sh -o 
 bash <(wget -qO- --no-check-certificate https://raw.githubusercontent.com/spiritLHLS/pve/main/build_backend.sh)
 ```
 
-### pve 7
+### pve7
 
 废弃，因为apt源最新版本不支持7.x
 
