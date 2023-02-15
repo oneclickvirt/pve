@@ -24,6 +24,14 @@ curl -L https://raw.githubusercontent.com/spiritLHLS/pve/main/pve6_to_pve7.sh -o
 curl -L https://raw.githubusercontent.com/spiritLHLS/pve/main/install_iso.sh -o install_iso.sh && chmod +x install_iso.sh && bash install_iso.sh
 ```
 
+### 检测硬件环境
+
+自测中，勿要使用，未完成
+
+```
+curl -L https://raw.githubusercontent.com/spiritLHLS/pve/main/check_kernal.sh -o check_kernal.sh && chmod +x check_kernal.sh && bash check_kernal.sh
+```
+
 ### pve 7
 
 废弃，因为apt源最新版本不支持7.x
