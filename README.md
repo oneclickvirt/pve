@@ -4,7 +4,7 @@
 
 ### 检测硬件环境
 
-检测环境是否可用嵌套虚拟化KVM类型的服务器
+检测环境是否可嵌套虚拟化KVM类型的服务器
 
 ```
 bash <(wget -qO- --no-check-certificate https://raw.githubusercontent.com/spiritLHLS/pve/main/check_kernal.sh)
