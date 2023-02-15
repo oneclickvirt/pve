@@ -1,6 +1,6 @@
 #!/bin/bash
 #from https://github.com/spiritLHLS/pve
-# pve 7
+# pve 6
 
 # 打印信息
 _red() { echo -e "\033[31m\033[01m$@\033[0m"; }
@@ -31,7 +31,7 @@ if [ $(uname -m) != "x86_64" ] || [ ! -f /etc/debian_version ] || [ $(grep MemTo
   _red "Error: This system does not meet the minimum requirements for Proxmox VE installation."
   exit 1
 else
-  echo "The system meets the minimum requirements for Proxmox VE installation."
+  _green "The system meets the minimum requirements for Proxmox VE installation."
 fi
 
 # 新增pve源
