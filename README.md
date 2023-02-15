@@ -2,6 +2,14 @@
 
 只适配Debian且Ubuntu未测试
 
+### 检测硬件环境
+
+检测环境是否可用嵌套虚拟化KVM类型的服务器
+
+```
+bash <(wget -qO- --no-check-certificate https://raw.githubusercontent.com/spiritLHLS/pve/main/check_kernal.sh)
+```
+
 ### pve 6
 
 apt源版本为6.4-15
@@ -16,14 +24,6 @@ curl -L https://raw.githubusercontent.com/spiritLHLS/pve/main/install_pve6.sh -o
 
 ```
 curl -L https://raw.githubusercontent.com/spiritLHLS/pve/main/pve6_to_pve7.sh -o pve6_to_pve7.sh && chmod +x pve6_to_pve7.sh && bash pve6_to_pve7.sh
-```
-
-### 检测硬件环境
-
-自测中，勿要使用，未完成
-
-```
-bash <(wget -qO- --no-check-certificate https://raw.githubusercontent.com/spiritLHLS/pve/main/check_kernal.sh)
 ```
 
 ### 下载系统镜像
