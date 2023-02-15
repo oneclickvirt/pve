@@ -18,6 +18,7 @@ curl -L https://raw.githubusercontent.com/spiritLHLS/one-click-installation-scri
 # sysctl -w net.ipv6.conf.default.disable_ipv6=1
 
 # 修改 /etc/hosts
+hostnamectl set-hostname pve
 ip=$(curl -s ipv4.ip.sb)
 line_number=$(tac /etc/hosts | grep -n "^127\.0\.0\.1" | head -n 1 | awk -F: '{print $1}')
 sed -i "${line_number} a $ip pve.proxmox.com pve" /etc/hosts
@@ -64,6 +65,7 @@ if [ -e "/etc/cloud/templates/hosts.debian.tmpl" ]; then
      sed -i "/^$ip_address/s/^/#/" /etc/cloud/templates/hosts.debian.tmpl
    fi
 fi
+
 
 # 再次预检查 
 apt-get install gnupg -y
