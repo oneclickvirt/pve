@@ -60,9 +60,9 @@ fi
 version=$(lsb_release -cs)
 case $version in
   jessie|stretch|buster|bullseye)
-    repo_url="deb https://mirrors.tuna.tsinghua.edu.cn/proxmox/debian/pve ${version} pve-no-subscription"
+    repo_url="deb http://download.proxmox.com/debian/pve ${version} pve-no-subscription"
     if [[ -n "${CN}" ]]; then
-      repo_url="deb http://download.proxmox.com/debian/pve ${version} pve-no-subscription"
+      repo_url="deb https://mirrors.tuna.tsinghua.edu.cn/proxmox/debian/pve ${version} pve-no-subscription"
     fi
     ;;
   *)
