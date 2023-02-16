@@ -72,7 +72,15 @@ case $version in
     ;;
   *)
     _red "Error: Unsupported Debian version"
-    exit 1
+    reading "是否要继续安装(非Debian系会爆上面这个警告)？(回车则默认不继续安装) [y/n] " confirm
+    echo ""
+    if [ "$confirmbbr" != "y" ]; then
+      exit 1
+    fi
+    repo_url="deb http://download.proxmox.com/debian/pve bullseye pve-no-subscription"
+    if [[ -n "${CN}" ]]; then
+      repo_url="deb https://mirrors.tuna.tsinghua.edu.cn/proxmox/debian/pve bullseye pve-no-subscription"
+    fi
     ;;
 esac
 wget http://download.proxmox.com/debian/proxmox-ve-release-6.x.gpg -O /etc/apt/trusted.gpg.d/proxmox-ve-release-6.x.gpg
