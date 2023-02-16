@@ -16,20 +16,12 @@
 bash <(wget -qO- --no-check-certificate https://raw.githubusercontent.com/spiritLHLS/pve/main/check_kernal.sh)
 ```
 
-### pve6
+### PVE
 
-apt源版本为6.4-15
+安装的是当下apt源最新的PVE(比如debian10则是pve6.4，debian11则是pve7.2)
 
 ```
 curl -L https://raw.githubusercontent.com/spiritLHLS/pve/main/install_pve6.sh -o install_pve6.sh && chmod +x install_pve6.sh && bash install_pve6.sh
-```
-
-### pve6升级为最新的pve7
-
-自测中，勿要使用，未完成
-
-```
-curl -L https://raw.githubusercontent.com/spiritLHLS/pve/main/pve6_to_pve7.sh -o pve6_to_pve7.sh && chmod +x pve6_to_pve7.sh && bash pve6_to_pve7.sh
 ```
 
 ### 下载系统镜像
@@ -48,12 +40,22 @@ curl -L https://raw.githubusercontent.com/spiritLHLS/pve/main/install_iso.sh -o 
 bash <(wget -qO- --no-check-certificate https://raw.githubusercontent.com/spiritLHLS/pve/main/build_backend.sh)
 ```
 
-### pve7
+### 废弃
+
+#### pve7
 
 废弃，因为apt源最新版本不支持7.x
 
 ```
 curl -L https://raw.githubusercontent.com/spiritLHLS/pve/main/install_pve7.sh -o install_pve7.sh && chmod +x install_pve7.sh && bash install_pve7.sh
+```
+
+#### pve6升级为最新的pve7
+
+废弃，PVE7基于debian11开发，仅升级PVE没有任何用处
+
+```
+curl -L https://raw.githubusercontent.com/spiritLHLS/pve/main/pve6_to_pve7.sh -o pve6_to_pve7.sh && chmod +x pve6_to_pve7.sh && bash pve6_to_pve7.sh
 ```
 
 ## 友链
