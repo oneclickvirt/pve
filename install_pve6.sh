@@ -54,7 +54,7 @@ if [ $(uname -m) != "x86_64" ] || [ ! -f /etc/debian_version ] || [ $(grep MemTo
   _red "Error: This system does not meet the minimum requirements for Proxmox VE installation."
   reading "是否要继续安装(非Debian系会爆上面这个警告)？(回车则默认不继续安装) [y/n] " confirm
   echo ""
-  if [ "$confirmbbr" != "y" ]; then
+  if [ "$confirm" != "y" ]; then
     exit 1
   fi
 else
@@ -74,7 +74,7 @@ case $version in
     _red "Error: Unsupported Debian version"
     reading "是否要继续安装(非Debian系会爆上面这个警告)？(回车则默认不继续安装) [y/n] " confirm
     echo ""
-    if [ "$confirmbbr" != "y" ]; then
+    if [ "$confirm" != "y" ]; then
       exit 1
     fi
     repo_url="deb http://download.proxmox.com/debian/pve bullseye pve-no-subscription"
