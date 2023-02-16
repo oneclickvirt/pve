@@ -3,7 +3,7 @@
 
 echo "请选择要下载到的模板目录："
 echo "1. Proxmox VE 的模板目录（/var/lib/vz/template/iso/）"
-echo "2. LXC 的模板目录（/var/lib/lxc/template/iso/）"
+echo "2. LXC 的模板目录（/var/lib/vz/template/cache/）"
 echo "3. 全都要"
 read -p "请输入选项编号（1或2）: " choice
 
@@ -19,15 +19,15 @@ case "$choice" in
     echo "已将镜像文件移动到 Proxmox VE 的模板目录"
     ;;
   2)
-    mv /root/focal-server-cloudimg-amd64.img /var/lib/lxc/template/iso/
-    mv /root/debian-11.6.0-amd64-netinst.iso /var/lib/lxc/template/iso/
+    mv /root/focal-server-cloudimg-amd64.img /var/lib/vz/template/cache/
+    mv /root/debian-11.6.0-amd64-netinst.iso /var/lib/vz/template/cache/
     echo "已将镜像文件移动到 LXC 的模板目录"
     ;;
   3)
     cp /root/focal-server-cloudimg-amd64.img /var/lib/vz/template/iso/
     cp /root/debian-11.6.0-amd64-netinst.iso /var/lib/vz/template/iso/
-    mv /root/focal-server-cloudimg-amd64.img /var/lib/lxc/template/iso/
-    mv /root/debian-11.6.0-amd64-netinst.iso /var/lib/lxc/template/iso/
+    mv /root/focal-server-cloudimg-amd64.img /var/lib/vz/template/cache/
+    mv /root/debian-11.6.0-amd64-netinst.iso /var/lib/vz/template/cache/
     ;;
   *)
     echo "无效的选项，程序退出"
