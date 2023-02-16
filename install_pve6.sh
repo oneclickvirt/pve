@@ -7,6 +7,7 @@ _red() { echo -e "\033[31m\033[01m$@\033[0m"; }
 _green() { echo -e "\033[32m\033[01m$@\033[0m"; }
 _yellow() { echo -e "\033[33m\033[01m$@\033[0m"; }
 _blue() { echo -e "\033[36m\033[01m$@\033[0m"; }
+reading(){ read -rp "$(green "$1")" "$2"; }
 
 # 前置环境安装
 if [ "$(id -u)" != "0" ]; then
@@ -51,7 +52,11 @@ fi
 apt-get install gnupg -y
 if [ $(uname -m) != "x86_64" ] || [ ! -f /etc/debian_version ] || [ $(grep MemTotal /proc/meminfo | awk '{print $2}') -lt 2000000 ] || [ $(grep -c ^processor /proc/cpuinfo) -lt 2 ] || [ $(ping -c 3 google.com > /dev/null 2>&1; echo $?) -ne 0 ]; then
   _red "Error: This system does not meet the minimum requirements for Proxmox VE installation."
-  exit 1
+  reading "是否要继续安装(非Debian系会爆上面这个警告)？(回车则默认不继续安装) [y/n] " confirm
+  echo ""
+  if [ "$confirmbbr" != "y" ]; then
+    exit 1
+  fi
 else
   _green "The system meets the minimum requirements for Proxmox VE installation."
 fi
