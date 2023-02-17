@@ -26,7 +26,7 @@ curl -L https://raw.githubusercontent.com/spiritLHLS/pve/main/install_pve6.sh -o
 
 ### 下载系统镜像
 
-自测中，勿要使用，未完成
+下载KVM或LXC模板到PVE的ISO/CT列表中
 
 ```
 curl -L https://raw.githubusercontent.com/spiritLHLS/pve/main/install_iso.sh -o install_iso.sh && chmod +x install_iso.sh && bash install_iso.sh
