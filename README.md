@@ -30,7 +30,7 @@ curl -L https://raw.githubusercontent.com/spiritLHLS/pve/main/install_pve6.sh -o
 
 下载KVM或LXC模板到PVE的ISO/CT列表中
 
-下载完成后请web端查看刷新一下记录，直接去创建虚拟机是看不到已下载的
+下载完成后请web端查看 pve > local(pve) > ISO Images/CT Templates 刷新一下记录，直接去创建虚拟机是看不到已下载的
 
 ```
 curl -L https://raw.githubusercontent.com/spiritLHLS/pve/main/install_iso.sh -o install_iso.sh && chmod +x install_iso.sh && bash install_iso.sh
