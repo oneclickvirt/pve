@@ -1,6 +1,17 @@
 #!/bin/bash
 #from https://github.com/spiritLHLS/pve
 
+# 打印信息
+_red() { echo -e "\033[31m\033[01m$@\033[0m"; }
+_green() { echo -e "\033[32m\033[01m$@\033[0m"; }
+_yellow() { echo -e "\033[33m\033[01m$@\033[0m"; }
+_blue() { echo -e "\033[36m\033[01m$@\033[0m"; }
+
+# 创建资源池
+_green "正在创建资源池 mypool..."
+pvesh create /pools --poolid mypool
+_green "资源池 mypool 已创建！"
+
 # 创建网桥
 interfaces=($(ls /sys/class/net))
 for interface in ${interfaces[@]}; do
@@ -10,10 +21,10 @@ for interface in ${interfaces[@]}; do
     fi
 done
 if [[ -z $bridge_ports ]]; then
-    echo "Error: No available network interface found."
+    _red "错误：找不到可用网络接口"
     exit 1
 fi
-echo "Creating bridge vmbr1..."
+_green "Creating bridge vmbr1..."
 cat <<EOF >> /etc/network/interfaces.d/vmbr1.cfg
 auto vmbr1
 iface vmbr1 inet static
@@ -28,10 +39,9 @@ iface vmbr1 inet6 static
     netmask $(ip -6 addr show dev $bridge_ports | grep inet6 | awk '{ print $4 }' | cut -d'/' -f1)
 EOF
 if grep -q "iface vmbr1" /etc/network/interfaces; then
-    echo "Bridge vmbr1 is already in Proxmox VE configuration."
+    _green "网桥 vmbr1 已经在 Proxmox VE 配置中"
 else
-    # Add bridge configuration to Proxmox VE configuration
-    echo "Adding bridge vmbr1 to Proxmox VE configuration..."
+    _green "将网桥 vmbr1 添加到 Proxmox VE 配置中..."
     cat <<EOF >> /etc/network/interfaces
 # Proxmox VE bridge vmbr1
 iface vmbr1 inet manual
@@ -41,30 +51,23 @@ iface vmbr1 inet manual
 EOF
 fi
 systemctl restart networking.service
-echo "Bridge vmbr1 created!"
-
-
-# 创建资源池
-echo "Creating resource pool mypool..."
-pvesh create /pools --poolid mypool
-echo "Resource pool mypool created!"
+_green "网桥 vmbr1 已创建！"
 
 # 检测AppArmor模块
 if ! dpkg -s apparmor > /dev/null 2>&1; then
-    echo "Installing AppArmor..."
+    _green "正在安装 AppArmor..."
     apt-get update
     apt-get install -y apparmor
 fi
 if ! systemctl is-active --quiet apparmor.service; then
-    echo "Starting AppArmor service..."
+    _green "启动 AppArmor 服务..."
     systemctl enable apparmor.service
     systemctl start apparmor.service
 fi
 if ! lsmod | grep -q apparmor; then
-    echo "Loading AppArmor kernel module..."
+    _green "正在加载 AppArmor 内核模块..."
     modprobe apparmor
 fi
 if ! lsmod | grep -q apparmor; then
-    echo "AppArmor not loaded, a system reboot may be required."
+    _yellow "AppArmor 仍未加载，可能需要重新启动系统，然后使用 lsmod | grep apparmor 查询是否加载成功"
 fi
-echo "AppArmor has been configured."
