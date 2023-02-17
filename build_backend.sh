@@ -48,3 +48,23 @@ echo "Bridge vmbr1 created!"
 echo "Creating resource pool mypool..."
 pvesh create /pools --poolid mypool
 echo "Resource pool mypool created!"
+
+# 检测AppArmor模块
+if ! dpkg -s apparmor > /dev/null 2>&1; then
+    echo "Installing AppArmor..."
+    apt-get update
+    apt-get install -y apparmor
+fi
+if ! systemctl is-active --quiet apparmor.service; then
+    echo "Starting AppArmor service..."
+    systemctl enable apparmor.service
+    systemctl start apparmor.service
+fi
+if ! lsmod | grep -q apparmor; then
+    echo "Loading AppArmor kernel module..."
+    modprobe apparmor
+fi
+if ! lsmod | grep -q apparmor; then
+    echo "AppArmor not loaded, a system reboot may be required."
+fi
+echo "AppArmor has been configured."
