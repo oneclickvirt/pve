@@ -69,5 +69,5 @@ if ! lsmod | grep -q apparmor; then
     modprobe apparmor
 fi
 if ! lsmod | grep -q apparmor; then
-    _yellow "AppArmor 仍未加载，可能需要重新启动系统，然后使用 lsmod | grep apparmor 查询是否加载成功"
+    _yellow "AppArmor 仍未加载，可能需要重新启动系统加载，但你可以在面板尝试创建并启动CT"
 fi
