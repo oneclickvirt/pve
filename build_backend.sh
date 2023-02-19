@@ -13,35 +13,41 @@ pvesh create /pools --poolid mypool
 _green "资源池 mypool 已创建！"
 
 # 创建网桥
+#!/bin/bash
+
+# 选择桥接接口的标准
+bridge_interface_pattern="eth*"
 interfaces=($(ls /sys/class/net))
 for interface in ${interfaces[@]}; do
-    if [[ $interface != "lo" ]] && [[ $interface != "vmbr"* ]]; then
+    if [[ $interface != "lo" ]] && [[ $interface =~ $bridge_interface_pattern ]]; then
         bridge_ports="$interface"
         break
     fi
 done
 if [[ -z $bridge_ports ]]; then
-    _red "错误：找不到可用网络接口"
+    echo "错误：找不到可用网络接口"
     exit 1
 fi
-_green "Creating bridge vmbr1..."
-cat <<EOF >> /etc/network/interfaces.d/vmbr1.cfg
+ipv4_address="192.168.1.1"
+ipv4_netmask="255.255.255.0"
+ipv6_address=$(ip -6 addr show dev $bridge_ports | awk '/inet6/{print $2;exit}' | cut -d'/' -f1)
+ipv6_netmask=$(ip -6 addr show dev $bridge_ports | awk '/inet6/{print $4;exit}' | cut -d'/' -f1)
+cat <<EOF > /etc/network/interfaces.d/vmbr1.cfg
 auto vmbr1
 iface vmbr1 inet static
-    address 192.168.1.1
-    netmask 255.255.255.0
+    address $ipv4_address
+    netmask $ipv4_netmask
     bridge_ports $bridge_ports
     bridge_stp off
     bridge_fd 0
-
 iface vmbr1 inet6 static
-    address $(ip -6 addr show dev $bridge_ports | grep inet6 | awk '{ print $2 }' | cut -d'/' -f1)
-    netmask $(ip -6 addr show dev $bridge_ports | grep inet6 | awk '{ print $4 }' | cut -d'/' -f1)
+    address $ipv6_address
+    netmask $ipv6_netmask
 EOF
 if grep -q "iface vmbr1" /etc/network/interfaces; then
-    _green "网桥 vmbr1 已经在 Proxmox VE 配置中"
+    echo "网桥 vmbr1 已经在 Proxmox VE 配置中"
 else
-    _green "将网桥 vmbr1 添加到 Proxmox VE 配置中..."
+    # 添加到配置文件
     cat <<EOF >> /etc/network/interfaces
 # Proxmox VE bridge vmbr1
 iface vmbr1 inet manual
@@ -51,7 +57,7 @@ iface vmbr1 inet manual
 EOF
 fi
 systemctl restart networking.service
-_green "网桥 vmbr1 已创建！"
+echo "网桥 vmbr1 已创建！"
 
 # 检测AppArmor模块
 if ! dpkg -s apparmor > /dev/null 2>&1; then
