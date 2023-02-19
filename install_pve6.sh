@@ -35,6 +35,7 @@ hostnamectl set-hostname pve
 ip=$(curl -s ipv4.ip.sb)
 echo "127.0.0.1 localhost.localdomain localhost" | tee -a /etc/hosts
 echo "${ip} pve.proxmox.com pve" | tee -a /etc/hosts
+sudo chattr +i /etc/hosts
 
 ## China_IP
 if [[ -z "${CN}" ]]; then
