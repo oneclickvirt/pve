@@ -22,6 +22,8 @@ bash <(wget -qO- --no-check-certificate https://raw.githubusercontent.com/spirit
 
 安装的是当下apt源最新的PVE(比如debian10则是pve6.4，debian11则是pve7.2)
 
+安装后如若重启系统，请检查 /etc/hosts 是否被覆写，因为有的商家 cloud-init 重启后会覆写配置
+
 ```
 curl -L https://raw.githubusercontent.com/spiritLHLS/pve/main/install_pve6.sh -o install_pve6.sh && chmod +x install_pve6.sh && bash install_pve6.sh
 ```
