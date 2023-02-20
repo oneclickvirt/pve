@@ -33,8 +33,14 @@ fi
 curl -L https://raw.githubusercontent.com/spiritLHLS/one-click-installation-script/main/check_sudo.sh -o check_sudo.sh && chmod +x check_sudo.sh && bash check_sudo.sh > /dev/null 2>&1
 hostnamectl set-hostname pve
 ip=$(curl -s ipv4.ip.sb)
-echo "127.0.0.1 localhost.localdomain localhost" | tee -a /etc/hosts
-echo "${ip} pve.proxmox.com pve" | tee -a /etc/hosts
+if ! grep -q "127.0.0.1 localhost.localdomain localhost" /etc/hosts; then
+    echo "127.0.0.1 localhost.localdomain localhost" >> /etc/hosts
+    echo "Added 127.0.0.1 localhost.localdomain localhost to /etc/hosts"
+fi
+if ! grep -q "${ip} pve.proxmox.com pve" /etc/hosts; then
+    echo "${ip} pve.proxmox.com pve" >> /etc/hosts
+    echo "Added ${ip} pve.proxmox.com pve to /etc/hosts"
+fi
 sudo chattr +i /etc/hosts
 
 ## China_IP
@@ -93,9 +99,13 @@ case $version in
     fi
     ;;
 esac
-wget http://download.proxmox.com/debian/proxmox-ve-release-6.x.gpg -O /etc/apt/trusted.gpg.d/proxmox-ve-release-6.x.gpg
-chmod +r /etc/apt/trusted.gpg.d/proxmox-ve-release-6.x.gpg
-echo "$repo_url" >> /etc/apt/sources.list
+if [ ! -f "/etc/apt/trusted.gpg.d/proxmox-ve-release-6.x.gpg" ]; then
+  wget http://download.proxmox.com/debian/proxmox-ve-release-6.x.gpg -O /etc/apt/trusted.gpg.d/proxmox-ve-release-6.x.gpg
+  chmod +r /etc/apt/trusted.gpg.d/proxmox-ve-release-6.x.gpg
+fi
+if ! grep -q "^deb.*pve-no-subscription" /etc/apt/sources.list; then
+   echo "$repo_url" >> /etc/apt/sources.list
+fi
 
 # 下载pve
 apt-get update -y && apt-get full-upgrade -y
@@ -113,6 +123,11 @@ if echo $output | grep -q "NO_PUBKEY"; then
   apt-get update
 else
   echo "All keys are present."
+fi
+output=$(apt-get update 2>&1)
+if echo $output | grep -q "NO_PUBKEY"; then
+   _yellow "try sudo apt-key adv --keyserver keyserver.ubuntu.com --recv-keys missing key"
+   exit 1
 fi
 apt -y install proxmox-ve postfix open-iscsi
 
