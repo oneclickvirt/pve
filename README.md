@@ -24,6 +24,12 @@ bash <(wget -qO- --no-check-certificate https://raw.githubusercontent.com/spirit
 
 安装后如若重启系统，请检查 /etc/hosts 是否被覆写，因为有的商家 cloud-init 重启后会覆写配置导致面板启动失败，自行解决
 
+安装过程中可能会退出安装，需要手动修复apt源，如图所示修复完毕后再次执行本脚本
+
+![图片](https://user-images.githubusercontent.com/103393591/220104992-9eed2601-c170-46b9-b8b7-de141eeb6da4.png)
+
+![图片](https://user-images.githubusercontent.com/103393591/220105032-72623188-4c44-43c0-b3f1-7ce267163687.png)
+
 ```
 curl -L https://raw.githubusercontent.com/spiritLHLS/pve/main/install_pve6.sh -o install_pve6.sh && chmod +x install_pve6.sh && bash install_pve6.sh
 ```
