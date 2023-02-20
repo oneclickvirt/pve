@@ -103,6 +103,17 @@ if [ $? -ne 0 ]; then
    apt-get install debian-keyring debian-archive-keyring -y
    apt-get update -y && apt-get full-upgrade -y
 fi
+output=$(apt-get update 2>&1)
+if echo $output | grep -q "NO_PUBKEY"; then
+  echo "Some keys are missing, attempting to retrieve them now..."
+  missing_keys=$(echo $output | grep "NO_PUBKEY" | awk -F' ' '{print $NF}')
+  for key in $missing_keys; do
+    sudo apt-key adv --keyserver keyserver.ubuntu.com --recv-keys $key
+  done
+  apt-get update
+else
+  echo "All keys are present."
+fi
 apt -y install proxmox-ve postfix open-iscsi
 
 # 打印安装后的信息
