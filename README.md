@@ -52,6 +52,12 @@ curl -L https://raw.githubusercontent.com/spiritLHLS/pve/main/install_iso.sh -o 
 bash <(wget -qO- --no-check-certificate https://raw.githubusercontent.com/spiritLHLS/pve/main/build_backend.sh)
 ```
 
+#### 删除apt源中的无效订阅
+
+```
+rm -f /etc/apt/sources.list.d/pve-enterprise.list
+```
+
 ### 废弃
 
 #### pve7
