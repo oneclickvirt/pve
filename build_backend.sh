@@ -57,6 +57,10 @@ _green "资源池 mypool 已创建！"
 # systemctl restart networking.service
 # echo "网桥 vmbr1 已创建！"
 
+# 安装ifupdown2模块
+apt-get update
+apt-get install -y ifupdown2
+
 # 检测AppArmor模块
 if ! dpkg -s apparmor > /dev/null 2>&1; then
     _green "正在安装 AppArmor..."
