@@ -13,7 +13,7 @@ IFS='.' read -ra IP_ARR <<< "$IP_ADDR"
 IFS='.' read -ra MASK_ARR <<< "$SUBNET_MASK"
 NET_ADDR=""
 for ((i=0; i<4; i++)); do
-  NET_ADDR="$NET_ADDR$(( ${IP_ARR[$i]} & ${MASK_ARR[$i]} ))."
+  NET_ADDR="${NET_ADDR}$((${IP_ARR[$i]} & ${MASK_ARR[$i]}))."
 done
 NET_ADDR=${NET_ADDR::-1}
 
@@ -22,8 +22,13 @@ GATEWAY=$(ip route | awk '/default/ {print $3}')
 
 # 创建虚拟网桥并将其记录到PVE配置中
 pvesh set /nodes/localhost/network/$BRIDGE_NAME \
-  bridge_ports=none \
-  bridge_vlan_aware=1 \
-  vlan_ids=100 \
-  addresses="$IP_ADDR/$SUBNET_MASK" \
-  gateway="$GATEWAY"
+  -content-type "application/json" \
+  -put \
+  -data \
+  '{
+    "bridge_ports": "none",
+    "bridge_vlan_aware": "1",
+    "vlan_ids": "100",
+    "addresses": "'"$IP_ADDR/$SUBNET_MASK"'",
+    "gateway": "'"$GATEWAY"'"
+  }'
