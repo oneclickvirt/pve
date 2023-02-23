@@ -12,54 +12,10 @@ _green "正在创建资源池 mypool..."
 pvesh create /pools --poolid mypool
 _green "资源池 mypool 已创建！"
 
-# 创建网桥
-# # 选择桥接接口的标准
-# bridge_interface_pattern="eth*"
-# interfaces=($(ls /sys/class/net))
-# for interface in ${interfaces[@]}; do
-#     if [[ $interface != "lo" ]] && [[ $interface =~ $bridge_interface_pattern ]]; then
-#         bridge_ports="$interface"
-#         break
-#     fi
-# done
-# if [[ -z $bridge_ports ]]; then
-#     echo "错误：找不到可用网络接口"
-#     exit 1
-# fi
-# ipv4_address="192.168.1.1"
-# ipv4_netmask="255.255.255.0"
-# ipv6_address=$(ip -6 addr show dev $bridge_ports | awk '/inet6/{print $2;exit}' | cut -d'/' -f1)
-# ipv6_netmask=$(ip -6 addr show dev $bridge_ports | awk '/inet6/{print $4;exit}' | cut -d'/' -f1)
-# cat <<EOF > /etc/network/interfaces.d/vmbr1.cfg
-# auto vmbr1
-# iface vmbr1 inet static
-#     address $ipv4_address
-#     netmask $ipv4_netmask
-#     bridge_ports $bridge_ports
-#     bridge_stp off
-#     bridge_fd 0
-# iface vmbr1 inet6 static
-#     address $ipv6_address
-#     netmask $ipv6_netmask
-# EOF
-# if grep -q "iface vmbr1" /etc/network/interfaces; then
-#     echo "网桥 vmbr1 已经在 Proxmox VE 配置中"
-# else
-#     # 添加到配置文件
-#     cat <<EOF >> /etc/network/interfaces
-# # Proxmox VE bridge vmbr1
-# iface vmbr1 inet manual
-#     bridge-ports $bridge_ports
-#     bridge-stp off
-#     bridge-fd 0
-# EOF
-# fi
-# systemctl restart networking.service
-# echo "网桥 vmbr1 已创建！"
-
-# 安装ifupdown2模块
+# 安装 ifupdown2 lshw 模块
 apt-get update
 apt-get install -y ifupdown2
+apt-get install -y lshw
 
 # 检测AppArmor模块
 if ! dpkg -s apparmor > /dev/null 2>&1; then
