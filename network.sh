@@ -4,10 +4,9 @@
 # 设置虚拟网桥名称
 BRIDGE_NAME="vmbr0"
 
-# 获取本地IPv4地址和子网掩码
+# 获取本地IPv4地址 子网掩码 网关地址
 IP_ADDR=$(ip route get 8.8.8.8 | head -1 | awk '{print $7}')
 SUBNET_MASK="255.255.255.0"
-# 获取网关地址
 GATEWAY=$(ip route | awk '/default/ {print $3}')
 
 # 创建虚拟网桥
