@@ -128,7 +128,7 @@ if echo $output | grep -q "NO_PUBKEY"; then
    _yellow "try sudo apt-key adv --keyserver keyserver.ubuntu.com --recv-keys missing key"
    exit 1
 fi
-apt -y install proxmox-ve postfix open-iscsi
+apt-get install -y proxmox-ve postfix open-iscsi
 
 # 打印安装后的信息
 url="https://${ip}:8006/"
