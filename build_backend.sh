@@ -18,7 +18,9 @@ else
     _green "资源池 $POOL_ID 已创建！"
 fi
 
-# 安装必备模块
+# 安装必备模块并删除apt源中的无效订阅
+rm -f /etc/apt/sources.list.d/pve-enterprise.list
+apt-get update
 install_required_modules() {
     modules=("sudo" "ifupdown2" "lshw" "iproute2" "net-tools" "cloud-init" "novnc")
     for module in "${modules[@]}"
@@ -26,7 +28,6 @@ install_required_modules() {
         if dpkg -s $module > /dev/null 2>&1 ; then
             _green "$module 已经安装！"
         else
-            apt-get update
             apt-get install -y $module
             _green "$module 已成功安装！"
         fi
