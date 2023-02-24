@@ -12,7 +12,8 @@
 
 ### 检测硬件环境
 
-检测环境是否可嵌套虚拟化KVM类型的服务器
+- 检测环境是否可嵌套虚拟化KVM类型的服务器
+- 不可嵌套虚拟化KVM类型的服务器也可以开LXC虚拟化的服务器
 
 ```
 bash <(wget -qO- --no-check-certificate https://raw.githubusercontent.com/spiritLHLS/pve/main/check_kernal.sh)
@@ -20,7 +21,7 @@ bash <(wget -qO- --no-check-certificate https://raw.githubusercontent.com/spirit
 
 ### PVE
 
-安装的是当下apt源最新的PVE(比如debian10则是pve6.4，debian11则是pve7.2)
+- 安装的是当下apt源最新的PVE(比如debian10则是pve6.4，debian11则是pve7.2)
 
 ```
 curl -L https://raw.githubusercontent.com/spiritLHLS/pve/main/install_pve6.sh -o install_pve6.sh && chmod +x install_pve6.sh && bash install_pve6.sh
@@ -36,17 +37,19 @@ curl -L https://raw.githubusercontent.com/spiritLHLS/pve/main/install_pve6.sh -o
 
 ### 下载系统镜像
 
-下载KVM或LXC模板到PVE的ISO/CT列表中
-
-下载完成后请web端查看 pve > local(pve) > ISO Images/CT Templates 刷新一下记录，直接去创建虚拟机是看不到已下载的
+- 下载KVM或LXC模板到PVE的ISO/CT列表中
+- 下载完成后请web端查看 pve > local(pve) > ISO Images/CT Templates 刷新一下记录，直接去创建虚拟机是看不到已下载的
 
 ```
 curl -L https://raw.githubusercontent.com/spiritLHLS/pve/main/install_iso.sh -o install_iso.sh && chmod +x install_iso.sh && bash install_iso.sh
 ```
 
-### 预安装环境
+### 预配置环境
 
-安装PVE开虚拟机需要的必备环境以及创建资源池
+- 创建资源池mypool
+- 安装PVE开虚拟机需要的必备工具包
+- 删除apt源中的无效订阅
+- 检测AppArmor模块并试图安装
 
 ```
 bash <(wget -qO- --no-check-certificate https://raw.githubusercontent.com/spiritLHLS/pve/main/build_backend.sh)
@@ -58,12 +61,6 @@ bash <(wget -qO- --no-check-certificate https://raw.githubusercontent.com/spirit
 
 ```
 bash <(wget -qO- --no-check-certificate https://raw.githubusercontent.com/spiritLHLS/pve/main/network.sh)
-```
-
-#### 删除apt源中的无效订阅
-
-```
-rm -f /etc/apt/sources.list.d/pve-enterprise.list
 ```
 
 ### 废弃
