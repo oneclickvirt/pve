@@ -10,7 +10,7 @@ _blue() { echo -e "\033[36m\033[01m$@\033[0m"; }
 # 创建资源池
 POOL_ID="mypool"
 if pvesh get /pools/$POOL_ID > /dev/null 2>&1 ; then
-    echo "资源池 $POOL_ID 已经存在！"
+    _green "资源池 $POOL_ID 已经存在！"
 else
     # 如果不存在则创建
     _green "正在创建资源池 $POOL_ID..."
@@ -24,11 +24,11 @@ install_required_modules() {
     for module in "${modules[@]}"
     do
         if dpkg -s $module > /dev/null 2>&1 ; then
-            echo "$module 已经安装！"
+            _green "$module 已经安装！"
         else
             apt-get update
             apt-get install -y $module
-            echo "$module 已成功安装！"
+            _green "$module 已成功安装！"
         fi
     done
 }
