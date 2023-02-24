@@ -12,10 +12,13 @@ _green "正在创建资源池 mypool..."
 pvesh create /pools --poolid mypool
 _green "资源池 mypool 已创建！"
 
-# 安装 ifupdown2 lshw 模块
+# 安装必备模块
 apt-get update
+apt-get install -y sudo 
 apt-get install -y ifupdown2
 apt-get install -y lshw
+apt-get install -y iproute2 
+apt-get install -y net-tools
 
 # 检测AppArmor模块
 if ! dpkg -s apparmor > /dev/null 2>&1; then
