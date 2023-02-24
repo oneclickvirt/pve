@@ -1,6 +1,5 @@
 #!/bin/bash
 #from https://github.com/spiritLHLS/pve
-# pve 6
 
 # 打印信息
 _red() { echo -e "\033[31m\033[01m$@\033[0m"; }
