@@ -22,6 +22,10 @@ bash <(wget -qO- --no-check-certificate https://raw.githubusercontent.com/spirit
 
 安装的是当下apt源最新的PVE(比如debian10则是pve6.4，debian11则是pve7.2)
 
+```
+curl -L https://raw.githubusercontent.com/spiritLHLS/pve/main/install_pve6.sh -o install_pve6.sh && chmod +x install_pve6.sh && bash install_pve6.sh
+```
+
 安装后如若重启系统，请检查 /etc/hosts 是否被覆写，因为有的商家 cloud-init 重启后会覆写配置导致面板启动失败，自行解决
 
 安装过程中可能会退出安装，需要手动修复apt源，如图所示修复完毕后再次执行本脚本
@@ -29,10 +33,6 @@ bash <(wget -qO- --no-check-certificate https://raw.githubusercontent.com/spirit
 ![图片](https://user-images.githubusercontent.com/103393591/220104992-9eed2601-c170-46b9-b8b7-de141eeb6da4.png)
 
 ![图片](https://user-images.githubusercontent.com/103393591/220105032-72623188-4c44-43c0-b3f1-7ce267163687.png)
-
-```
-curl -L https://raw.githubusercontent.com/spiritLHLS/pve/main/install_pve6.sh -o install_pve6.sh && chmod +x install_pve6.sh && bash install_pve6.sh
-```
 
 ### 下载系统镜像
 
@@ -44,13 +44,17 @@ curl -L https://raw.githubusercontent.com/spiritLHLS/pve/main/install_pve6.sh -o
 curl -L https://raw.githubusercontent.com/spiritLHLS/pve/main/install_iso.sh -o install_iso.sh && chmod +x install_iso.sh && bash install_iso.sh
 ```
 
-### 开虚拟机环境预设置
+### 预安装环境
 
-自测中，勿要使用，未完成
+安装PVE开虚拟机需要的必备环境以及创建资源池
 
 ```
 bash <(wget -qO- --no-check-certificate https://raw.githubusercontent.com/spiritLHLS/pve/main/build_backend.sh)
 ```
+
+### 自动配置NAT网关
+
+自测中，勿要使用，未完成
 
 ```
 bash <(wget -qO- --no-check-certificate https://raw.githubusercontent.com/spiritLHLS/pve/main/network.sh)
