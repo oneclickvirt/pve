@@ -22,7 +22,7 @@ fi
 rm -f /etc/apt/sources.list.d/pve-enterprise.list
 apt-get update
 install_required_modules() {
-    modules=("sudo" "ifupdown2" "lshw" "iproute2" "net-tools" "cloud-init" "novnc")
+    modules=("sudo" "ifupdown2" "lshw" "iproute2" "net-tools" "cloud-init" "novnc" "isc-dhcp-server")
     for module in "${modules[@]}"
     do
         if dpkg -s $module > /dev/null 2>&1 ; then
