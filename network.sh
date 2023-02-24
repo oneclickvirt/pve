@@ -2,8 +2,8 @@
 #from https://github.com/spiritLHLS/pve
 
 interface=$(lshw -C network | awk '/logical name:/{print $3}' | head -1)
-ip=$(ip addr show $interface | awk '/inet /{print $2}' | head -1)
-netmask=$(ifconfig $interface | awk '/netmask/{print $4}' | head -1)
+ip=$(ip addr show $interface | awk '/inet /{print $2}')
+netmask=$(ifconfig $interface | awk '/netmask/{print $4}')
 gateway=$(ip route | awk '/default/ {print $3}')
 cat << EOF | sudo tee /etc/network/interfaces.d/vmbr0.conf
 auto vmbr0
