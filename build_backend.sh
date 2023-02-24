@@ -19,6 +19,8 @@ apt-get install -y ifupdown2
 apt-get install -y lshw
 apt-get install -y iproute2 
 apt-get install -y net-tools
+apt-get install -y cloud-init
+
 
 # 检测AppArmor模块
 if ! dpkg -s apparmor > /dev/null 2>&1; then
