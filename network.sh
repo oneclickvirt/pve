@@ -5,7 +5,7 @@ interface=$(lshw -C network | awk '/logical name:/{print $3}' | head -1)
 ip=$(ip addr show $interface | awk '/inet /{print $2}' | head -1)
 netmask=$(ifconfig $interface | awk '/netmask/{print $4}' | head -1)
 gateway=$(ip route | awk '/default/ {print $3}')
-cat << EOF | sudo tee /etc/network/interfaces.d/vmbr0
+cat << EOF | sudo tee /etc/network/interfaces.d/vmbr0.conf
 auto vmbr0
 iface vmbr0 inet static
     address $ip
@@ -16,7 +16,7 @@ iface vmbr0 inet static
     bridge_fd 0
 EOF
 
-cat << EOF | sudo tee /etc/network/interfaces.d/vmbr1
+cat << EOF | sudo tee /etc/network/interfaces.d/vmbr1.conf
 auto vmbr1
 iface vmbr1 inet static
     address 172.16.1.1
