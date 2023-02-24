@@ -2,21 +2,19 @@
 #from https://github.com/spiritLHLS/pve
 
 interface=$(lshw -C network | awk '/logical name:/{print $3}' | head -1)
-ip=$(ip addr show $interface | awk '/inet /{print $2}')
-netmask=$(ifconfig $interface | awk '/netmask/{print $4}')
+ip=$(curl -s ipv4.ip.sb)/24
 gateway=$(ip route | awk '/default/ {print $3}')
-cat << EOF | sudo tee /etc/network/interfaces.d/vmbr0.conf
+cat << EOF | sudo tee -a /etc/network/interfaces
 auto vmbr0
 iface vmbr0 inet static
     address $ip
-    netmask $netmask
     gateway $gateway
     bridge_ports $interface
     bridge_stp off
     bridge_fd 0
 EOF
 
-cat << EOF | sudo tee /etc/network/interfaces.d/vmbr1.conf
+cat << EOF | sudo tee -a /etc/network/interfaces
 auto vmbr1
 iface vmbr1 inet static
     address 172.16.1.1
