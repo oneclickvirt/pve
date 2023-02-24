@@ -20,6 +20,13 @@ apt-get install -y lshw
 apt-get install -y iproute2 
 apt-get install -y net-tools
 apt-get install -y cloud-init
+if ! dpkg -s novnc > /dev/null 2>&1 ; then
+    apt-get update
+    apt-get install -y novnc
+    echo "noVNC已成功安装"
+else
+    echo "noVNC已安装"
+fi
 
 
 # 检测AppArmor模块
