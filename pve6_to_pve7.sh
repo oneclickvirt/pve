@@ -36,6 +36,12 @@ fi
 # 升级为debian11系统
 curl -L https://raw.githubusercontent.com/spiritLHLS/one-click-installation-script/main/todebian11.sh -o todebian11.sh && chmod +x todebian11.sh && bash todebian11.sh
 
+# 检查 PVE 是否可以升级
+if ! pve6to7 | grep -q "FAILURES: 0"; then
+    _red "检测到 PVE 升级存在问题，请先解决问题后再执行升级"
+    exit 1
+fi
+
 # 检查 PVE 版本是否为最新版本
 if ! [ "$(pveversion -v)" = "$(pveversion -r)" ]; then
     _yellow "当前 PVE 版本不是最新版本，尝试升级到最新版本"
@@ -45,22 +51,6 @@ if ! [ "$(pveversion -v)" = "$(pveversion -r)" ]; then
         exit 1
     else
         _green "PVE 升级到最新版本成功"
+        exit 1
     fi
-fi
-
-# 检查 PVE 是否可以升级
-if ! pve6to7 | grep -q "FAILURES: 0"; then
-    _red "检测到 PVE 升级存在问题，请先解决问题后再执行升级"
-    exit 1
-fi
-
-# 升级 PVE
-_yellow "升级 PVE ..."
-sed -i 's/buster/bullseye/g' /etc/apt/sources.list
-apt-get dist-upgrade -y
-if [ $? -ne 0 ]; then
-    _red "升级 PVE 失败，请检查网络或源配置"
-    exit 1
-else
-    _green "PVE 升级成功，请重启系统以应用更改"
 fi
