@@ -48,8 +48,10 @@ curl -L https://raw.githubusercontent.com/spiritLHLS/pve/main/install_iso.sh -o 
 
 - 创建资源池mypool
 - 安装PVE开虚拟机需要的必备工具包
-- 删除apt源中的无效订阅
+- 替换apt源中的企业订阅为社区源
+- 删除无效的系统内核
 - 检测AppArmor模块并试图安装
+- 配置完毕需要重启系统加载内核
 
 ```
 bash <(wget -qO- --no-check-certificate https://raw.githubusercontent.com/spiritLHLS/pve/main/build_backend.sh)
