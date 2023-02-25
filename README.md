@@ -63,6 +63,14 @@ bash <(wget -qO- --no-check-certificate https://raw.githubusercontent.com/spirit
 bash <(wget -qO- --no-check-certificate https://raw.githubusercontent.com/spiritLHLS/pve/main/network.sh)
 ```
 
+#### pve6升级为最新的pve7
+
+自测中，勿要使用，未完成
+
+```
+curl -L https://raw.githubusercontent.com/spiritLHLS/pve/main/pve6_to_pve7.sh -o pve6_to_pve7.sh && chmod +x pve6_to_pve7.sh && bash pve6_to_pve7.sh
+```
+
 ## 友链
 
 VPS融合怪测评脚本
