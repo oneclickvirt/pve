@@ -29,7 +29,7 @@ fi
 if ! command -v iptables > /dev/null 2>&1; then
       apt-get install -y iptables
 fi
-curl -L https://raw.githubusercontent.com/spiritLHLS/one-click-installation-script/main/check_sudo.sh -o check_sudo.sh && chmod +x check_sudo.sh && bash check_sudo.sh > /dev/null 2>&1
+# curl -L https://raw.githubusercontent.com/spiritLHLS/one-click-installation-script/main/check_sudo.sh -o check_sudo.sh && chmod +x check_sudo.sh && bash check_sudo.sh > /dev/null 2>&1
 hostnamectl set-hostname pve
 ip=$(curl -s ipv4.ip.sb)
 if ! grep -q "127.0.0.1 localhost.localdomain localhost" /etc/hosts; then
