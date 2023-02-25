@@ -46,7 +46,7 @@ if ! [ "$(pveversion -v)" = "$(pveversion -r)" ]; then
 fi
 
 # 检查 PVE 是否可以升级
-if ! pve6to7 --check | grep -q "FAILURES: 0"; then
+if ! pve6to7 | grep -q "FAILURES: 0"; then
     _red "检测到 PVE 升级存在问题，请先解决问题后再执行升级"
     exit 1
 fi
