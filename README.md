@@ -61,6 +61,7 @@ bash <(wget -qO- --no-check-certificate https://raw.githubusercontent.com/spirit
 
 - 创建vmbr0
 - 创建vmbr1(NAT网关)
+- 可能需要web端手动点应用配置按钮应用一下
 
 ```
 bash <(wget -qO- --no-check-certificate https://raw.githubusercontent.com/spiritLHLS/pve/main/network.sh)
