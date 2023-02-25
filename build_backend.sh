@@ -36,6 +36,11 @@ install_required_modules() {
 }
 install_required_modules
 
+# 更新内核
+# apt-get install -y pve-kernel-5.4.98-1-pve
+update-grub
+apt-get remove -y linux-image*
+
 # 检测AppArmor模块
 if ! dpkg -s apparmor > /dev/null 2>&1; then
     _green "正在安装 AppArmor..."
@@ -52,5 +57,5 @@ if ! lsmod | grep -q apparmor; then
     modprobe apparmor
 fi
 if ! lsmod | grep -q apparmor; then
-    _yellow "AppArmor 仍未加载，可能需要重新启动系统加载，但你可以在面板尝试创建并启动CT"
+    _yellow "AppArmor 仍未加载，需要重新启动系统加载"
 fi
