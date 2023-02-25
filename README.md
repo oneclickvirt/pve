@@ -59,7 +59,8 @@ bash <(wget -qO- --no-check-certificate https://raw.githubusercontent.com/spirit
 
 ### 自动配置NAT网关
 
-自测中，勿要使用，未完成
+- 创建vmbr0
+- 创建vmbr1(NAT网关)
 
 ```
 bash <(wget -qO- --no-check-certificate https://raw.githubusercontent.com/spiritLHLS/pve/main/network.sh)
