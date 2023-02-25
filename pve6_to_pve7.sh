@@ -54,18 +54,19 @@ fi
 # 检查是否为 Debian 11
 if ! [ "$(lsb_release -cs)" = "bullseye" ]; then
     _yellow "当前不是 Debian 11，尝试升级到 Debian 11"
-    sed -i 's/buster/bullseye/g' /etc/apt/sources.list
     apt-get update && apt-get dist-upgrade -y
     if [ $? -ne 0 ]; then
         _red "升级 Debian 11 失败，请检查网络或源配置"
         exit 1
     else
-        _green "Debian 升级到 11 成功"
+        _green "Debian 升级到 11 成功，请重启服务器"
+        exit 1
     fi
 fi
 
 # 升级 PVE
 _yellow "升级 PVE ..."
+sed -i 's/buster/bullseye/g' /etc/apt/sources.list
 apt-get update && apt-get dist-upgrade -y
 if [ $? -ne 0 ]; then
     _red "升级 PVE 失败，请检查网络或源配置"
