@@ -33,6 +33,7 @@ if [ "$(cat /sys/module/kvm_intel/parameters/nested)" = "Y" ]; then
     fi
 else
     _yellow "本机操作系统不支持KVM硬件嵌套虚拟化，使用PVE虚拟化出来的KVM服务器不能在选项中开启KVM硬件虚拟化，记得在开出来的KVM服务器选项中关闭"
+    exit 1
 fi
 
 # 如果KVM模块未加载，则加载KVM模块并将其添加到/etc/modules文件中
