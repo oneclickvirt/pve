@@ -147,6 +147,6 @@ apt-get install -y proxmox-ve postfix open-iscsi
 # 打印安装后的信息
 url="https://${ip}:8006/"
 _green "安装完毕，请打开HTTPS网页 $url"
-_green "用户名、密码就是服务器所使用的用户名、密码"
+_green "用户名、密码就是服务器所使用的用户名、密码(如root和root用户的密码)"
 
 
