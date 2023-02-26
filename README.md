@@ -63,9 +63,10 @@ bash <(wget -qO- --no-check-certificate https://raw.githubusercontent.com/spirit
 - 创建vmbr0
 - 创建vmbr1(NAT网关)
 - 可能需要web端手动点应用配置按钮应用一下
+- 想查看完整设置可以执行```cat /etc/network/interfaces```
 
 ```
-bash <(wget -qO- --no-check-certificate https://raw.githubusercontent.com/spiritLHLS/pve/main/network.sh)
+bash <(wget -qO- --no-check-certificate https://raw.githubusercontent.com/spiritLHLS/pve/main/build_nat_network.sh)
 ```
 
 #### pve6升级为最新的pve7
