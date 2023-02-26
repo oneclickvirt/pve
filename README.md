@@ -24,7 +24,10 @@ bash <(wget -qO- --no-check-certificate https://raw.githubusercontent.com/spirit
 
 - 安装的是当下apt源最新的PVE
 - 比如debian10则是pve6.4，debian11则是pve7.x
-- 已设置```/etc/hosts```为只读模式，避免重启后文件被覆写，如需修改请使用```chattr -i /etc/hosts```取消只读锁定
+- /etc/hosts文件修改(修正商家hostname设置错误以及新增PVE所需的内容)
+- 已设置```/etc/hosts```为只读模式，避免重启后文件被覆写，如需修改请使用```chattr -i /etc/hosts```取消只读锁定，修改完毕请执行```chattr +i /etc/hosts```只读锁定
+- 检测是否为中国IP，如果为中国IP使用清华镜像源，否则使用官方源
+- 新增PVE的APT源链接后，下载PVE并打印输出登陆信息
 
 ```
 curl -L https://raw.githubusercontent.com/spiritLHLS/pve/main/install_pve.sh -o install_pve.sh && chmod +x install_pve.sh && bash install_pve.sh
