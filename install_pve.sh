@@ -23,7 +23,7 @@ if [ $? -ne 0 ]; then
 fi
 output=$(apt-get update 2>&1)
 if echo $output | grep -q "NO_PUBKEY"; then
-   _yellow "try sudo apt-key adv --keyserver keyserver.ubuntu.com --recv-keys missing key"
+   _yellow "try “ sudo apt-key adv --keyserver keyserver.ubuntu.com --recv-keys missing key ” to fix"
    exit 1
 fi
 if ! command -v wget > /dev/null 2>&1; then
