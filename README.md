@@ -1,5 +1,15 @@
 # PVE
 
+### 前言
+
+建议debian在使用前尽量使用最新的系统
+
+非debian11可使用 [debian一键升级](https://github.com/spiritLHLS/one-click-installation-script#%E4%B8%80%E9%94%AE%E5%8D%87%E7%BA%A7%E4%BD%8E%E7%89%88%E6%9C%ACdebian%E4%B8%BAdebian11) 来升级系统
+
+当然不使用最新的debian系统也没问题，只不过得不到官方支持
+
+### 配置与系统要求
+
 只适配Debian且Ubuntu未测试
 
 系统要求：Debian 8+
@@ -53,7 +63,7 @@ curl -L https://raw.githubusercontent.com/spiritLHLS/pve/main/install_iso.sh -o 
 - 创建资源池mypool
 - 安装PVE开虚拟机需要的必备工具包
 - 替换apt源中的企业订阅为社区源
-- 删除无效的系统内核
+- 删除无效的Linux系统内核
 - 检测AppArmor模块并试图安装
 - 配置完毕需要重启系统加载内核
 
