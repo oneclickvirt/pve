@@ -82,7 +82,7 @@ bash <(wget -qO- --no-check-certificate https://raw.githubusercontent.com/spirit
 bash <(wget -qO- --no-check-certificate https://raw.githubusercontent.com/spiritLHLS/pve/main/build_nat_network.sh)
 ```
 
-#### pve6升级为最新的pve7
+#### pve6.4升级为最新的pve7.x
 
 自测中，勿要使用，未完成
 
