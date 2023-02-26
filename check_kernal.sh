@@ -36,7 +36,8 @@ fi
 
 # 如果KVM模块未加载，则加载KVM模块并将其添加到/etc/modules文件中
 if ! lsmod | grep -q kvm; then
+    _yellow "尝试加载KVM模块……"
     modprobe kvm
     echo "kvm" >> /etc/modules
-    _green "KVM模块已加载并添加到 /etc/modules，可以使用PVE虚拟化KVM服务器，也可以开LXC服务器(CT)"
+    _green "KVM模块已加载并添加到 /etc/modules，可以尝试使用PVE虚拟化KVM服务器，也可以开LXC服务器(CT)"
 fi
