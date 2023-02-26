@@ -12,7 +12,8 @@
 
 ### 检测硬件环境
 
-- 检测环境是否可嵌套虚拟化KVM类型的服务器
+- 检测硬件环境是否可嵌套虚拟化KVM类型的服务器
+- 检测系统环境是否可嵌套虚拟化KVM类型的服务器
 - 不可嵌套虚拟化KVM类型的服务器也可以开LXC虚拟化的服务器
 
 ```
@@ -23,7 +24,7 @@ bash <(wget -qO- --no-check-certificate https://raw.githubusercontent.com/spirit
 
 - 安装的是当下apt源最新的PVE
 - 比如debian10则是pve6.4，debian11则是pve7.x
-- 已设置```/etc/hosts```为只读模式，避免重启后文件被覆写
+- 已设置```/etc/hosts```为只读模式，避免重启后文件被覆写，如需修改请使用```chattr -i /etc/hosts```取消只读锁定
 
 ```
 curl -L https://raw.githubusercontent.com/spiritLHLS/pve/main/install_pve.sh -o install_pve.sh && chmod +x install_pve.sh && bash install_pve.sh
