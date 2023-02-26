@@ -29,9 +29,23 @@ fi
 if ! command -v iptables > /dev/null 2>&1; then
       apt-get install -y iptables
 fi
-# curl -L https://raw.githubusercontent.com/spiritLHLS/one-click-installation-script/main/check_sudo.sh -o check_sudo.sh && chmod +x check_sudo.sh && bash check_sudo.sh > /dev/null 2>&1
-hostnamectl set-hostname pve
+
+# /etc/hosts文件修改
 ip=$(curl -s ipv4.ip.sb)
+hostname=$(hostname)
+if [ "${hostname}" != "pve" ]; then
+    hosts=$(grep -E "^[^#]*\s+${hostname}\s+${hostname}\$" /etc/hosts | grep -v "${ip}")
+   if [ -n "${hosts}" ]; then
+       # 注释掉查询到的行
+       sudo sed -i "s/^$(echo ${hosts} | sed 's/\//\\\//g')/# &/" /etc/hosts
+       # 添加新行
+       echo "${ip} ${hostname} ${hostname}" | sudo tee -a /etc/hosts > /dev/null
+       _green "已将 ${ip} ${hostname} ${hostname} 添加到 /etc/hosts 文件中"
+   else
+       _blue "已存在 ${ip} ${hostname} ${hostname} 的记录，无需添加"
+   fi
+fi
+hostnamectl set-hostname pve
 if ! grep -q "127.0.0.1 localhost.localdomain localhost" /etc/hosts; then
     echo "127.0.0.1 localhost.localdomain localhost" >> /etc/hosts
     echo "Added 127.0.0.1 localhost.localdomain localhost to /etc/hosts"
@@ -42,7 +56,7 @@ if ! grep -q "${ip} pve.proxmox.com pve" /etc/hosts; then
 fi
 sudo chattr +i /etc/hosts
 
-## China_IP
+## ChinaIP检测
 if [[ -z "${CN}" ]]; then
   if [[ $(curl -m 10 -s https://ipapi.co/json | grep 'China') != "" ]]; then
       _yellow "根据ipapi.co提供的信息，当前IP可能在中国"
