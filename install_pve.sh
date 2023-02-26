@@ -14,6 +14,18 @@ if [ "$(id -u)" != "0" ]; then
    exit 1
 fi
 apt-get update -y
+if [ $? -ne 0 ]; then
+   dpkg --configure -a
+   apt-get update -y
+fi
+if [ $? -ne 0 ]; then
+   apt-get install gnupg -y
+fi
+output=$(apt-get update 2>&1)
+if echo $output | grep -q "NO_PUBKEY"; then
+   _yellow "try sudo apt-key adv --keyserver keyserver.ubuntu.com --recv-keys missing key"
+   exit 1
+fi
 if ! command -v wget > /dev/null 2>&1; then
       apt-get install -y wget
 fi
