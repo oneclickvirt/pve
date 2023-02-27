@@ -51,7 +51,7 @@ curl -L https://raw.githubusercontent.com/spiritLHLS/pve/main/install_pve.sh -o 
 
 ### 下载系统模板
 
-- 下载KVM或LXC模板到PVE的ISO/CT列表中
+- 下载KVM或LXC模板到PVE的ISO/CT列表中(debian11，ubuntu20)
 - 下载完成后请web端查看 pve > local(pve) > ISO Images/CT Templates 刷新一下记录，直接去创建虚拟机是看不到已下载的
 
 ```
