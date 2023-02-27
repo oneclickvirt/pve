@@ -39,9 +39,13 @@ case "$choice" in
       wget -P /root/ https://github.com/spiritLHLS/realServer-Template/releases/download/1.1/ubuntu20.qcow2
       wget -P /root/ https://github.com/spiritLHLS/realServer-Template/releases/download/1.0/debian11.qcow2
     fi
-    qm importdisk --format qcow2 100 /root/ubuntu20.qcow2 local
-    qm importdisk --format qcow2 101 /root/ubuntu20.qcow2 local
-    rm -rf /root/ubuntu20.qcow2 /root/debian11.qcow
+    qemu-img convert -f qcow2 -O raw /root/ubuntu20.qcow2 /root/ubuntu20.raw
+    mkisofs -o /root/ubuntu20.iso /root/ubuntu20.raw
+    mv /root/ubuntu20.iso /var/lib/vz/template/iso/
+    qemu-img convert -f qcow2 -O raw /root/debian11.qcow2 /root/debian11.raw
+    mkisofs -o /root/debian11.iso /root/debian11.raw
+    mv /root/debian11.iso /var/lib/vz/template/iso/
+    rm -rf /root/ubuntu20.qcow2 /root/debian11.qcow /root/debian11.raw /root/ubuntu20.raw
     echo "已将镜像文件加载到 Proxmox VE 的模板目录"
     ;;
   2)
@@ -72,9 +76,13 @@ case "$choice" in
       wget -P /root/ http://download.proxmox.com/images/system/ubuntu-20.10-standard_20.10-1_amd64.tar.gz
       wget -P /root/ http://download.proxmox.com/images/system/debian-11-standard_11.3-0_amd64.tar.gz
     fi
-    qm importdisk --format qcow2 100 /root/ubuntu20.qcow2 local
-    qm importdisk --format qcow2 101 /root/ubuntu20.qcow2 local
-    rm -rf /root/ubuntu20.qcow2 /root/debian11.qcow
+    qemu-img convert -f qcow2 -O raw /root/ubuntu20.qcow2 /root/ubuntu20.raw
+    mkisofs -o /root/ubuntu20.iso /root/ubuntu20.raw
+    mv /root/ubuntu20.iso /var/lib/vz/template/iso/
+    qemu-img convert -f qcow2 -O raw /root/debian11.qcow2 /root/debian11.raw
+    mkisofs -o /root/debian11.iso /root/debian11.raw
+    mv /root/debian11.iso /var/lib/vz/template/iso/
+    rm -rf /root/ubuntu20.qcow2 /root/debian11.qcow /root/debian11.raw /root/ubuntu20.raw
     mv /root/ubuntu-20.10-standard_20.10-1_amd64.tar.gz /var/lib/vz/template/cache/
     mv /root/debian-11-standard_11.3-0_amd64.tar.gz /var/lib/vz/template/cache/
     echo "已全部加载"
