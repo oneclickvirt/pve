@@ -45,7 +45,7 @@ case "$choice" in
     qemu-img convert -f qcow2 -O raw /root/debian11.qcow2 /root/debian11.raw
     mkisofs -o /root/debian11.iso /root/debian11.raw
     mv /root/debian11.iso /var/lib/vz/template/iso/
-    rm -rf /root/ubuntu20.qcow2 /root/debian11.qcow /root/debian11.raw /root/ubuntu20.raw
+    rm -rf /root/ubuntu20.qcow2 /root/debian11.qcow2 /root/debian11.raw /root/ubuntu20.raw
     echo "已将镜像文件加载到 Proxmox VE 的模板目录"
     ;;
   2)
@@ -82,7 +82,7 @@ case "$choice" in
     qemu-img convert -f qcow2 -O raw /root/debian11.qcow2 /root/debian11.raw
     mkisofs -o /root/debian11.iso /root/debian11.raw
     mv /root/debian11.iso /var/lib/vz/template/iso/
-    rm -rf /root/ubuntu20.qcow2 /root/debian11.qcow /root/debian11.raw /root/ubuntu20.raw
+    rm -rf /root/ubuntu20.qcow2 /root/debian11.qcow2 /root/debian11.raw /root/ubuntu20.raw
     mv /root/ubuntu-20.10-standard_20.10-1_amd64.tar.gz /var/lib/vz/template/cache/
     mv /root/debian-11-standard_11.3-0_amd64.tar.gz /var/lib/vz/template/cache/
     echo "已全部加载"
