@@ -47,15 +47,15 @@ case "$choice" in
     if [[ -n "${CN}" ]]; then
       wget -P /root/ https://mirrors.tuna.tsinghua.edu.cn/proxmox/images/system/debian-11-standard_11.3-0_amd64.tar.gz
       wget -P /root/ https://mirrors.tuna.tsinghua.edu.cn/proxmox/images/system/ubuntu-20.10-standard_20.10-1_amd64.tar.gz
-      wget -P /root/ https://mirrors.tuna.tsinghua.edu.cn/proxmox/images/system/debian-10-standard_10.7-1_amd64.tar.gz
+#       wget -P /root/ https://mirrors.tuna.tsinghua.edu.cn/proxmox/images/system/debian-10-standard_10.7-1_amd64.tar.gz
     else
       wget -P /root/ http://download.proxmox.com/images/system/ubuntu-20.10-standard_20.10-1_amd64.tar.gz
       wget -P /root/ http://download.proxmox.com/images/system/debian-11-standard_11.3-0_amd64.tar.gz
-      wget -P /root/ http://download.proxmox.com/images/system/debian-10-standard_10.7-1_amd64.tar.gz
+#       wget -P /root/ http://download.proxmox.com/images/system/debian-10-standard_10.7-1_amd64.tar.gz
     fi
     mv /root/ubuntu-20.10-standard_20.10-1_amd64.tar.gz /var/lib/vz/template/cache/
     mv /root/debian-11-standard_11.3-0_amd64.tar.gz /var/lib/vz/template/cache/
-    mv /root/debian-10-standard_10.7-1_amd64.tar.gz /var/lib/vz/template/cache/
+#     mv /root/debian-10-standard_10.7-1_amd64.tar.gz /var/lib/vz/template/cache/
     echo "已将镜像文件移动到 LXC 的模板目录"
     ;;
   3)
@@ -65,19 +65,19 @@ case "$choice" in
       wget -P /root/ https://ghproxy.com/https://github.com/spiritLHLS/pve/releases/download/debian-11.6.0-amd64-netinst.iso/debian-11.6.0-amd64-netinst.iso
       wget -P /root/ https://mirrors.tuna.tsinghua.edu.cn/proxmox/images/system/debian-11-standard_11.3-0_amd64.tar.gz
       wget -P /root/ https://mirrors.tuna.tsinghua.edu.cn/proxmox/images/system/ubuntu-20.10-standard_20.10-1_amd64.tar.gz
-      wget -P /root/ https://mirrors.tuna.tsinghua.edu.cn/proxmox/images/system/debian-10-standard_10.7-1_amd64.tar.gz
+#       wget -P /root/ https://mirrors.tuna.tsinghua.edu.cn/proxmox/images/system/debian-10-standard_10.7-1_amd64.tar.gz
     else
       wget -P /root/ https://cloud-images.ubuntu.com/focal/current/focal-server-cloudimg-amd64.img
       wget -P /root/ https://github.com/spiritLHLS/pve/releases/download/debian-11.6.0-amd64-netinst.iso/debian-11.6.0-amd64-netinst.iso
       wget -P /root/ http://download.proxmox.com/images/system/ubuntu-20.10-standard_20.10-1_amd64.tar.gz
       wget -P /root/ http://download.proxmox.com/images/system/debian-11-standard_11.3-0_amd64.tar.gz
-      wget -P /root/ http://download.proxmox.com/images/system/debian-10-standard_10.7-1_amd64.tar.gz
+#       wget -P /root/ http://download.proxmox.com/images/system/debian-10-standard_10.7-1_amd64.tar.gz
     fi
     mv /root/focal-server-cloudimg-amd64.img /var/lib/vz/template/iso/
     mv /root/debian-11.6.0-amd64-netinst.iso /var/lib/vz/template/iso/
     mv /root/ubuntu-20.10-standard_20.10-1_amd64.tar.gz /var/lib/vz/template/cache/
     mv /root/debian-11-standard_11.3-0_amd64.tar.gz /var/lib/vz/template/cache/
-    mv /root/debian-10-standard_10.7-1_amd64.tar.gz /var/lib/vz/template/cache/
+#     mv /root/debian-10-standard_10.7-1_amd64.tar.gz /var/lib/vz/template/cache/
     ;;
   *)
     echo "无效的选项，程序退出"
