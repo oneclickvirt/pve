@@ -42,7 +42,7 @@ case "$choice" in
     qm importdisk --format qcow2 100 /root/ubuntu20.qcow2 local
     qm importdisk --format qcow2 101 /root/ubuntu20.qcow2 local
     rm -rf /root/ubuntu20.qcow2 /root/debian11.qcow
-    echo "已将镜像文件移动到 Proxmox VE 的模板目录"
+    echo "已将镜像文件加载到 Proxmox VE 的模板目录"
     ;;
   2)
     if [[ -n "${CN}" ]]; then
@@ -77,6 +77,7 @@ case "$choice" in
     rm -rf /root/ubuntu20.qcow2 /root/debian11.qcow
     mv /root/ubuntu-20.10-standard_20.10-1_amd64.tar.gz /var/lib/vz/template/cache/
     mv /root/debian-11-standard_11.3-0_amd64.tar.gz /var/lib/vz/template/cache/
+    echo "已全部加载"
     ;;
   *)
     echo "无效的选项，程序退出"
