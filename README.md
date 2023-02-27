@@ -74,6 +74,8 @@ bash <(wget -qO- --no-check-certificate https://raw.githubusercontent.com/spirit
 bash <(wget -qO- --no-check-certificate https://raw.githubusercontent.com/spiritLHLS/pve/main/build_nat_network.sh)
 ```
 
+## 以下脚本测试开发中勿要使用
+
 ### 加载系统模板
 
 自测中，勿要使用，未完成
