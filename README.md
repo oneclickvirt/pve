@@ -74,7 +74,8 @@ bash <(wget -qO- --no-check-certificate https://raw.githubusercontent.com/spirit
 ### 自动配置IPV4的NAT网关
 
 - 创建vmbr0
-- 创建vmbr1(NAT网关)，开虚拟机时网关使用```172.16.1.1```，ip地址使用```172.16.1.x/24```，这里的x不能是1
+- 创建vmbr1(NAT网关)
+- 开NAT虚拟机时网关（IPV4）使用```172.16.1.1```，IPV4/CIDR使用```172.16.1.x/24```，这里的x不能是1
 - 可能需要web端手动点应用配置按钮应用一下
 - 想查看完整设置可以执行```cat /etc/network/interfaces```查看
 
