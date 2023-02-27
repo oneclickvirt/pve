@@ -71,7 +71,7 @@ curl -L https://raw.githubusercontent.com/spiritLHLS/pve/main/install_iso.sh -o 
 bash <(wget -qO- --no-check-certificate https://raw.githubusercontent.com/spiritLHLS/pve/main/build_backend.sh)
 ```
 
-### 自动配置NAT网关
+### 自动配置IPV4的NAT网关
 
 - 创建vmbr0
 - 创建vmbr1(NAT网关)
