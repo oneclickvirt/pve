@@ -23,7 +23,7 @@ if [[ -z "${CN}" ]]; then
   fi
 fi
 
-echo "请选择要下载到的模板目录："
+echo "请选择要加载到的模板目录："
 echo "1. Proxmox VE 的模板目录（/var/lib/vz/template/iso/）"
 echo "2. LXC 的模板目录（/var/lib/vz/template/cache/）"
 echo "3. 全都要"
@@ -33,51 +33,50 @@ read -p "请输入选项编号（1或2）: " choice
 case "$choice" in
   1)
     if [[ -n "${CN}" ]]; then
-      wget -P /root/ https://mirrors.tuna.tsinghua.edu.cn/ubuntu-cloud-images/focal/current/focal-server-cloudimg-amd64.img
-      wget -P /root/ https://ghproxy.com/https://github.com/spiritLHLS/pve/releases/download/debian-11.6.0-amd64-netinst.iso/debian-11.6.0-amd64-netinst.iso
+      wget -P /root/ https://ghproxy.com/https://github.com/spiritLHLS/realServer-Template/releases/download/1.1/ubuntu20.qcow2
+      wget -P /root/ https://ghproxy.com/https://github.com/spiritLHLS/realServer-Template/releases/download/1.0/debian11.qcow2
     else
-      wget -P /root/ https://cloud-images.ubuntu.com/focal/current/focal-server-cloudimg-amd64.img
-      wget -P /root/ https://github.com/spiritLHLS/pve/releases/download/debian-11.6.0-amd64-netinst.iso/debian-11.6.0-amd64-netinst.iso
+      wget -P /root/ https://github.com/spiritLHLS/realServer-Template/releases/download/1.1/ubuntu20.qcow2
+      wget -P /root/ https://github.com/spiritLHLS/realServer-Template/releases/download/1.0/debian11.qcow2
     fi
-    mv /root/focal-server-cloudimg-amd64.img /var/lib/vz/template/iso/
-    mv /root/debian-11.6.0-amd64-netinst.iso /var/lib/vz/template/iso/
+    qm importdisk --format qcow2 100 /root/ubuntu20.qcow2 local
+    qm importdisk --format qcow2 101 /root/ubuntu20.qcow2 local
+    rm -rf /root/ubuntu20.qcow2 /root/debian11.qcow
     echo "已将镜像文件移动到 Proxmox VE 的模板目录"
     ;;
   2)
     if [[ -n "${CN}" ]]; then
       wget -P /root/ https://mirrors.tuna.tsinghua.edu.cn/proxmox/images/system/debian-11-standard_11.3-0_amd64.tar.gz
       wget -P /root/ https://mirrors.tuna.tsinghua.edu.cn/proxmox/images/system/ubuntu-20.10-standard_20.10-1_amd64.tar.gz
-#       wget -P /root/ https://mirrors.tuna.tsinghua.edu.cn/proxmox/images/system/debian-10-standard_10.7-1_amd64.tar.gz
+      wget -P /root/ https://mirrors.tuna.tsinghua.edu.cn/proxmox/images/system/debian-10-standard_10.7-1_amd64.tar.gz
     else
       wget -P /root/ http://download.proxmox.com/images/system/ubuntu-20.10-standard_20.10-1_amd64.tar.gz
       wget -P /root/ http://download.proxmox.com/images/system/debian-11-standard_11.3-0_amd64.tar.gz
-#       wget -P /root/ http://download.proxmox.com/images/system/debian-10-standard_10.7-1_amd64.tar.gz
+      wget -P /root/ http://download.proxmox.com/images/system/debian-10-standard_10.7-1_amd64.tar.gz
     fi
     mv /root/ubuntu-20.10-standard_20.10-1_amd64.tar.gz /var/lib/vz/template/cache/
     mv /root/debian-11-standard_11.3-0_amd64.tar.gz /var/lib/vz/template/cache/
-#     mv /root/debian-10-standard_10.7-1_amd64.tar.gz /var/lib/vz/template/cache/
+    mv /root/debian-10-standard_10.7-1_amd64.tar.gz /var/lib/vz/template/cache/
     echo "已将镜像文件移动到 LXC 的模板目录"
     ;;
   3)
     
     if [[ -n "${CN}" ]]; then
-      wget -P /root/ https://mirrors.tuna.tsinghua.edu.cn/ubuntu-cloud-images/focal/current/focal-server-cloudimg-amd64.img
-      wget -P /root/ https://ghproxy.com/https://github.com/spiritLHLS/pve/releases/download/debian-11.6.0-amd64-netinst.iso/debian-11.6.0-amd64-netinst.iso
+      wget -P /root/ https://ghproxy.com/https://github.com/spiritLHLS/realServer-Template/releases/download/1.1/ubuntu20.qcow2
+      wget -P /root/ https://ghproxy.com/https://github.com/spiritLHLS/realServer-Template/releases/download/1.0/debian11.qcow2
       wget -P /root/ https://mirrors.tuna.tsinghua.edu.cn/proxmox/images/system/debian-11-standard_11.3-0_amd64.tar.gz
       wget -P /root/ https://mirrors.tuna.tsinghua.edu.cn/proxmox/images/system/ubuntu-20.10-standard_20.10-1_amd64.tar.gz
-#       wget -P /root/ https://mirrors.tuna.tsinghua.edu.cn/proxmox/images/system/debian-10-standard_10.7-1_amd64.tar.gz
     else
-      wget -P /root/ https://cloud-images.ubuntu.com/focal/current/focal-server-cloudimg-amd64.img
-      wget -P /root/ https://github.com/spiritLHLS/pve/releases/download/debian-11.6.0-amd64-netinst.iso/debian-11.6.0-amd64-netinst.iso
+      wget -P /root/ https://github.com/spiritLHLS/realServer-Template/releases/download/1.1/ubuntu20.qcow2
+      wget -P /root/ https://github.com/spiritLHLS/realServer-Template/releases/download/1.0/debian11.qcow2
       wget -P /root/ http://download.proxmox.com/images/system/ubuntu-20.10-standard_20.10-1_amd64.tar.gz
       wget -P /root/ http://download.proxmox.com/images/system/debian-11-standard_11.3-0_amd64.tar.gz
-#       wget -P /root/ http://download.proxmox.com/images/system/debian-10-standard_10.7-1_amd64.tar.gz
     fi
-    mv /root/focal-server-cloudimg-amd64.img /var/lib/vz/template/iso/
-    mv /root/debian-11.6.0-amd64-netinst.iso /var/lib/vz/template/iso/
+    qm importdisk --format qcow2 100 /root/ubuntu20.qcow2 local
+    qm importdisk --format qcow2 101 /root/ubuntu20.qcow2 local
+    rm -rf /root/ubuntu20.qcow2 /root/debian11.qcow
     mv /root/ubuntu-20.10-standard_20.10-1_amd64.tar.gz /var/lib/vz/template/cache/
     mv /root/debian-11-standard_11.3-0_amd64.tar.gz /var/lib/vz/template/cache/
-#     mv /root/debian-10-standard_10.7-1_amd64.tar.gz /var/lib/vz/template/cache/
     ;;
   *)
     echo "无效的选项，程序退出"
