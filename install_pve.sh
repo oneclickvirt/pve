@@ -93,7 +93,7 @@ fi
 apt-get install gnupg -y
 if [ $(uname -m) != "x86_64" ] || [ ! -f /etc/debian_version ] || [ $(grep MemTotal /proc/meminfo | awk '{print $2}') -lt 2000000 ] || [ $(grep -c ^processor /proc/cpuinfo) -lt 2 ] || [ $(ping -c 3 google.com > /dev/null 2>&1; echo $?) -ne 0 ]; then
   _red "Error: This system does not meet the minimum requirements for Proxmox VE installation."
-  reading "是否要继续安装(非Debian系会爆上面这个警告)？(回车则默认不继续安装) [y/n] " confirm
+  reading "是否要继续安装(非Debian系或不满足最低的配置安装要求会爆上面这个警告)？(回车则默认不继续安装) [y/n] " confirm
   echo ""
   if [ "$confirm" != "y" ]; then
     exit 1
