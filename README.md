@@ -32,7 +32,7 @@
 bash <(wget -qO- --no-check-certificate https://raw.githubusercontent.com/spiritLHLS/pve/main/check_kernal.sh)
 ```
 
-### PVE基础安装
+### PVE基础安装(一键安装PVE)
 
 - 安装的是当下apt源最新的PVE
 - 比如debian10则是pve6.4，debian11则是pve7.x
