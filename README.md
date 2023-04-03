@@ -10,7 +10,7 @@
 
 ### 配置与系统要求
 
-只适配Debian系统
+只适配Debian系统，非Debian使用Ubuntu需要在询问时确认在非Debian上安装
 
 系统要求：Debian 8+
 
