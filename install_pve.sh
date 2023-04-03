@@ -124,10 +124,19 @@ case $version in
     fi
     ;;
 esac
+
+# 6.x
 if [ ! -f "/etc/apt/trusted.gpg.d/proxmox-ve-release-6.x.gpg" ]; then
   wget http://download.proxmox.com/debian/proxmox-ve-release-6.x.gpg -O /etc/apt/trusted.gpg.d/proxmox-ve-release-6.x.gpg
   chmod +r /etc/apt/trusted.gpg.d/proxmox-ve-release-6.x.gpg
 fi
+
+# 7.x
+if [ ! -f "/etc/apt/trusted.gpg.d/proxmox-release-bullseye.gpg" ]; then
+  wget http://download.proxmox.com/debian/proxmox-release-bullseye.gpg -O /etc/apt/trusted.gpg.d/proxmox-release-bullseye.gpg
+  chmod +r /etc/apt/trusted.gpg.d/proxmox-release-bullseye.gpg
+fi
+
 if ! grep -q "^deb.*pve-no-subscription" /etc/apt/sources.list; then
    echo "$repo_url" >> /etc/apt/sources.list
 fi
