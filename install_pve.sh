@@ -194,13 +194,35 @@ install_required_modules() {
 }
 install_required_modules
 
-# 更新内核
+# 打印内核
 running_kernel=$(uname -r)
 _green "Running kernel: $(pveversion)"
 installed_kernels=($(dpkg -l 'pve-kernel-*' | awk '/^ii/ {print $2}' | cut -d'-' -f3- | sort -V))
 latest_kernel=${installed_kernels[-1]}
 _green "PVE latest kernel: $latest_kernel"
-update-grub
+# update-grub
+apt-get install ipcalc -y
+# 检查/etc/network/interfaces是否有source /etc/network/interfaces.d/*行
+if grep -q "source /etc/network/interfaces.d/*" /etc/network/interfaces; then
+  # 检查/etc/network/interfaces.d/文件夹下是否有50-cloud-init文件
+  if [ -f /etc/network/interfaces.d/50-cloud-init ]; then
+    # 检查50-cloud-init文件中是否有iface eth0 inet dhcp行
+    if grep -q "iface eth0 inet dhcp" /etc/network/interfaces.d/50-cloud-init; then
+      # 获取ipv4、subnet、gateway信息
+      gateway=$(ip route | awk '/default/ {print $3}')
+      eth0info=$(ip -o -4 addr show dev eth0 | awk '{print $4}')
+      ipv4=$(echo $eth0info | cut -d'/' -f1)
+      subnet=$(echo $eth0info | cut -d'/' -f2)
+      subnet=$(ipcalc -n "$ipv4/$subnet" | grep -oP 'Netmask:\s+\K.*' | awk '{print $1}')
+      sed -i "/iface eth0 inet dhcp/c\
+        iface eth0 inet static\n\
+        address $ipv4\n\
+        netmask $subnet\n\
+        gateway $gateway\n\
+        dns-nameservers 8.8.8.8 8.8.4.4" /etc/network/interfaces.d/50-cloud-init
+    fi
+  fi
+fi
 
 # 打印安装后的信息
 url="https://${ip}:8006/"
