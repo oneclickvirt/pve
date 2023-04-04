@@ -47,7 +47,7 @@ bash <(wget -qO- --no-check-certificate https://raw.githubusercontent.com/spirit
 - 替换apt源中的企业订阅为社区源
 - 打印查询Linux系统内核和PVE内核是否已安装
 - 查询网络配置是否为dhcp配置的V4网络，如果是则转换为静态地址避免重启后dhcp失效，已设置为只读模式，如需修改请使用```chattr -i /etc/network/interfaces.d/50-cloud-init```取消只读锁定，修改完毕请执行```chattr +i /etc/network/interfaces.d/50-cloud-init```只读锁定
-- 检测```/etc/resolv.conf```是否存在```8.8.8.8```的记录，不存在则设置开机自启添加的systemd服务
+- 检测```/etc/resolv.conf```是否为空，为空则设置检测```8.8.8.8```的开机自启添加DNS的systemd服务
 - 新增PVE的APT源链接后，下载PVE并打印输出登陆信息
 - 配置完毕需要重启系统加载新内核
 
