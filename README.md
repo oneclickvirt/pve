@@ -48,6 +48,7 @@ bash <(wget -qO- --no-check-certificate https://raw.githubusercontent.com/spirit
 - 打印查询Linux系统内核和PVE内核是否已安装
 - 查询网络配置是否为dhcp配置的V4网络,如果是则转换为静态地址避免重启后dhcp失效
 - 新增PVE的APT源链接后，下载PVE并打印输出登陆信息
+- 配置完毕需要重启系统加载新内核
 
 ```
 curl -L https://raw.githubusercontent.com/spiritLHLS/pve/main/install_pve.sh -o install_pve.sh && chmod +x install_pve.sh && bash install_pve.sh
@@ -63,7 +64,6 @@ curl -L https://raw.githubusercontent.com/spiritLHLS/pve/main/install_pve.sh -o 
 
 - 创建资源池mypool
 - 检测AppArmor模块并试图安装
-- 配置完毕需要重启系统加载内核
 
 ```
 bash <(wget -qO- --no-check-certificate https://raw.githubusercontent.com/spiritLHLS/pve/main/build_backend.sh)
