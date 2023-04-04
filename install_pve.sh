@@ -175,6 +175,29 @@ if echo $output | grep -q "NO_PUBKEY"; then
 fi
 apt-get install -y proxmox-ve postfix open-iscsi
 
+# 安装必备模块并替换apt源中的无效订阅
+cp /etc/apt/sources.list.d/pve-enterprise.list /etc/apt/sources.list.d/pve-enterprise.list.bak
+echo "deb http://download.proxmox.com/debian/pve $(lsb_release -sc) pve-no-subscription" > /etc/apt/sources.list.d/pve-enterprise.list
+apt-get update
+install_required_modules() {
+    modules=("sudo" "ifupdown2" "lshw" "iproute2" "net-tools" "cloud-init" "novnc" "isc-dhcp-server")
+    for module in "${modules[@]}"
+    do
+        if dpkg -s $module > /dev/null 2>&1 ; then
+            _green "$module 已经安装！"
+        else
+            apt-get install -y $module
+            _green "$module 已成功安装！"
+        fi
+    done
+}
+install_required_modules
+
+# 更新内核
+# apt-get install -y pve-kernel-5.4.98-1-pve
+update-grub
+# apt-get remove -y linux-image*
+
 # 打印安装后的信息
 url="https://${ip}:8006/"
 _green "安装完毕，请打开HTTPS网页 $url"
