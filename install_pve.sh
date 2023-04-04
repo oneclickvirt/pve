@@ -223,7 +223,7 @@ if grep -q "source /etc/network/interfaces.d/*" /etc/network/interfaces; then
     fi
   fi
 fi
-
+systemctl restart networking
 # 打印安装后的信息
 url="https://${ip}:8006/"
 _green "安装完毕，请打开HTTPS网页 $url"
