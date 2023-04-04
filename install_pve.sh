@@ -195,9 +195,18 @@ install_required_modules() {
 install_required_modules
 
 # 更新内核
-# apt-get install -y pve-kernel-5.4.98-1-pve
+running_kernel=$(uname -r)
+_green "Running kernel: $(pveversion)"
+installed_kernels=($(dpkg -l 'pve-kernel-*' | awk '/^ii/ {print $2}' | cut -d'-' -f3- | sort -V))
+latest_kernel=${installed_kernels[-1]}
+sed -i '/^GRUB_HIDDEN_TIMEOUT=/ s/^/#/' /etc/default/grub
+sed -i '/^GRUB_HIDDEN_TIMEOUT_QUIET=/ s/^/#/' /etc/default/grub
+# if ! grep -q "^GRUB_DEFAULT=" /etc/default/grub; then
+#     sed -i "/^GRUB_TIMEOUT=/a GRUB_DEFAULT=\"$latest_kernel\"" /etc/default/grub
+# else
+#     sed -i "s/^GRUB_DEFAULT=.*/GRUB_DEFAULT=\"$latest_kernel\"/" /etc/default/grub
+# fi
 update-grub
-# apt-get remove -y linux-image*
 
 # 打印安装后的信息
 url="https://${ip}:8006/"
