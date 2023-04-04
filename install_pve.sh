@@ -58,7 +58,11 @@ if [ "${hostname}" != "pve" ]; then
    fi
 fi
 hostnamectl set-hostname pve
-if ! grep -q "127.0.0.1 localhost.localdomain localhost" /etc/hosts; then
+if grep -q "^127\.0\.0\.1 localhost$" /etc/hosts; then
+    sed -i '/^127\.0\.0\.1 localhost$/ s/^/#/' /etc/hosts
+    echo "Commented out 127.0.0.1 localhost in /etc/hosts"
+fi
+if ! grep -q "^127\.0\.0\.1 localhost\.localdomain localhost$" /etc/hosts; then
     echo "127.0.0.1 localhost.localdomain localhost" >> /etc/hosts
     echo "Added 127.0.0.1 localhost.localdomain localhost to /etc/hosts"
 fi
