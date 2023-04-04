@@ -56,27 +56,27 @@ if [ "${hostname}" != "pve" ]; then
    else
        _blue "已存在 ${ip} ${hostname} ${hostname} 的记录，无需添加"
    fi
+   hostnamectl set-hostname pve
+   hostname=$(hostname)
+   if ! grep -q "::1 localhost" /etc/hosts; then
+       echo "::1 localhost" >> /etc/hosts
+       echo "Added ::1 localhost to /etc/hosts"
+   fi
+   # if grep -q "^127\.0\.0\.1 localhost$" /etc/hosts; then
+   #     sed -i '/^127\.0\.0\.1 localhost$/ s/^/#/' /etc/hosts
+   #     echo "Commented out 127.0.0.1 localhost in /etc/hosts"
+   # fi
+   if ! grep -q "^127\.0\.0\.1 localhost\.localdomain localhost$" /etc/hosts; then
+       # 127.0.1.1
+       echo "${ip} ${hostname}.localdomain ${hostname}" >> /etc/hosts
+       echo "Added ${ip} ${hostname}.localdomain ${hostname} to /etc/hosts"
+   fi
+   # if ! grep -q "${ip} pve.proxmox.com pve" /etc/hosts; then
+   #     echo "${ip} pve.proxmox.com pve" >> /etc/hosts
+   #     echo "Added ${ip} pve.proxmox.com pve to /etc/hosts"
+   # fi
+   sudo chattr +i /etc/hosts
 fi
-hostnamectl set-hostname pve
-hostname=$(hostname)
-if ! grep -q "::1 localhost" /etc/hosts; then
-    echo "::1 localhost" >> /etc/hosts
-    echo "Added ::1 localhost to /etc/hosts"
-fi
-# if grep -q "^127\.0\.0\.1 localhost$" /etc/hosts; then
-#     sed -i '/^127\.0\.0\.1 localhost$/ s/^/#/' /etc/hosts
-#     echo "Commented out 127.0.0.1 localhost in /etc/hosts"
-# fi
-if ! grep -q "^127\.0\.0\.1 localhost\.localdomain localhost$" /etc/hosts; then
-    # 127.0.1.1
-    echo "${ip} ${hostname}.localdomain ${hostname}" >> /etc/hosts
-    echo "Added ${ip} ${hostname}.localdomain ${hostname} to /etc/hosts"
-fi
-# if ! grep -q "${ip} pve.proxmox.com pve" /etc/hosts; then
-#     echo "${ip} pve.proxmox.com pve" >> /etc/hosts
-#     echo "Added ${ip} pve.proxmox.com pve to /etc/hosts"
-# fi
-sudo chattr +i /etc/hosts
 
 ## ChinaIP检测
 if [[ -z "${CN}" ]]; then
