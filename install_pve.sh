@@ -46,6 +46,7 @@ fi
 ip=$(curl -s ipv4.ip.sb)
 hostname=$(hostname)
 if [ "${hostname}" != "pve" ]; then
+    chattr -i /etc/hosts
     hosts=$(grep -E "^[^#]*\s+${hostname}\s+${hostname}\$" /etc/hosts | grep -v "${ip}")
    if [ -n "${hosts}" ]; then
        # 注释掉查询到的行
@@ -75,7 +76,7 @@ if [ "${hostname}" != "pve" ]; then
    #     echo "${ip} pve.proxmox.com pve" >> /etc/hosts
    #     echo "Added ${ip} pve.proxmox.com pve to /etc/hosts"
    # fi
-   sudo chattr +i /etc/hosts
+   chattr +i /etc/hosts
 fi
 
 ## ChinaIP检测
@@ -214,6 +215,7 @@ if grep -q "source /etc/network/interfaces.d/*" /etc/network/interfaces; then
       ipv4=$(echo $eth0info | cut -d'/' -f1)
       subnet=$(echo $eth0info | cut -d'/' -f2)
       subnet=$(ipcalc -n "$ipv4/$subnet" | grep -oP 'Netmask:\s+\K.*' | awk '{print $1}')
+      chattr -i /etc/network/interfaces.d/50-cloud-init
       sed -i "/iface eth0 inet dhcp/c\
         iface eth0 inet static\n\
         address $ipv4\n\
@@ -227,8 +229,9 @@ fi
 systemctl restart networking
 if [ ! -s "/etc/resolv.conf" ]
 then
+    chattr -i /etc/resolv.conf
     echo "nameserver 8.8.8.8" | sudo tee /etc/resolv.conf > /dev/null
-    sudo chattr +i /etc/resolv.conf
+    chattr +i /etc/resolv.conf
 fi
 # 打印安装后的信息
 url="https://${ip}:8006/"
