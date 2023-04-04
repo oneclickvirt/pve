@@ -177,7 +177,8 @@ apt-get install -y proxmox-ve postfix open-iscsi
 
 # 安装必备模块并替换apt源中的无效订阅
 cp /etc/apt/sources.list.d/pve-enterprise.list /etc/apt/sources.list.d/pve-enterprise.list.bak
-echo "deb http://download.proxmox.com/debian/pve $(lsb_release -sc) pve-no-subscription" > /etc/apt/sources.list.d/pve-enterprise.list
+# echo "deb http://download.proxmox.com/debian/pve $(lsb_release -sc) pve-no-subscription" > /etc/apt/sources.list.d/pve-enterprise.list
+rm -rf /etc/apt/sources.list.d/pve-enterprise.list
 apt-get update
 install_required_modules() {
     modules=("sudo" "ifupdown2" "lshw" "iproute2" "net-tools" "cloud-init" "novnc") # "isc-dhcp-server"
