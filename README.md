@@ -39,6 +39,9 @@ bash <(wget -qO- --no-check-certificate https://raw.githubusercontent.com/spirit
 - /etc/hosts文件修改(修正商家hostname设置错误以及新增PVE所需的内容)
 - 已设置```/etc/hosts```为只读模式，避免重启后文件被覆写，如需修改请使用```chattr -i /etc/hosts```取消只读锁定，修改完毕请执行```chattr +i /etc/hosts```只读锁定
 - 检测是否为中国IP，如果为中国IP使用清华镜像源，否则使用官方源
+- 安装PVE开虚拟机需要的必备工具包
+- 替换apt源中的企业订阅为社区源
+- 升级Linux系统内核
 - 新增PVE的APT源链接后，下载PVE并打印输出登陆信息
 
 ```
@@ -54,9 +57,6 @@ curl -L https://raw.githubusercontent.com/spiritLHLS/pve/main/install_pve.sh -o 
 ### 预配置环境
 
 - 创建资源池mypool
-- 安装PVE开虚拟机需要的必备工具包
-- 替换apt源中的企业订阅为社区源
-- 删除无效的Linux系统内核
 - 检测AppArmor模块并试图安装
 - 配置完毕需要重启系统加载内核
 
