@@ -10,7 +10,7 @@
 
 ### 配置与系统要求
 
-只适配Debian系统
+只适配Debian系统(非Debian无法通过APT源安装，官方只给了Debian的镜像，其他系统只能使用ISO安装)
 
 系统要求：Debian 8+
 
