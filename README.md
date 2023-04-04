@@ -12,8 +12,6 @@
 
 ***如果服务器给你初始登陆的用户名不是root可能会出现各种各样的BUG,慎重使用!!!***
 
-依然处于实验中,可能出现任何BUG
-
 ### 配置与系统要求
 
 只适配Debian系统(非Debian无法通过APT源安装，官方只给了Debian的镜像，其他系统只能使用ISO安装)
@@ -47,7 +45,8 @@ bash <(wget -qO- --no-check-certificate https://raw.githubusercontent.com/spirit
 - 检测是否为中国IP，如果为中国IP使用清华镜像源，否则使用官方源
 - 安装PVE开虚拟机需要的必备工具包
 - 替换apt源中的企业订阅为社区源
-- 升级Linux系统内核
+- 打印查询Linux系统内核和PVE内核是否已安装
+- 查询网络配置是否为dhcp配置的V4网络,如果是则转换为静态地址避免重启后dhcp失效
 - 新增PVE的APT源链接后，下载PVE并打印输出登陆信息
 
 ```
