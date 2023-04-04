@@ -51,8 +51,8 @@ if [ "${hostname}" != "pve" ]; then
        # 注释掉查询到的行
        sudo sed -i "s/^$(echo ${hosts} | sed 's/\//\\\//g')/# &/" /etc/hosts
        # 添加新行
-       echo "${ip} ${hostname} ${hostname}" | sudo tee -a /etc/hosts > /dev/null
-       _green "已将 ${ip} ${hostname} ${hostname} 添加到 /etc/hosts 文件中"
+       # echo "${ip} ${hostname} ${hostname}" | sudo tee -a /etc/hosts > /dev/null
+       # _green "已将 ${ip} ${hostname} ${hostname} 添加到 /etc/hosts 文件中"
    else
        _blue "已存在 ${ip} ${hostname} ${hostname} 的记录，无需添加"
    fi
