@@ -225,6 +225,11 @@ if grep -q "source /etc/network/interfaces.d/*" /etc/network/interfaces; then
   fi
 fi
 systemctl restart networking
+if [ ! -s "/etc/resolv.conf" ]
+then
+    echo "nameserver 8.8.8.8" | sudo tee /etc/resolv.conf > /dev/null
+    sudo chattr +i /etc/resolv.conf
+fi
 # 打印安装后的信息
 url="https://${ip}:8006/"
 _green "安装完毕，请打开HTTPS网页 $url"
