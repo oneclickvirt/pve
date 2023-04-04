@@ -234,17 +234,15 @@ then
     chattr +i /etc/resolv.conf
 fi
 if [ $? -ne 0 ]; then
-   if [ ! -f /usr/local/bin/check-dns.sh ]; then
-      if [[ -n "${CN}" ]]; then
-         wget https://ghproxy.com/https://raw.githubusercontent.com/spiritLHLS/pve/main/check-dns.sh -O /usr/local/bin/check-dns.sh
-         wget https://ghproxy.com/https://raw.githubusercontent.com/spiritLHLS/pve/main/check-dns.service -O /etc/systemd/system/check-dns.service
-      else
-         wget https://raw.githubusercontent.com/spiritLHLS/pve/main/check-dns.sh -O /usr/local/bin/check-dns.sh
-         wget https://raw.githubusercontent.com/spiritLHLS/pve/main/check-dns.service -O /etc/systemd/system/check-dns.service
-      fi
-      chmod +x /usr/local/bin/check-dns.sh
-      chmod +x /etc/systemd/system/check-dns.service
+   if [[ -n "${CN}" ]]; then
+      wget https://ghproxy.com/https://raw.githubusercontent.com/spiritLHLS/pve/main/check-dns.sh -O /usr/local/bin/check-dns.sh
+      wget https://ghproxy.com/https://raw.githubusercontent.com/spiritLHLS/pve/main/check-dns.service -O /etc/systemd/system/check-dns.service
+   else
+      wget https://raw.githubusercontent.com/spiritLHLS/pve/main/check-dns.sh -O /usr/local/bin/check-dns.sh
+      wget https://raw.githubusercontent.com/spiritLHLS/pve/main/check-dns.service -O /etc/systemd/system/check-dns.service
    fi
+   chmod +x /usr/local/bin/check-dns.sh
+   chmod +x /etc/systemd/system/check-dns.service
 fi
 systemctl daemon-reload
 systemctl enable check-dns.service
