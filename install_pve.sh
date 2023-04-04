@@ -234,14 +234,21 @@ then
     chattr +i /etc/resolv.conf
 fi
 if [ $? -ne 0 ]; then
-   if [ ! -f /etc/rc.local ]; then
-     echo "#!/bin/bash" | sudo tee /etc/rc.local > /dev/null
-     echo "echo \"nameserver 8.8.8.8\" > /etc/resolv.conf" | sudo tee -a /etc/rc.local > /dev/null
-     sudo chmod +x /etc/rc.local
+   if [ ! -f /usr/local/bin/check-dns.sh ]; then
+      if [[ -n "${CN}" ]]; then
+         wget https://ghproxy.com/https://raw.githubusercontent.com/spiritLHLS/pve/main/check-dns.sh -O /usr/local/bin/check-dns.sh
+         wget https://ghproxy.com/https://raw.githubusercontent.com/spiritLHLS/pve/main/check-dns.service -O /etc/systemd/system/check-dns.service
+      else
+         wget https://raw.githubusercontent.com/spiritLHLS/pve/main/check-dns.sh -O /usr/local/bin/check-dns.sh
+         wget https://raw.githubusercontent.com/spiritLHLS/pve/main/check-dns.service -O /etc/systemd/system/check-dns.service
+      fi
+      chmod +x /usr/local/bin/check-dns.sh
+      chmod +x /etc/systemd/system/check-dns.service
    fi
 fi
-systemctl enable rc-local.service
-systemctl start rc-local.service
+systemctl daemon-reload
+systemctl enable check-dns.service
+systemctl start check-dns.service
 # 打印安装后的信息
 url="https://${ip}:8006/"
 _green "安装完毕，请打开HTTPS网页 $url"
