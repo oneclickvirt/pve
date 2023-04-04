@@ -200,19 +200,12 @@ _green "Running kernel: $(pveversion)"
 installed_kernels=($(dpkg -l 'pve-kernel-*' | awk '/^ii/ {print $2}' | cut -d'-' -f3- | sort -V))
 latest_kernel=${installed_kernels[-1]}
 _green "PVE latest kernel: $latest_kernel"
-# sed -i '/^GRUB_HIDDEN_TIMEOUT=/ s/^/#/' /etc/default/grub
-# sed -i '/^GRUB_HIDDEN_TIMEOUT_QUIET=/ s/^/#/' /etc/default/grub
-# if ! grep -q "^GRUB_DEFAULT=" /etc/default/grub; then
-#     sed -i "/^GRUB_TIMEOUT=/a GRUB_DEFAULT=\"$latest_kernel\"" /etc/default/grub
-# else
-#     sed -i "s/^GRUB_DEFAULT=.*/GRUB_DEFAULT=\"$latest_kernel\"/" /etc/default/grub
-# fi
 update-grub
-# apt-get remove -y linux-image*
 
 # 打印安装后的信息
 url="https://${ip}:8006/"
 _green "安装完毕，请打开HTTPS网页 $url"
 _green "用户名、密码就是服务器所使用的用户名、密码(如root和root用户的密码)"
+_green "请重启机器以更新PVE的内核"
 
 
