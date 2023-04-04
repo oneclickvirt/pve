@@ -1,0 +1,9 @@
+[Unit]
+Description=Check DNS service
+After=network.target
+
+[Service]
+ExecStart=/usr/local/bin/check-dns.sh
+
+[Install]
+WantedBy=multi-user.target
