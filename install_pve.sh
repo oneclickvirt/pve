@@ -233,6 +233,15 @@ then
     echo "nameserver 8.8.8.8" | sudo tee /etc/resolv.conf > /dev/null
     chattr +i /etc/resolv.conf
 fi
+if [ $? -ne 0 ]; then
+   if [ ! -f /etc/rc.local ]; then
+     echo "#!/bin/bash" | sudo tee /etc/rc.local > /dev/null
+     echo "echo \"nameserver 8.8.8.8\" > /etc/resolv.conf" | sudo tee -a /etc/rc.local > /dev/null
+     sudo chmod +x /etc/rc.local
+   fi
+fi
+systemctl enable rc-local.service
+systemctl start rc-local.service
 # 打印安装后的信息
 url="https://${ip}:8006/"
 _green "安装完毕，请打开HTTPS网页 $url"
