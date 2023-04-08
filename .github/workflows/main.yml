@@ -13,9 +13,7 @@ jobs:
         
     - name: Install dependencies
       run: |
-            apt-get install -y libguestfs-tools
-            apt-get install -y rng-tools
-            apt-get install -y wget
+            sudo apt-get install -y libguestfs-tools rng-tools wget
     
     - name: Get Images
       run: |
