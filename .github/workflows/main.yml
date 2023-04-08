@@ -1,0 +1,65 @@
+name: Images
+
+on:
+  workflow_dispatch:
+
+jobs:
+  Images:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15 
+    
+    steps:
+    - uses: actions/checkout@v2
+        
+    - name: Install dependencies
+      run: |
+            apt-get update
+            apt-get install -y libguestfs-tools
+            apt-get install -y rng-tools
+            apt-get install -y wget
+    
+    - name: Get Images
+      run: |
+        for image in ubuntu20.qcow2 ubuntu22.qcow2; do
+          wget "https://cdn-backblaze.down.idc.wiki//Image/realServer-Template/$image"
+        done
+        
+    - name: Update qcow2
+      run: |
+        for image in ubuntu20.qcow2 ubuntu22.qcow2; do
+          bash pve/back/rebuild_qcow2.sh $image
+        done
+    
+    - name: Move qcow2
+      run: |
+        for image in ubuntu20.qcow2 ubuntu22.qcow2; do
+          mv $image pve/images/
+        done
+  
+    - name: Configure Git
+      run: |
+        git config --global user.name "update"
+        git config --global user.email "tg@spiritlhl.top"
+      
+    - name: Add files to Git staging area
+      run: |
+        ls
+        pwd
+        git add .
+        
+    - name: Check Git status
+      run: |
+        git branch -a
+        git remote -v
+        git status
+    
+    - name: Commit changes
+      run: |
+        #(
+        git commit -m "Update CSV files"
+        #) || true
+    
+    - name: Push changes
+      uses: ad-m/github-push-action@master
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
