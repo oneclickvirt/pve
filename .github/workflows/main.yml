@@ -24,7 +24,7 @@ jobs:
     - name: Update qcow2
       run: |
         for image in ubuntu20.qcow2 ubuntu22.qcow2; do
-          bash back/rebuild_qcow2.sh $image
+          sudo bash back/rebuild_qcow2.sh $image
         done
     
     - name: Move qcow2
