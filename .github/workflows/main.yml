@@ -13,7 +13,6 @@ jobs:
         
     - name: Install dependencies
       run: |
-            apt-get update
             apt-get install -y libguestfs-tools
             apt-get install -y rng-tools
             apt-get install -y wget
