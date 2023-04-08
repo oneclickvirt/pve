@@ -14,6 +14,7 @@ then
     sudo apt-get install -y rng-tools
 fi
 
+export LIBGUESTFS_DEBUG=1 LIBGUESTFS_TRACE=1
 qcow_file=$1
 echo "转换文件$qcow_file中......"
 echo "启用SSH功能..."
