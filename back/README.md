@@ -31,4 +31,5 @@ curl -L https://raw.githubusercontent.com/spiritLHLS/pve/main/buildvm.sh -o buil
 rm -rf vm* qcow *.sh
 nft delete table nat
 echo "" > /etc/nftables.conf
+systemctl restart nftables.service
 ```
