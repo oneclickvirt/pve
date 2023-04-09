@@ -7,7 +7,7 @@
 
 cd /root >/dev/null 2>&1
 # 创建容器
-vm_num="${1:-200}"
+vm_num="${1:-101}"
 user="${2:-test}"
 password="${3:-123456}"
 core="${4:-1}"
@@ -87,7 +87,7 @@ qm resize $vm_num scsi0 ${disk}G
 qm start $vm_num
 
 iptables -t nat -A POSTROUTING -o eth0 -j SNAT --to ${IPV4}
-iptables -t nat -A PREROUTING -i eth0 -p tcp -m tcp --dport ${ssh_port} -j DNAT --to-destination ${user_ip}:22
+iptables -t nat -A PREROUTING -i eth0 -p tcp -m tcp --dport ${sshn} -j DNAT --to-destination ${user_ip}:22
 iptables -t nat -A PREROUTING -i eth0 -p tcp -m tcp --dport ${web1_port} -j DNAT --to-destination ${user_ip}:80
 iptables -t nat -A PREROUTING -i eth0 -p tcp -m tcp --dport ${web2_port} -j DNAT --to-destination ${user_ip}:443
 iptables -t nat -A PREROUTING -i eth0 -p tcp -m tcp --dport ${port_first}:${port_last} -j DNAT --to-destination ${user_ip}:${port_first}-${port_last}
@@ -95,4 +95,4 @@ iptables -t nat -A PREROUTING -i eth0 -p udp -m udp --dport ${port_first}:${port
 service iptables save
 service iptables restart
 
-echo "$vm_num $user $password $core $memory $disk $ssh_port $web1_port $web2_port $port_start $port_end $system" >> "vm${vm_num}"
+echo "$vm_num $user $password $core $memory $disk $sshn $web1_port $web2_port $port_first $port_last $system" >> "vm${vm_num}"
