@@ -24,7 +24,7 @@ curl -L https://raw.githubusercontent.com/spiritLHLS/pve/main/buildvm.sh -o buil
 ```
 
 ```
-./buildvm.sh 102 test1 1234567 1 512 5 40001 40002 40003 50000 50025 debian10
+./buildvm.sh 102 test1 1234567 1 512 5 40001 40002 40003 50000 50025 ubuntu20
 ```
 
 ```
