@@ -96,14 +96,20 @@ if systemctl enable iptables > /dev/null 2>&1; then
   service iptables save
   service iptables restart
 else
+  if ! systemctl is-active --quiet nftables; then
+      systemctl start nftables
+  fi
+  if ! command -v nft >/dev/null 2>&1; then
+      apt-get install nftables
+  fi
   nft add rule nat POSTROUTING oif eth0 snat to ${IPV4}
   nft add rule nat prerouting iif eth0 tcp dport ${sshn} dnat to ${user_ip}:22
   nft add rule nat prerouting iif eth0 tcp dport ${web1_port} dnat to ${user_ip}:80
   nft add rule nat prerouting iif eth0 tcp dport ${web2_port} dnat to ${user_ip}:443
   nft add rule nat prerouting iif eth0 tcp dport ${port_first}-${port_last} dnat to ${user_ip}:${port_first}-${port_last}
   nft add rule nat prerouting iif eth0 udp dport ${port_first}-${port_last} dnat to ${user_ip}:${port_first}-${port_last}
-  nft list ruleset > /etc/nftables.conf  # 保存规则到文件
-  systemctl restart nftables.service    # 重新加载规则
+  nft list ruleset > /etc/nftables.conf
+  systemctl restart nftables.service
 fi
 
 echo "$vm_num $user $password $core $memory $disk $sshn $web1_port $web2_port $port_first $port_last $system" >> "vm${vm_num}"
