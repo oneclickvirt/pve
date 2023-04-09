@@ -86,7 +86,6 @@ qm set $vm_num --ipconfig0 ip=${user_ip}/24,gw=172.16.1.1
 qm set $vm_num --cipassword $password --ciuser $user
 qm resize $vm_num scsi0 ${disk}G
 qm start $vm_num
-sleep 600
 
 # if systemctl enable iptables > /dev/null 2>&1; then
 #   iptables -t nat -A POSTROUTING -o eth0 -j SNAT --to ${IPV4}
