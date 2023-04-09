@@ -73,7 +73,9 @@ build_new_containers(){
         user=${ori: 2: 4}
         ori=$(date | md5sum)
         password=${ori: 2: 9}
-        ssh_port=$(($ssh_port + 1))
+        ssh_port=$(($web2_port + 1))
+        web1_port=$(($web2_port + 2)) 
+        web2_port=$(($web1_port + 3))
         port_start=$(($port_end + 1))
         port_end=$(($port_start + 25))
         ./buildvm.sh $vm_num $user $password 1 512 5 $ssh_port $web1_port $web2_port $port_start $port_end 300 300
