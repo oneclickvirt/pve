@@ -78,11 +78,10 @@ build_new_containers(){
         web2_port=$(($web1_port + 3))
         port_start=$(($port_end + 1))
         port_end=$(($port_start + 25))
-        ./buildvm.sh $vm_num $user $password 1 512 5 $ssh_port $web1_port $web2_port $port_start $port_end 300 300
+        ./buildvm.sh $vm_num $user $password 1 512 5 $ssh_port $web1_port $web2_port $port_start $port_end
         cat "vm$vm_num" >> vmlog
         rm -rf "vm$vm_num"
     done
 }
 
-
-
+build_new_containers
