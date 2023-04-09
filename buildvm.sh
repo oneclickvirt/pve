@@ -86,13 +86,24 @@ qm set $vm_num --cipassword $password --ciuser $user
 qm resize $vm_num scsi0 ${disk}G
 qm start $vm_num
 
-iptables -t nat -A POSTROUTING -o eth0 -j SNAT --to ${IPV4}
-iptables -t nat -A PREROUTING -i eth0 -p tcp -m tcp --dport ${sshn} -j DNAT --to-destination ${user_ip}:22
-iptables -t nat -A PREROUTING -i eth0 -p tcp -m tcp --dport ${web1_port} -j DNAT --to-destination ${user_ip}:80
-iptables -t nat -A PREROUTING -i eth0 -p tcp -m tcp --dport ${web2_port} -j DNAT --to-destination ${user_ip}:443
-iptables -t nat -A PREROUTING -i eth0 -p tcp -m tcp --dport ${port_first}:${port_last} -j DNAT --to-destination ${user_ip}:${port_first}-${port_last}
-iptables -t nat -A PREROUTING -i eth0 -p udp -m udp --dport ${port_first}:${port_last} -j DNAT --to-destination ${user_ip}:${port_first}-${port_last}
-service iptables save
-service iptables restart
+if systemctl enable iptables > /dev/null 2>&1; then
+  iptables -t nat -A POSTROUTING -o eth0 -j SNAT --to ${IPV4}
+  iptables -t nat -A PREROUTING -i eth0 -p tcp -m tcp --dport ${sshn} -j DNAT --to-destination ${user_ip}:22
+  iptables -t nat -A PREROUTING -i eth0 -p tcp -m tcp --dport ${web1_port} -j DNAT --to-destination ${user_ip}:80
+  iptables -t nat -A PREROUTING -i eth0 -p tcp -m tcp --dport ${web2_port} -j DNAT --to-destination ${user_ip}:443
+  iptables -t nat -A PREROUTING -i eth0 -p tcp -m tcp --dport ${port_first}:${port_last} -j DNAT --to-destination ${user_ip}:${port_first}-${port_last}
+  iptables -t nat -A PREROUTING -i eth0 -p udp -m udp --dport ${port_first}:${port_last} -j DNAT --to-destination ${user_ip}:${port_first}-${port_last}
+  service iptables save
+  service iptables restart
+else
+  nft add rule nat POSTROUTING oif eth0 snat to ${IPV4}
+  nft add rule nat prerouting iif eth0 tcp dport ${sshn} dnat to ${user_ip}:22
+  nft add rule nat prerouting iif eth0 tcp dport ${web1_port} dnat to ${user_ip}:80
+  nft add rule nat prerouting iif eth0 tcp dport ${web2_port} dnat to ${user_ip}:443
+  nft add rule nat prerouting iif eth0 tcp dport ${port_first}-${port_last} dnat to ${user_ip}:${port_first}-${port_last}
+  nft add rule nat prerouting iif eth0 udp dport ${port_first}-${port_last} dnat to ${user_ip}:${port_first}-${port_last}
+  nft list ruleset > /etc/nftables.conf  # 保存规则到文件
+  systemctl restart nftables.service    # 重新加载规则
+fi
 
 echo "$vm_num $user $password $core $memory $disk $sshn $web1_port $web2_port $port_first $port_last $system" >> "vm${vm_num}"
