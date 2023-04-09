@@ -107,17 +107,17 @@ else
       nft add table nat
   fi
   if ! nft list table nat | grep -q postrouting; then
-      nft add chain nat postrouting { type nat hook postrouting priority 0 \; }
-      nft add rule nat postrouting oif eth0 snat to ${IPV4}
+      nft add chain nat postrouting { type nat hook postrouting priority filter \; policy accept \; }
+      nft add rule nat postrouting oif "eth0" snat to ${IPV4}
   fi
   if ! nft list table nat | grep -q prerouting; then
-      nft add chain nat prerouting { type nat hook prerouting priority 0 \; }
+      nft add chain nat prerouting { type nat hook prerouting priority filter \; policy accept \; }
   fi
-  nft add rule nat prerouting iif eth0 tcp dport ${sshn} dnat to ${user_ip}:22
-  nft add rule nat prerouting iif eth0 tcp dport ${web1_port} dnat to ${user_ip}:80
-  nft add rule nat prerouting iif eth0 tcp dport ${web2_port} dnat to ${user_ip}:443
-  nft add rule nat prerouting iif eth0 tcp dport ${port_first}-${port_last} dnat to ${user_ip}:${port_first}-${port_last}
-  nft add rule nat prerouting iif eth0 udp dport ${port_first}-${port_last} dnat to ${user_ip}:${port_first}-${port_last}
+  nft add rule nat prerouting iif "eth0" tcp dport ${sshn} dnat to ${user_ip}:22
+  nft add rule nat prerouting iif "eth0" tcp dport ${web1_port} dnat to ${user_ip}:80
+  nft add rule nat prerouting iif "eth0" tcp dport ${web2_port} dnat to ${user_ip}:443
+  nft add rule nat prerouting iif "eth0" tcp dport ${port_first}-${port_last} dnat to ${user_ip}:${port_first}-${port_last}
+  nft add rule nat prerouting iif "eth0" udp dport ${port_first}-${port_last} dnat to ${user_ip}:${port_first}-${port_last}
   nft list ruleset > /etc/nftables.conf
   systemctl restart nftables.service
 fi
