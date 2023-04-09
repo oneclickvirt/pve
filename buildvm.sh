@@ -108,7 +108,7 @@ else
   fi
   if ! nft list table nat | grep -q postrouting; then
       nft add chain nat postrouting { type nat hook postrouting priority 0 \; }
-      nft add rule nat postrouting oif eth0 snat to ${IPV4}
+#       nft add rule nat postrouting oif eth0 snat to ${IPV4}
   fi
   if ! nft list table nat | grep -q prerouting; then
       nft add chain nat prerouting { type nat hook prerouting priority 0 \; }
