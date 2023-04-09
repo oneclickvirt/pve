@@ -30,9 +30,9 @@ pre_check(){
 # 检查当前目录下是否有vmlog文件
 if [ ! -f "vmlog" ]; then
   yellow "当前目录下不存在vmlog文件"
-  nat_num=200
-  web2_port=40000
-  port_end=50000
+  nat_num=202
+  web2_port=40003
+  port_end=50025
 else
   lines=$(cat vmlog | sed '/^$/d')
   last_line=$(echo "$lines" | tail -n 1)
