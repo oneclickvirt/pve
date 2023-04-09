@@ -103,7 +103,16 @@ else
   if ! command -v nft >/dev/null 2>&1; then
       apt-get install nftables
   fi
-  nft add rule nat POSTROUTING oif eth0 snat to ${IPV4}
+  if ! nft list tables | grep -q nat; then
+      nft add table nat
+  fi
+  if ! nft list table nat | grep -q postrouting; then
+      nft add chain nat postrouting { type nat hook postrouting priority 0 \; }
+      nft add rule nat postrouting oif eth0 snat to ${IPV4}
+  fi
+  if ! nft list table nat | grep -q prerouting; then
+      nft add chain nat prerouting { type nat hook prerouting priority 0 \; }
+  fi
   nft add rule nat prerouting iif eth0 tcp dport ${sshn} dnat to ${user_ip}:22
   nft add rule nat prerouting iif eth0 tcp dport ${web1_port} dnat to ${user_ip}:80
   nft add rule nat prerouting iif eth0 tcp dport ${web2_port} dnat to ${user_ip}:443
