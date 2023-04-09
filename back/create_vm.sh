@@ -1,11 +1,80 @@
-qm create 100 --agent 1 --scsihw virtio-scsi-single --serial0 socket --cores 1 --sockets 1 --net0 virtio,bridge=vmbr1
-qm importdisk 100 /root/qcow/ubuntu22.qcow2 local
-qm set 100 --scsihw virtio-scsi-pci --scsi0 local:100/vm-100-disk-0.raw
-qm set 100 --bootdisk scsi0
-qm set 100 --boot order=scsi0
-qm set 100 --memory 1024
-qm set 100 --ide2 local:cloudinit
-qm set 100 --nameserver 8.8.8.8
-qm set 100 --searchdomain 8.8.4.4
-qm set 100 --ipconfig0 ip=172.16.1.2/24,gw=172.16.1.1
-qm set 100 --cipassword 123456 --ciuser test
+#!/bin/bash
+# from
+# https://github.com/spiritLHLS/pve
+# 2023.04.09
+
+# cd /root
+
+red() { echo -e "\033[31m\033[01m$@\033[0m"; }
+green() { echo -e "\033[32m\033[01m$@\033[0m"; }
+yellow() { echo -e "\033[33m\033[01m$@\033[0m"; }
+blue() { echo -e "\033[36m\033[01m$@\033[0m"; }
+reading(){ read -rp "$(green "$1")" "$2"; }
+
+pre_check(){
+    home_dir=$(eval echo "~$(whoami)")
+    if [ "$home_dir" != "/root" ]; then
+        red "当前路径不是/root，脚本将退出。"
+        exit 1
+    fi
+    if ! command -v dos2unix > /dev/null 2>&1; then
+        apt-get install dos2unix -y
+    fi
+    if [ ! -f buildvm.sh ]; then
+        curl -L https://raw.githubusercontent.com/spiritLHLS/pve/main/buildvm.sh
+        chmod 777 buildvm.sh
+        dos2unix buildvm.sh
+    fi
+}
+
+# 检查当前目录下是否有vmlog文件
+if [ ! -f "vmlog" ]; then
+  yellow "当前目录下不存在vmlog文件"
+  nat_num=100
+  ssh_port=40000
+  port_start=50000
+  port_end=50025
+  echo "" > vmlog
+else
+  lines=$(cat vmlog | sed '/^$/d')
+  last_line=$(echo "$lines" | tail -n 1)
+  nat_num=$(echo "$last_line" | awk '{print $1}')
+  user=$(echo "$last_line" | awk '{print $2}')
+  password=$(echo "$last_line" | awk '{print $3}')
+  ssh_port=$(echo "$last_line" | awk '{print $4}')
+  port_start=$(echo "$last_line" | awk '{print $5}')
+  port_end=$(echo "$last_line" | awk '{print $6}')
+  green "最后一个NAT服务器对应的信息："
+  echo "NAT服务器: $nat"
+#   echo "用户名: $user"
+#   echo "密码: $password"
+  echo "SSH端口: $ssh_port"
+  echo "外网端口范围: $port_start-$port_end"
+fi
+
+build_new_containers(){
+    while true; do
+        reading "还需要生成几个NAT服务器？(输入新增几个NAT服务器)：" new_nums
+        if [[ "$new_nums" =~ ^[1-9][0-9]*$ ]]; then
+            break
+        else
+            yellow "输入无效，请输入一个正整数。"
+        fi
+    done
+    for ((i=1; i<=$new_nums; i++)); do
+        vm_num=$(($nat_num + 1))
+        ori=$(date | md5sum)
+        user=${ori: 2: 4}
+        ori=$(date | md5sum)
+        password=${ori: 2: 9}
+        ssh_port=$(($ssh_port + 1))
+        port_start=$(($port_end + 1))
+        port_end=$(($port_start + 25))
+        ./buildvm.sh $vm_num $user $password 1 512 5 $ssh_port $port_start $port_end 300 300
+        cat "vm$vm_num" >> vmlog
+        rm -rf "vm$vm_num"
+    done
+}
+
+
+
