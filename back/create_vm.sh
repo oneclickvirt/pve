@@ -32,6 +32,8 @@ if [ ! -f "vmlog" ]; then
   yellow "当前目录下不存在vmlog文件"
   nat_num=200
   ssh_port=40000
+  web1_port=40001
+  web2_port=40002
 #   port_start=50000
   port_end=50000
   echo "" > vmlog
@@ -42,14 +44,18 @@ else
   user=$(echo "$last_line" | awk '{print $2}')
   password=$(echo "$last_line" | awk '{print $3}')
   ssh_port=$(echo "$last_line" | awk '{print $4}')
-  port_start=$(echo "$last_line" | awk '{print $5}')
-  port_end=$(echo "$last_line" | awk '{print $6}')
+  web1_port=$(echo "$last_line" | awk '{print $5}')
+  web2_port=$(echo "$last_line" | awk '{print $6}')
+  port_start=$(echo "$last_line" | awk '{print $7}')
+  port_end=$(echo "$last_line" | awk '{print $8}')
   green "最后一个NAT服务器对应的信息："
   echo "NAT服务器: $nat"
 #   echo "用户名: $user"
 #   echo "密码: $password"
-  echo "SSH端口: $ssh_port"
-  echo "外网端口范围: $port_start-$port_end"
+  echo "外网SSH端口: $ssh_port"
+  echo "外网80端口: $web1_port"
+  echo "外网443端口: $web2_port"
+  echo "外网其他端口范围: $port_start-$port_end"
 fi
 
 build_new_containers(){
@@ -70,7 +76,7 @@ build_new_containers(){
         ssh_port=$(($ssh_port + 1))
         port_start=$(($port_end + 1))
         port_end=$(($port_start + 25))
-        ./buildvm.sh $vm_num $user $password 1 512 5 $ssh_port $port_start $port_end 300 300
+        ./buildvm.sh $vm_num $user $password 1 512 5 $ssh_port $web1_port $web2_port $port_start $port_end 300 300
         cat "vm$vm_num" >> vmlog
         rm -rf "vm$vm_num"
     done
