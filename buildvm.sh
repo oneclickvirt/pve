@@ -72,7 +72,7 @@ else
   num=$((first_digit - 2))$second_digit$third_digit
 fi
 
-qm create $vm_num --agent 1 --scsihw virtio-scsi-single --serial0 socket --cores $core --sockets 1 --net0 virtio,bridge=vmbr1
+qm create $vm_num --agent 1 --scsihw virtio-scsi-single --serial0 socket --cores $core --sockets 1 --net0 virtio,bridge=vmbr1,firewall=0
 qm importdisk $vm_num /root/qcow/${system}.qcow2 local
 qm set $vm_num --scsihw virtio-scsi-pci --scsi0 local:${vm_num}/vm-${vm_num}-disk-0.raw
 qm set $vm_num --bootdisk scsi0
