@@ -31,12 +31,8 @@ pre_check(){
 if [ ! -f "vmlog" ]; then
   yellow "当前目录下不存在vmlog文件"
   nat_num=200
-  ssh_port=40000
-  web1_port=40001
-  web2_port=40002
-#   port_start=50000
+  web2_port=40000
   port_end=50000
-  echo "" > vmlog
 else
   lines=$(cat vmlog | sed '/^$/d')
   last_line=$(echo "$lines" | tail -n 1)
@@ -58,7 +54,7 @@ else
   echo "外网其他端口范围: $port_start-$port_end"
 fi
 
-build_new_containers(){
+build_new_vms(){
     while true; do
         reading "还需要生成几个NAT服务器？(输入新增几个NAT服务器)：" new_nums
         if [[ "$new_nums" =~ ^[1-9][0-9]*$ ]]; then
@@ -84,4 +80,4 @@ build_new_containers(){
     done
 }
 
-build_new_containers
+build_new_vms
