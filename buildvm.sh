@@ -79,11 +79,14 @@ else
   echo "net.ipv4.ip_forward=1" >> /etc/sysctl.conf
 fi
 sysctl -p
-iptables -t nat -A PREROUTING -i eth0 -p tcp -m tcp --dport ${sshn} -j DNAT --to-destination ${user_ip}:22
-iptables -t nat -A PREROUTING -i eth0 -p tcp -m tcp --dport ${web1_port} -j DNAT --to-destination ${user_ip}:80
-iptables -t nat -A PREROUTING -i eth0 -p tcp -m tcp --dport ${web2_port} -j DNAT --to-destination ${user_ip}:443
-iptables -t nat -A PREROUTING -i eth0 -p tcp -m tcp --dport ${port_first}:${port_last} -j DNAT --to-destination ${user_ip}:${port_first}-${port_last}
-iptables -t nat -A PREROUTING -i eth0 -p udp -m udp --dport ${port_first}:${port_last} -j DNAT --to-destination ${user_ip}:${port_first}-${port_last}
-iptables-save
+iptables -t nat -A PREROUTING -p tcp --dport ${sshn} -j DNAT --to-destination ${user_ip}:22
+iptables -t nat -A PREROUTING -p tcp -m tcp --dport ${web1_port} -j DNAT --to-destination ${user_ip}:80
+iptables -t nat -A PREROUTING -p tcp -m tcp --dport ${web2_port} -j DNAT --to-destination ${user_ip}:443
+# iptables -t nat -A PREROUTING -i eth0 -p tcp -m tcp --dport ${sshn} -j DNAT --to-destination ${user_ip}:22
+# iptables -t nat -A PREROUTING -i eth0 -p tcp -m tcp --dport ${web1_port} -j DNAT --to-destination ${user_ip}:80
+# iptables -t nat -A PREROUTING -i eth0 -p tcp -m tcp --dport ${web2_port} -j DNAT --to-destination ${user_ip}:443
+# iptables -t nat -A PREROUTING -i eth0 -p tcp -m tcp --dport ${port_first}:${port_last} -j DNAT --to-destination ${user_ip}:${port_first}-${port_last}
+# iptables -t nat -A PREROUTING -i eth0 -p udp -m udp --dport ${port_first}:${port_last} -j DNAT --to-destination ${user_ip}:${port_first}-${port_last}
+iptables-save > /etc/iptables/rules.v4
 echo "$vm_num $user $password $core $memory $disk $sshn $web1_port $web2_port $port_first $port_last $system" >> "vm${vm_num}"
 cat "vm${vm_num}"
