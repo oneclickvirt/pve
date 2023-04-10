@@ -1,6 +1,7 @@
 #!/bin/bash
 
 apt-get install -y libguestfs-tools rng-tools curl
+apt-get install -y libguestfs-tools rng-tools curl --fix-missing
 curl -o rebuild_qcow2.sh https://raw.githubusercontent.com/spiritLHLS/pve/main/back/rebuild_qcow2.sh
 chmod 777 rebuild_qcow2.sh
 # QuTScloud_5.0.1.qcow2 fedora33.qcow2 fedora34.qcow2 opensuse-leap-15.qcow2 rockylinux8.qcow2 routeros_v6.qcow2 routeros_v7.qcow2
