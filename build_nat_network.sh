@@ -57,7 +57,7 @@ fi
 
 # 加载iptables并设置回源且允许NAT端口转发
 if ! command -v iptables &> /dev/null; then
-    green "iptables 未安装，正在安装..."
+    _green "iptables 未安装，正在安装..."
     apt-get install -y iptables
 fi
 iptables -t nat -A POSTROUTING -j MASQUERADE
