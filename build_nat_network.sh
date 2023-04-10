@@ -7,9 +7,20 @@ _green() { echo -e "\033[32m\033[01m$@\033[0m"; }
 _yellow() { echo -e "\033[33m\033[01m$@\033[0m"; }
 _blue() { echo -e "\033[36m\033[01m$@\033[0m"; }
 
+API_NET=("ip.sb" "ipget.net" "ip.ping0.cc" "https://ip4.seeip.org" "https://api.my-ip.io/ip" "https://ipv4.icanhazip.com" "api.ipify.org")
+for p in "${API_NET[@]}"; do
+  response=$(curl -s4m8 "$p")
+  sleep 1
+  if [ $? -eq 0 ] && ! echo "$response" | grep -q "error"; then
+    IP_API="$p"
+    break
+  fi
+done
+IPV4=$(curl -s4m8 "$IP_API")
+
 # 查询信息
 interface=$(lshw -C network | awk '/logical name:/{print $3}' | head -1)
-ip=$(curl -s ipv4.ip.sb)/24
+ip=${IPV4}/24
 gateway=$(ip route | awk '/default/ {print $3}')
 
 # 录入网关
@@ -44,8 +55,12 @@ iface vmbr1 inet static
 EOF
 fi
 
+if ! command -v iptables &> /dev/null; then
+    green "iptables 未安装，正在安装..."
+    apt-get install -y iptables
+fi
+iptables -t nat -A POSTROUTING -o eth0 -j SNAT --to ${IPV4}
+
 # 重启配置
 service networking restart
 systemctl restart networking.service
-
-# 配置DHCP
