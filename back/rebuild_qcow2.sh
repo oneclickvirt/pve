@@ -5,6 +5,7 @@ then
     echo "virt-customize not found, installing libguestfs-tools"
     sudo apt-get update
     sudo apt-get install -y libguestfs-tools
+    sudo apt-get install -y libguestfs-tools --fix-missing
 fi
 
 if ! command -v rngd &> /dev/null
@@ -12,6 +13,7 @@ then
     echo "rng-tools not found, installing rng-tools"
     sudo apt-get update
     sudo apt-get install -y rng-tools
+    sudo apt-get install -y rng-tools --fix-missing
 fi
 
 # export LIBGUESTFS_DEBUG=1 LIBGUESTFS_TRACE=1
