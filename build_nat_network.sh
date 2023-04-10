@@ -59,7 +59,6 @@ if ! command -v iptables &> /dev/null; then
     green "iptables 未安装，正在安装..."
     apt-get install -y iptables
 fi
-iptables -t nat -A POSTROUTING -o eth0 -j SNAT --to ${IPV4}
 
 # 重启配置
 service networking restart
