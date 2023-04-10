@@ -62,6 +62,7 @@ if ! command -v iptables &> /dev/null; then
 fi
 iptables -t nat -A POSTROUTING -j MASQUERADE
 sysctl net.ipv4.ip_forward=1
+sysctl_path=$(which sysctl)
 if grep -q "^net.ipv4.ip_forward=1" /etc/sysctl.conf; then
   if grep -q "^#net.ipv4.ip_forward=1" /etc/sysctl.conf; then
     sed -i 's/^#net.ipv4.ip_forward=1/net.ipv4.ip_forward=1/' /etc/sysctl.conf
@@ -69,7 +70,7 @@ if grep -q "^net.ipv4.ip_forward=1" /etc/sysctl.conf; then
 else
   echo "net.ipv4.ip_forward=1" >> /etc/sysctl.conf
 fi
-sysctl -p
+${sysctl_path} -p
 
 # 重启配置
 service networking restart
