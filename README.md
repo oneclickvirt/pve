@@ -72,7 +72,7 @@ bash <(wget -qO- --no-check-certificate https://raw.githubusercontent.com/spirit
 
 ### 自动配置IPV4的NAT网关
 
-- 使用前请保证重启过服务器且PVE能正常使用WEB端再执行
+- **使用前请保证重启过服务器且PVE能正常使用WEB端再执行**
 - 创建vmbr0
 - 创建vmbr1(NAT网关)
 - 开NAT虚拟机时网关（IPV4）使用```172.16.1.1```，IPV4/CIDR使用```172.16.1.x/24```，这里的x不能是1
