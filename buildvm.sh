@@ -122,7 +122,7 @@ qm start $vm_num
 #   systemctl restart nftables.service
 # fi
 
-echo "TCP4-LISTEN:${sshn},fork TCP4:${user_ip}:22" > /etc/socat.conf
+echo "TCP4-LISTEN:${sshn},fork TCP4:${user_ip}:22" >> /etc/socat.conf
 echo "TCP4-LISTEN:${web1_port},fork TCP4:${user_ip}:80" >> /etc/socat.conf
 echo "TCP4-LISTEN:${web2_port},fork TCP4:${user_ip}:443" >> /etc/socat.conf
 echo "TCP4-LISTEN:${port_first},fork TCP4:${user_ip}:${port_first}-${port_last}" >> /etc/socat.conf
