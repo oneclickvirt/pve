@@ -87,6 +87,14 @@ qm set $vm_num --cipassword $password --ciuser $user
 qm resize $vm_num scsi0 ${disk}G
 qm start $vm_num
 
+if grep -q "^net.ipv4.ip_forward=1" /etc/sysctl.conf; then
+  if grep -q "^#net.ipv4.ip_forward=1" /etc/sysctl.conf; then
+    sed -i 's/^#net.ipv4.ip_forward=1/net.ipv4.ip_forward=1/' /etc/sysctl.conf
+  fi
+else
+  echo "net.ipv4.ip_forward=1" >> /etc/sysctl.conf
+fi
+sysctl -p
 if systemctl enable iptables > /dev/null 2>&1; then
   iptables -t nat -A POSTROUTING -o eth0 -j SNAT --to ${IPV4}
   iptables -t nat -A PREROUTING -i eth0 -p tcp -m tcp --dport ${sshn} -j DNAT --to-destination ${user_ip}:22
