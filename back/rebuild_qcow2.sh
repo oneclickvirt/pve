@@ -17,6 +17,9 @@ fi
 # export LIBGUESTFS_DEBUG=1 LIBGUESTFS_TRACE=1
 qcow_file=$1
 echo "转换文件$qcow_file中......"
+virt-customize -a $qcow_file --run-command "echo 'Modified from https://github.com/spiritLHLS/Images' > /etc/motd"
+virt-customize -a $qcow_file --run-command "echo 'Related repo https://github.com/spiritLHLS/pve' > /etc/motd"
+virt-customize -a $qcow_file --run-command "echo '--by https://t.me/spiritlhl' > /etc/motd"
 echo "启用SSH功能..."
 virt-customize -a $qcow_file --run-command "systemctl enable ssh"
 virt-customize -a $qcow_file --run-command "systemctl start ssh"
