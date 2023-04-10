@@ -43,22 +43,6 @@ if [ ! -f "$file_path" ]; then
   curl -L -o "$file_path" "$url"
 fi
 
-API_NET=("ip.sb" "ipget.net" "ip.ping0.cc" "https://ip4.seeip.org" "https://api.my-ip.io/ip" "https://ipv4.icanhazip.com" "api.ipify.org")
-for p in "${API_NET[@]}"; do
-  response=$(curl -s4m8 "$p")
-  sleep 1
-  if [ $? -eq 0 ] && ! echo "$response" | grep -q "error"; then
-    IP_API="$p"
-    break
-  fi
-done
-IPV4=$(curl -s4m8 "$IP_API")
-
-if ! command -v iptables &> /dev/null; then
-    green "iptables 未安装，正在安装..."
-    apt-get install -y iptables
-fi
-
 first_digit=${vm_num:0:1}
 second_digit=${vm_num:1:1}
 third_digit=${vm_num:2:1}
@@ -95,47 +79,11 @@ else
   echo "net.ipv4.ip_forward=1" >> /etc/sysctl.conf
 fi
 sysctl -p
-if systemctl enable iptables > /dev/null 2>&1; then
-  iptables -t nat -A POSTROUTING -o eth0 -j SNAT --to ${IPV4}
-  iptables -t nat -A PREROUTING -i eth0 -p tcp -m tcp --dport ${sshn} -j DNAT --to-destination ${user_ip}:22
-  iptables -t nat -A PREROUTING -i eth0 -p tcp -m tcp --dport ${web1_port} -j DNAT --to-destination ${user_ip}:80
-  iptables -t nat -A PREROUTING -i eth0 -p tcp -m tcp --dport ${web2_port} -j DNAT --to-destination ${user_ip}:443
-  iptables -t nat -A PREROUTING -i eth0 -p tcp -m tcp --dport ${port_first}:${port_last} -j DNAT --to-destination ${user_ip}:${port_first}-${port_last}
-  iptables -t nat -A PREROUTING -i eth0 -p udp -m udp --dport ${port_first}:${port_last} -j DNAT --to-destination ${user_ip}:${port_first}-${port_last}
-  service iptables save
-  service iptables restart
-else
-  if ! systemctl is-active --quiet nftables; then
-      systemctl start nftables
-  fi
-  if ! command -v nft >/dev/null 2>&1; then
-      apt-get install nftables
-  fi
-  if ! nft list tables | grep -q nat; then
-      nft add table nat
-  fi
-  if ! nft list table nat | grep -q postrouting; then
-      nft add chain nat postrouting { type nat hook postrouting priority filter \; policy accept \; }
-      nft add rule nat postrouting oif "eth0" snat to ${IPV4}
-  fi
-  if ! nft list table nat | grep -q prerouting; then
-      nft add chain nat prerouting { type nat hook prerouting priority filter \; policy accept \; }
-  fi
-  nft add rule nat prerouting iif "eth0" tcp dport ${sshn} dnat to ${user_ip}:22
-  nft add rule nat prerouting iif "eth0" tcp dport ${web1_port} dnat to ${user_ip}:80
-  nft add rule nat prerouting iif "eth0" tcp dport ${web2_port} dnat to ${user_ip}:443
-  nft add rule nat prerouting iif "eth0" tcp dport ${port_first}-${port_last} dnat to ${user_ip}:${port_first}-${port_last}
-  nft add rule nat prerouting iif "eth0" udp dport ${port_first}-${port_last} dnat to ${user_ip}:${port_first}-${port_last}
-  nft list ruleset > /etc/nftables.conf
-  systemctl restart nftables.service
-fi
-
-# echo "TCP4-LISTEN:${sshn},fork TCP4:${user_ip}:22" >> /etc/socat.conf
-# echo "TCP4-LISTEN:${web1_port},fork TCP4:${user_ip}:80" >> /etc/socat.conf
-# echo "TCP4-LISTEN:${web2_port},fork TCP4:${user_ip}:443" >> /etc/socat.conf
-# echo "TCP4-LISTEN:${port_first},fork TCP4:${user_ip}:${port_first}-${port_last}" >> /etc/socat.conf
-# echo "UDP4-LISTEN:${port_first},fork UDP4:${user_ip}:${port_first}-${port_last}" >> /etc/socat.conf
-# /usr/bin/socat -d -d -lf /var/log/socat.log < /etc/socat.conf
-
+iptables -t nat -A PREROUTING -i eth0 -p tcp -m tcp --dport ${sshn} -j DNAT --to-destination ${user_ip}:22
+iptables -t nat -A PREROUTING -i eth0 -p tcp -m tcp --dport ${web1_port} -j DNAT --to-destination ${user_ip}:80
+iptables -t nat -A PREROUTING -i eth0 -p tcp -m tcp --dport ${web2_port} -j DNAT --to-destination ${user_ip}:443
+iptables -t nat -A PREROUTING -i eth0 -p tcp -m tcp --dport ${port_first}:${port_last} -j DNAT --to-destination ${user_ip}:${port_first}-${port_last}
+iptables -t nat -A PREROUTING -i eth0 -p udp -m udp --dport ${port_first}:${port_last} -j DNAT --to-destination ${user_ip}:${port_first}-${port_last}
+iptables-save
 echo "$vm_num $user $password $core $memory $disk $sshn $web1_port $web2_port $port_first $port_last $system" >> "vm${vm_num}"
 cat "vm${vm_num}"
