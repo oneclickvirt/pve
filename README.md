@@ -84,6 +84,12 @@ bash <(wget -qO- --no-check-certificate https://raw.githubusercontent.com/spirit
 bash <(wget -qO- --no-check-certificate https://raw.githubusercontent.com/spiritLHLS/pve/main/build_nat_network.sh)
 ```
 
+### 相关qcow2镜像
+
+- 已预安装开启cloudinit，开启SSH登陆，预设值SSH监听V4和V6的22端口，开启允许密码验证登陆，开启允许ROOT登陆
+
+https://github.com/spiritLHLS/Images/releases/tag/v1.0
+
 ## 以下脚本测试开发中勿要使用
 
 ### 单独生成KVM虚拟化的VM
