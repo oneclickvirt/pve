@@ -80,7 +80,7 @@ build_new_vms(){
         web2_port=$(($web1_port + 3))
         port_start=$(($port_end + 1))
         port_end=$(($port_start + 25))
-        ./buildvm.sh $vm_num $user $password 1 512 5 $ssh_port $web1_port $web2_port $port_start $port_end
+        ./buildvm.sh $vm_num $user $password 1 512 5 $ssh_port $web1_port $web2_port $port_start $port_end ubuntu20
         cat "vm$vm_num" >> vmlog
         rm -rf "vm$vm_num"
     done
