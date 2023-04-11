@@ -26,13 +26,13 @@ pre_check(){
     fi
 }
 
-files=$(find . -maxdepth 1 -name "vm*" | sort)
-if [ -n "$files" ]; then
-  for file in $files
-  do
-    cat "$file" >> vmlog
-  done
-fi
+# files=$(find . -maxdepth 1 -name "vm*" | sort)
+# if [ -n "$files" ]; then
+#   for file in $files
+#   do
+#     cat "$file" >> vmlog
+#   done
+# fi
 
 if [ ! -f "vmlog" ]; then
   yellow "当前目录下不存在vmlog文件"
