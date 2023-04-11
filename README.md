@@ -86,7 +86,30 @@ bash <(wget -qO- --no-check-certificate https://raw.githubusercontent.com/spirit
 
 ## 以下脚本测试开发中勿要使用
 
+### 批量开设NAT的KVM虚拟化的VM
 
+-批量继承设置
+-自动开设NAT服务器
+-自动进行内外网端口映射
+
+```
+curl -L https://raw.githubusercontent.com/spiritLHLS/pve/main/create_vm.sh -o create_vm.sh && chmod +x create_vm.sh
+```
+
+### 单独生成KVM虚拟化的VM
+
+-自动开设NAT服务器
+-自动进行内外网端口映射
+
+```
+curl -L https://raw.githubusercontent.com/spiritLHLS/pve/main/buildvm.sh -o buildvm.sh && chmod +x buildvm.sh
+```
+
+-测试开一个NAT服务器
+
+```
+./buildvm.sh 102 test1 1234567 1 512 5 40001 40002 40003 50000 50025 ubuntu20
+```
 
 ## 友链
 
