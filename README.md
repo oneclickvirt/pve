@@ -119,7 +119,7 @@ systemctl restart networking.service
 - 自动进行内外网端口映射
 
 ```
-curl -L https://raw.githubusercontent.com/spiritLHLS/pve/main/create_vm.sh -o create_vm.sh && chmod +x create_vm.sh
+curl -L https://raw.githubusercontent.com/spiritLHLS/pve/main/create_vm.sh -o create_vm.sh && chmod +x create_vm.sh && bash create_vm.sh
 ```
 
 ## 友链
