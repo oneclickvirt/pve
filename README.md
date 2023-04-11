@@ -84,7 +84,7 @@ bash <(wget -qO- --no-check-certificate https://raw.githubusercontent.com/spirit
 bash <(wget -qO- --no-check-certificate https://raw.githubusercontent.com/spiritLHLS/pve/main/build_nat_network.sh)
 ```
 
-### 单独生成KVM虚拟化的VM
+### 单独生成KVM虚拟化的VM(一键生成KVM虚拟化的NAT服务器)
 
 - 自动开设NAT服务器
 - 自动进行内外网端口映射
