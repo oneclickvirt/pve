@@ -55,7 +55,7 @@ else
   port_end="${last_line_array[10]}"
   system="${last_line_array[11]}"
   green "最后一个NAT服务器对应的信息："
-  echo "NAT服务器: $nat"
+  echo "NAT服务器: $vm_num"
 #   echo "用户名: $user"
 #   echo "密码: $password"
   echo "外网SSH端口: $ssh_port"
