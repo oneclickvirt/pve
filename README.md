@@ -84,7 +84,23 @@ bash <(wget -qO- --no-check-certificate https://raw.githubusercontent.com/spirit
 bash <(wget -qO- --no-check-certificate https://raw.githubusercontent.com/spiritLHLS/pve/main/build_nat_network.sh)
 ```
 
-### 单独生成KVM虚拟化的VM(一键生成KVM虚拟化的NAT服务器)
+## 一键生成KVM虚拟化的NAT服务器
+
+使用前记得**执行本仓库的第一个个命令，那个检测硬件环境的命令**
+
+![图片](https://user-images.githubusercontent.com/103393591/231160050-79945d07-b3d0-4e8d-9315-74e4fbb24f9d.png)
+
+查询如上的只需使用下面的一键脚本自动创建虚拟机即可
+
+![图片](https://user-images.githubusercontent.com/103393591/231160070-c317607c-8b0c-4aa4-bfa2-e75ec6626b24.png)
+
+查询如上的记得关闭开设的虚拟机的硬件嵌套虚拟化，如下图
+
+![图片](https://user-images.githubusercontent.com/103393591/231160449-82911a57-4b49-47ec-8fad-2100c6059017.png)
+
+关闭后重启服务器才能使用NOVNC，不关闭可能导致开出的虚拟机有BUG无法使用
+
+### 单独生成KVM虚拟化的VM
 
 - 自动开设NAT服务器，默认使用Debian10镜像，因为该镜像占用最小
 - 可在命令中自定义需要使用的镜像，这里有给出配置好的镜像，镜像自带空间是2G硬盘，所以最少需要在命令中设置硬盘到3G
