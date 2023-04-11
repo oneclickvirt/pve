@@ -181,6 +181,18 @@ cat vmlog
 
 查看信息
 
+### 致谢
+
+https://blog.ilolicon.com/archives/615
+
+https://github.com/Ella-Alinda/somescripts/blob/main/nat.sh
+
+https://pve.proxmox.com/pve-docs/qm.1.html
+
+https://down.idc.wiki/Image/realServer-Template/
+
+感谢 @Ella-Alinda 提供的PVE指导
+
 ## 友链
 
 VPS融合怪测评脚本
