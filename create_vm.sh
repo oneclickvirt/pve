@@ -22,6 +22,7 @@ pre_check(){
     fi
     if [ ! -f "buildvm.sh" ]; then
       curl -L https://raw.githubusercontent.com/spiritLHLS/pve/main/buildvm.sh -o buildvm.sh && chmod +x buildvm.sh
+      dos2unix buildvm.sh
     fi
 }
 
@@ -85,4 +86,5 @@ build_new_vms(){
     done
 }
 
+pre_check
 build_new_vms
