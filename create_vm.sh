@@ -34,22 +34,26 @@ pre_check(){
 #   done
 # fi
 
+log_file="vmlog"
 if [ ! -f "vmlog" ]; then
   yellow "当前目录下不存在vmlog文件"
   vm_num=202
   web2_port=40003
   port_end=50025
 else
-  lines=$(cat vmlog)
-  last_line=$(echo "$lines" | tail -n 1)
-  vm_num=$(echo "$last_line" | awk '{print $1}')
-  user=$(echo "$last_line" | awk '{print $2}')
-  password=$(echo "$last_line" | awk '{print $3}')
-  ssh_port=$(echo "$last_line" | awk '{print $4}')
-  web1_port=$(echo "$last_line" | awk '{print $5}')
-  web2_port=$(echo "$last_line" | awk '{print $6}')
-  port_start=$(echo "$last_line" | awk '{print $7}')
-  port_end=$(echo "$last_line" | awk '{print $8}')
+  while read line; do
+      last_line="$line"
+  done < "$log_file"
+  last_line_array=($last_line)
+  vm_num="${last_line_array[0]}"
+  user="${last_line_array[1]}"
+  password="${last_line_array[2]}"
+  ssh_port="${last_line_array[6]}"
+  web1_port="${last_line_array[7]}"
+  web2_port="${last_line_array[8]}"
+  port_start="${last_line_array[9]}"
+  port_end="${last_line_array[10]}"
+  system="${last_line_array[11]}"
   green "最后一个NAT服务器对应的信息："
   echo "NAT服务器: $nat"
 #   echo "用户名: $user"
@@ -58,6 +62,7 @@ else
   echo "外网80端口: $web1_port"
   echo "外网443端口: $web2_port"
   echo "外网其他端口范围: $port_start-$port_end"
+  echo "系统：$system"
 fi
 
 build_new_vms(){
@@ -80,7 +85,7 @@ build_new_vms(){
         web2_port=$(($web1_port + 3))
         port_start=$(($port_end + 1))
         port_end=$(($port_start + 25))
-        ./buildvm.sh $vm_num $user $password 1 512 5 $ssh_port $web1_port $web2_port $port_start $port_end ubuntu20
+        ./buildvm.sh $vm_num $user $password 1 512 5 $ssh_port $web1_port $web2_port $port_start $port_end debian10
         cat "vm$vm_num" >> vmlog
         rm -rf "vm$vm_num"
     done
