@@ -105,6 +105,10 @@ curl -L https://raw.githubusercontent.com/spiritLHLS/pve/main/buildvm.sh -o buil
 
 测试开一个NAT服务器
 
+以下示例开设VMID为102的虚拟机，用户名是test1，密码是1234567，CPU是1核，内存是512MB，硬盘是5G，SSH端口是40001，80端口是40002，443端口是40003
+
+同时内外网映射端口一致的区间是50000到50025，系统使用的是ubuntu20
+
 ```
 ./buildvm.sh 102 test1 1234567 1 512 5 40001 40002 40003 50000 50025 ubuntu20
 ```
