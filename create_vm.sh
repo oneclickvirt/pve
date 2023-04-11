@@ -20,14 +20,19 @@ pre_check(){
     if ! command -v dos2unix > /dev/null 2>&1; then
         apt-get install dos2unix -y
     fi
-    if [ ! -f buildvm.sh ]; then
-        curl -L https://raw.githubusercontent.com/spiritLHLS/pve/main/buildvm.sh
-        chmod 777 buildvm.sh
-        dos2unix buildvm.sh
+    if [ ! -f "buildvm.sh" ]; then
+      curl -L https://raw.githubusercontent.com/spiritLHLS/pve/main/buildvm.sh -o buildvm.sh && chmod +x buildvm.sh
     fi
 }
 
-# 检查当前目录下是否有vmlog文件
+files=$(find . -maxdepth 1 -name "vm*" | sort)
+if [ -n "$files" ]; then
+  for file in $files
+  do
+    cat "$file" >> vmlog
+  done
+fi
+
 if [ ! -f "vmlog" ]; then
   yellow "当前目录下不存在vmlog文件"
   nat_num=202
