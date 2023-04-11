@@ -40,7 +40,7 @@ if [ ! -f "vmlog" ]; then
   web2_port=40003
   port_end=50025
 else
-  lines=$(cat vmlog | sed '/^$/d')
+  lines=$(cat vmlog)
   last_line=$(echo "$lines" | tail -n 1)
   vm_num=$(echo "$last_line" | awk '{print $1}')
   user=$(echo "$last_line" | awk '{print $2}')
