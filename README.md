@@ -8,9 +8,9 @@
 
 当然不使用最新的debian系统也没问题，只不过得不到官方支持
 
-***请确保使用前机器可以重装系统，不保证本套脚本不造成任何BUG!!!***
+**请确保使用前机器可以重装系统，不保证本套脚本不造成任何BUG!!!**
 
-***如果服务器是VPS而不是独服，可能会出现各种各样的BUG，请做好部署失败重装服务器的准备!!!***
+**如果服务器是VPS而不是独服，可能会出现各种各样的BUG，请做好部署失败重装服务器的准备!!!**
 
 ### 配置与系统要求
 
@@ -181,7 +181,7 @@ cat vmlog
 
 查看信息
 
-### 致谢
+## 致谢
 
 https://blog.ilolicon.com/archives/615
 
@@ -191,7 +191,7 @@ https://pve.proxmox.com/pve-docs/qm.1.html
 
 https://down.idc.wiki/Image/realServer-Template/
 
-感谢 @Ella-Alinda 提供的PVE指导
+感谢 [@Ella-Alinda](https://github.com/Ella-Alinda) 提供的PVE指导
 
 ## 友链
 
