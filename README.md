@@ -99,7 +99,7 @@ bash <(wget -qO- --no-check-certificate https://raw.githubusercontent.com/spirit
 
 ![图片](https://user-images.githubusercontent.com/103393591/231160449-82911a57-4b49-47ec-8fad-2100c6059017.png)
 
-关闭后重启对应的虚拟机才能使用NOVNC，不关闭可能导致这个虚拟机有BUG无法使用
+先停止虚拟机再修改，修改完后再开机才能使用NOVNC，不关闭可能导致这个虚拟机有BUG无法使用
 
 ### 单独生成KVM虚拟化的VM
 
