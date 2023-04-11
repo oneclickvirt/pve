@@ -36,13 +36,13 @@ fi
 
 if [ ! -f "vmlog" ]; then
   yellow "当前目录下不存在vmlog文件"
-  nat_num=202
+  vm_num=202
   web2_port=40003
   port_end=50025
 else
   lines=$(cat vmlog | sed '/^$/d')
   last_line=$(echo "$lines" | tail -n 1)
-  nat_num=$(echo "$last_line" | awk '{print $1}')
+  vm_num=$(echo "$last_line" | awk '{print $1}')
   user=$(echo "$last_line" | awk '{print $2}')
   password=$(echo "$last_line" | awk '{print $3}')
   ssh_port=$(echo "$last_line" | awk '{print $4}')
@@ -70,7 +70,7 @@ build_new_vms(){
         fi
     done
     for ((i=1; i<=$new_nums; i++)); do
-        vm_num=$(($nat_num + 1))
+        vm_num=$(($vm_num + 1))
         ori=$(date | md5sum)
         user=${ori: 2: 4}
         ori=$(date | md5sum)
