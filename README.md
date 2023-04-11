@@ -86,8 +86,11 @@ bash <(wget -qO- --no-check-certificate https://raw.githubusercontent.com/spirit
 
 ### 单独生成KVM虚拟化的VM(一键生成KVM虚拟化的NAT服务器)
 
-- 自动开设NAT服务器
-- 自动进行内外网端口映射
+- 自动开设NAT服务器，默认使用Debian10镜像，因为该镜像占用最小
+- 可在命令中自定义需要使用的镜像，这里有给出配置好的镜像，镜像自带空间是2G硬盘，所以最少需要在命令中设置硬盘到3G
+- 自定义内存大小推荐512MB内存，需要注意的是母鸡内存记得开点swap免得机器炸了[开SWAP点我跳转](https://github.com/spiritLHLS/addswap)
+- 自动进行内外网端口映射，含22，80，443端口以及其他25个内外网端口号一样的端口
+- 生成后需要等待一段时间虚拟机内部的cloudinit配置好网络以及登陆信息，大概需要5分钟
 
 ```
 curl -L https://raw.githubusercontent.com/spiritLHLS/pve/main/buildvm.sh -o buildvm.sh && chmod +x buildvm.sh
@@ -141,14 +144,14 @@ rm -rf vm102
 
 https://github.com/spiritLHLS/Images/releases/tag/v1.0
 
-## 以下脚本测试开发中勿要使用
-
 ### 批量开设NAT的KVM虚拟化的VM
 
-- **使用前需要保证未使用过上面单独生成KVM虚拟化的VM的测试命令，否则可能出现BUG**
-- 可多次运行批量继承设置
-- 自动开设NAT服务器
-- 自动进行内外网端口映射
+- **初次使用前需要保证当前PVE未有任何虚拟机未有进行任何端口映射，否则可能出现BUG**
+- 可多次运行批量生成VM，但需要注意的是母鸡内存记得开点swap免得机器炸了[开SWAP点我跳转](https://github.com/spiritLHLS/addswap)
+- 自动开设NAT服务器，默认使用Debian10镜像，因为该镜像占用最小
+- 自动进行内外网端口映射，含22，80，443端口以及其他25个内外网端口号一样的端口
+- 生成后需要等待一段时间虚拟机内部的cloudinit配置好网络以及登陆信息，大概需要5分钟
+- 默认批量开设的虚拟机配置为：1核512MB内存5G硬盘，22，80，443端口及一个25个端口区间的内外网映射
 
 ```
 curl -L https://raw.githubusercontent.com/spiritLHLS/pve/main/create_vm.sh -o create_vm.sh && chmod +x create_vm.sh && bash create_vm.sh
