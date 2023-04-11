@@ -19,9 +19,9 @@ web1_port="${8:-40002}"
 web2_port="${9:-40003}"
 port_first="${10:-49975}"
 port_last="${11:-50000}"
+system="${12:-debian10}"
 # in="${12:-300}"
 # out="${13:-300}"
-system="${14:-debian10}"
 rm -rf "vm$name"
 
 if [ ! -d "qcow" ]; then
