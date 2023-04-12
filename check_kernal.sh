@@ -43,3 +43,30 @@ if ! lsmod | grep -q kvm; then
     echo "kvm" >> /etc/modules
     _green "KVM模块已加载并添加到 /etc/modules，可以尝试使用PVE虚拟化KVM服务器，也可以开LXC服务器(CT)"
 fi
+
+check_config(){
+    # 检查CPU核心数
+    cpu_cores=$(grep -c ^processor /proc/cpuinfo)
+    if [ "$cpu_cores" -lt 2 ]; then
+        _yellow "服务器不满足最低要求：至少2核CPU"
+        return
+    fi
+
+    # 检查内存大小
+    total_mem=$(free -m | awk '/^Mem:/{print $2}')
+    if [ "$total_mem" -lt 2048 ]; then
+        _yellow "服务器不满足最低要求：至少2G内存"
+        return
+    fi
+
+    # 检查硬盘大小
+    total_disk=$(df -h / | awk '/\//{print $2}')
+    if [ "$total_disk" -lt 20 ]; then
+        _yellow "服务器不满足最低要求：至少20G硬盘"
+        return
+    fi
+
+    _green "服务器满足至少2核2G内存20G硬盘的最低要求"
+}
+
+check_config
