@@ -48,14 +48,14 @@ check_config(){
     # 检查CPU核心数
     cpu_cores=$(grep -c ^processor /proc/cpuinfo)
     if [ "$cpu_cores" -lt 2 ]; then
-        _yellow "服务器不满足最低要求：至少2核CPU"
+        _yellow "本机配置不满足最低要求：至少2核CPU"
         return
     fi
 
     # 检查内存大小
     total_mem=$(free -m | awk '/^Mem:/{print $2}')
     if [ "$total_mem" -lt 2048 ]; then
-        _yellow "服务器不满足最低要求：至少2G内存"
+        _yellow "本机配置不满足最低要求：至少2G内存"
         return
     fi
 
@@ -63,11 +63,11 @@ check_config(){
     total_disk=$(df -h / | awk '/\//{print $2}')
     total_disk_num=$(echo $total_disk | sed 's/G//')
     if [ "$total_disk_num" -lt 20 ]; then
-        _yellow "服务器不满足最低要求：至少20G硬盘"
+        _yellow "本机配置不满足最低要求：至少20G硬盘"
         return
     fi
 
-    _green "服务器满足至少2核2G内存20G硬盘的最低要求"
+    _green "本机配置满足至少2核2G内存20G硬盘的最低要求"
 }
 
 check_config
