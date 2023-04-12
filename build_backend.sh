@@ -35,12 +35,10 @@ if [ `grep $iommu /etc/default/grub|wc -l` = 0 ];then
    sed -i 's|quiet|quiet '$iommu'|' /etc/default/grub
    update-grub
    if [ `grep "vfio" /etc/modules|wc -l` = 0 ];then
-cat <<-EOF >> /etc/modules
- vfio
- vfio_iommu_type1
- vfio_pci
- vfio_virqfd
-EOF
+echo 'vfio
+vfio_iommu_type1
+vfio_pci
+vfio_virqfd' >> /etc/modules
    fi
 else
    _green "已设置硬件直通"
