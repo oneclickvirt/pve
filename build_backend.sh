@@ -25,23 +25,24 @@ sed -Ezi.bak "s/(Ext.Msg.show\(\{\s+title: gettext\('No valid sub)/void\(\{ \/\/
 # 开启硬件直通
 if [ `dmesg | grep -e DMAR -e IOMMU|wc -l` = 0 ];then
    _yellow "硬件不支持直通"
-fi
-if [ `cat /proc/cpuinfo|grep Intel|wc -l` = 0 ];then
-   iommu="amd_iommu=on"
 else
-   iommu="intel_iommu=on"
-fi
-if [ `grep $iommu /etc/default/grub|wc -l` = 0 ];then
-   sed -i 's|quiet|quiet '$iommu'|' /etc/default/grub
-   update-grub
-   if [ `grep "vfio" /etc/modules|wc -l` = 0 ];then
-echo 'vfio
-vfio_iommu_type1
-vfio_pci
-vfio_virqfd' >> /etc/modules
-   fi
-else
-   _green "已设置硬件直通"
+    if [ `cat /proc/cpuinfo|grep Intel|wc -l` = 0 ];then
+       iommu="amd_iommu=on"
+    else
+       iommu="intel_iommu=on"
+    fi
+    if [ `grep $iommu /etc/default/grub|wc -l` = 0 ];then
+       sed -i 's|quiet|quiet '$iommu'|' /etc/default/grub
+       update-grub
+       if [ `grep "vfio" /etc/modules|wc -l` = 0 ];then
+    echo 'vfio
+    vfio_iommu_type1
+    vfio_pci
+    vfio_virqfd' >> /etc/modules
+       fi
+    else
+       _green "已设置硬件直通"
+    fi
 fi
 
 # 检测AppArmor模块
