@@ -66,6 +66,7 @@ curl -L https://raw.githubusercontent.com/spiritLHLS/pve/main/install_pve.sh -o 
 
 - 创建资源池mypool
 - 移除订阅弹窗
+- 尝试开启硬件直通
 - 检测AppArmor模块并试图安装
 
 ```
