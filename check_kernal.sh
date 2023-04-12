@@ -61,7 +61,8 @@ check_config(){
 
     # 检查硬盘大小
     total_disk=$(df -h / | awk '/\//{print $2}')
-    if [ "$total_disk" -lt 20 ]; then
+    total_disk_num=$(echo $total_disk | sed 's/G//')
+    if [ "$total_disk_num" -lt 20 ]; then
         _yellow "服务器不满足最低要求：至少20G硬盘"
         return
     fi
