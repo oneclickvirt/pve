@@ -176,6 +176,13 @@ if echo $output | grep -q "NO_PUBKEY"; then
 fi
 apt-get install -y proxmox-ve postfix open-iscsi
 
+# 如果是国内服务器则替换CT源为国内镜像源
+if [[ -n "${CN}" ]]; then
+   cp -rf /usr/share/perl5/PVE/APLInfo.pm /usr/share/perl5/PVE/APLInfo.pm.bak
+   sed -i 's|http://download.proxmox.com|https://mirrors.tuna.tsinghua.edu.cn/proxmox|g' /usr/share/perl5/PVE/APLInfo.pm
+	sed -i 's|http://mirrors.ustc.edu.cn/proxmox|https://mirrors.tuna.tsinghua.edu.cn/proxmox|g' /usr/share/perl5/PVE/APLInfo.pm
+fi
+
 # 安装必备模块并替换apt源中的无效订阅
 cp /etc/apt/sources.list.d/pve-enterprise.list /etc/apt/sources.list.d/pve-enterprise.list.bak
 # echo "deb http://download.proxmox.com/debian/pve $(lsb_release -sc) pve-no-subscription" > /etc/apt/sources.list.d/pve-enterprise.list
