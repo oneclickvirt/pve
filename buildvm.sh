@@ -62,6 +62,7 @@ qm set $vm_num --scsihw virtio-scsi-pci --scsi0 local:${vm_num}/vm-${vm_num}-dis
 qm set $vm_num --bootdisk scsi0
 qm set $vm_num --boot order=scsi0
 qm set $vm_num --memory $memory
+# --swap 256
 qm set $vm_num --ide2 local:cloudinit
 qm set $vm_num --nameserver 8.8.8.8
 qm set $vm_num --searchdomain 8.8.4.4
