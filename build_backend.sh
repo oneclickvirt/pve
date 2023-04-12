@@ -18,6 +18,10 @@ else
     _green "资源池 $POOL_ID 已创建！"
 fi
 
+# 移除订阅弹窗
+cp -rf /usr/share/javascript/proxmox-widget-toolkit/proxmoxlib.js /usr/share/javascript/proxmox-widget-toolkit/proxmoxlib.js.bak
+sed -Ezi.bak "s/(Ext.Msg.show\(\{\s+title: gettext\('No valid sub)/void\(\{ \/\/\1/g" /usr/share/javascript/proxmox-widget-toolkit/proxmoxlib.js
+
 # 检测AppArmor模块
 if ! dpkg -s apparmor > /dev/null 2>&1; then
     _green "正在安装 AppArmor..."
