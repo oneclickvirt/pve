@@ -194,6 +194,8 @@ https://pve.proxmox.com/pve-docs/qm.1.html
 
 https://down.idc.wiki/Image/realServer-Template/
 
+https://mirrors.tuna.tsinghua.edu.cn/proxmox/
+
 https://github.com/roacn/pve/blob/main/pve.sh
 
 感谢 [@Ella-Alinda](https://github.com/Ella-Alinda) 提供的PVE指导
