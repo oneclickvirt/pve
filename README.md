@@ -65,6 +65,7 @@ curl -L https://raw.githubusercontent.com/spiritLHLS/pve/main/install_pve.sh -o 
 ### 预配置环境
 
 - 创建资源池mypool
+- 移除订阅弹窗
 - 检测AppArmor模块并试图安装
 
 ```
