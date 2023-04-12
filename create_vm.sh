@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/spiritLHLS/pve
-# 2023.04.11
+# 2023.04.12
 
 # cd /root
 
@@ -34,36 +34,38 @@ pre_check(){
 #   done
 # fi
 
-log_file="vmlog"
-if [ ! -f "vmlog" ]; then
-  yellow "当前目录下不存在vmlog文件"
-  vm_num=202
-  web2_port=40003
-  port_end=50025
-else
-  while read line; do
-      last_line="$line"
-  done < "$log_file"
-  last_line_array=($last_line)
-  vm_num="${last_line_array[0]}"
-  user="${last_line_array[1]}"
-  password="${last_line_array[2]}"
-  ssh_port="${last_line_array[6]}"
-  web1_port="${last_line_array[7]}"
-  web2_port="${last_line_array[8]}"
-  port_start="${last_line_array[9]}"
-  port_end="${last_line_array[10]}"
-  system="${last_line_array[11]}"
-  green "最后一个NAT服务器对应的信息："
-  echo "NAT服务器: $vm_num"
-#   echo "用户名: $user"
-#   echo "密码: $password"
-  echo "外网SSH端口: $ssh_port"
-  echo "外网80端口: $web1_port"
-  echo "外网443端口: $web2_port"
-  echo "外网其他端口范围: $port_start-$port_end"
-  echo "系统：$system"
-fi
+check_info(){
+    log_file="vmlog"
+    if [ ! -f "vmlog" ]; then
+      yellow "当前目录下不存在vmlog文件"
+      vm_num=202
+      web2_port=40003
+      port_end=50025
+    else
+      while read line; do
+          last_line="$line"
+      done < "$log_file"
+      last_line_array=($last_line)
+      vm_num="${last_line_array[0]}"
+      user="${last_line_array[1]}"
+      password="${last_line_array[2]}"
+      ssh_port="${last_line_array[6]}"
+      web1_port="${last_line_array[7]}"
+      web2_port="${last_line_array[8]}"
+      port_start="${last_line_array[9]}"
+      port_end="${last_line_array[10]}"
+      system="${last_line_array[11]}"
+      green "当前最后一个NAT服务器对应的信息："
+      echo "NAT服务器: $vm_num"
+    #   echo "用户名: $user"
+    #   echo "密码: $password"
+      echo "外网SSH端口: $ssh_port"
+      echo "外网80端口: $web1_port"
+      echo "外网443端口: $web2_port"
+      echo "外网其他端口范围: $port_start-$port_end"
+      echo "系统：$system"
+    fi
+}
 
 build_new_vms(){
     while true; do
@@ -92,4 +94,6 @@ build_new_vms(){
 }
 
 pre_check
+check_info
 build_new_vms
+check_info
