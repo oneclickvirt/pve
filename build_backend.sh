@@ -22,6 +22,30 @@ fi
 cp -rf /usr/share/javascript/proxmox-widget-toolkit/proxmoxlib.js /usr/share/javascript/proxmox-widget-toolkit/proxmoxlib.js.bak
 sed -Ezi.bak "s/(Ext.Msg.show\(\{\s+title: gettext\('No valid sub)/void\(\{ \/\/\1/g" /usr/share/javascript/proxmox-widget-toolkit/proxmoxlib.js
 
+# 开启硬件直通
+if [ `dmesg | grep -e DMAR -e IOMMU|wc -l` = 0 ];then
+   _yellow "硬件不支持直通"
+fi
+if [ `cat /proc/cpuinfo|grep Intel|wc -l` = 0 ];then
+   iommu="amd_iommu=on"
+else
+   iommu="intel_iommu=on"
+fi
+if [ `grep $iommu /etc/default/grub|wc -l` = 0 ];then
+   sed -i 's|quiet|quiet '$iommu'|' /etc/default/grub
+   update-grub
+   if [ `grep "vfio" /etc/modules|wc -l` = 0 ];then
+      cat <<-EOF >> /etc/modules
+         vfio
+         vfio_iommu_type1
+         vfio_pci
+         vfio_virqfd
+      EOF
+   fi
+else
+   _green "已设置硬件直通"
+fi
+
 # 检测AppArmor模块
 if ! dpkg -s apparmor > /dev/null 2>&1; then
     _green "正在安装 AppArmor..."
