@@ -94,11 +94,11 @@ bash <(wget -qO- --no-check-certificate https://raw.githubusercontent.com/spirit
 
 ![图片](https://user-images.githubusercontent.com/103393591/231160050-79945d07-b3d0-4e8d-9315-74e4fbb24f9d.png)
 
-查询如上的只需使用下面的一键脚本自动创建虚拟机即可
+查询如上的只需使用下面的一键脚本自动创建虚拟机即可，无需手动再修改WEB端设置
 
 ![图片](https://user-images.githubusercontent.com/103393591/231160070-c317607c-8b0c-4aa4-bfa2-e75ec6626b24.png)
 
-查询如上的在使用后续脚本创建了虚拟机后，记得关闭对应每个虚拟机的硬件嵌套虚拟化，如下图
+查询如上的在使用后续脚本创建了虚拟机后，需要手动修改WEB端设置，需要关闭对应每个虚拟机的硬件嵌套虚拟化，如下图
 
 ![图片](https://user-images.githubusercontent.com/103393591/231160449-82911a57-4b49-47ec-8fad-2100c6059017.png)
 
