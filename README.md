@@ -185,6 +185,10 @@ cat vmlog
 
 查看信息
 
+### 注意事项
+
+PVE修改虚拟机配置前都得停机先，再修改配置，修改完再启动，免得出现配置重载错误
+
 ## 致谢
 
 https://blog.ilolicon.com/archives/615
