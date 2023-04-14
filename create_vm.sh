@@ -90,6 +90,7 @@ build_new_vms(){
         ./buildvm.sh $vm_num $user $password 1 512 5 $ssh_port $web1_port $web2_port $port_start $port_end debian10
         cat "vm$vm_num" >> vmlog
         rm -rf "vm$vm_num"
+        sleep 180
     done
 }
 
