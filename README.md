@@ -167,6 +167,7 @@ https://github.com/spiritLHLS/Images/releases/tag/v1.0
 ### 批量开设NAT的KVM虚拟化的VM
 
 - **初次使用前需要保证当前PVE未有任何虚拟机未有进行任何端口映射，否则可能出现BUG**
+- **开设前请使用screen挂起执行，避免批量运行SSH不稳定导致中间执行中断**
 - 可多次运行批量生成VM，但需要注意的是母鸡内存记得开点swap免得机器炸了[开SWAP点我跳转](https://github.com/spiritLHLS/addswap)
 - 自动开设NAT服务器，默认使用Debian10镜像，因为该镜像占用最小
 - 自动进行内外网端口映射，含22，80，443端口以及其他25个内外网端口号一样的端口
