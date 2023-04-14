@@ -119,6 +119,7 @@ curl -L https://raw.githubusercontent.com/spiritLHLS/pve/main/buildvm.sh -o buil
 #### 使用方法
 
 - 系统支持：详见 [跳转](https://github.com/spiritLHLS/Images/releases/tag/v1.0) 中列出的系统，使用时只需写文件名字，不需要.qcow2尾缀
+- **注意这里的用户名不能是纯数字，会造成cloudinit出问题，最好是纯英文或英文开头**
 
 ```
 ./buildvm.sh VMID 用户名 密码 CPU核数 内存 硬盘 SSH端口 80端口 443端口 外网端口起 外网端口止 系统
