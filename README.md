@@ -186,6 +186,17 @@ cat vmlog
 
 查看信息
 
+#### 删除所有虚拟机
+
+```
+for vmid in $(qm list | awk '{if(NR>1) print $1}'); do qm stop $vmid; qm destroy $vmid; rm -rf /var/lib/vz/images/$vmid*; done
+iptables -t nat -F
+iptables -t filter -F
+service networking restart
+systemctl restart networking.service
+rm -rf vmlog
+```
+
 ### 注意事项
 
 PVE修改虚拟机配置前都得停机先，再修改配置，修改完再启动，免得出现配置重载错误
