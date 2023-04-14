@@ -78,8 +78,7 @@ build_new_vms(){
     done
     for ((i=1; i<=$new_nums; i++)); do
         vm_num=$(($vm_num + 1))
-        ori=$(date | md5sum)
-        user=${ori: 2: 4}
+        user=$(cat /dev/urandom | tr -dc 'a-zA-Z' | fold -w 4 | head -n 1)
         ori=$(date | md5sum)
         password=${ori: 2: 9}
         ssh_port=$(($web2_port + 1))
