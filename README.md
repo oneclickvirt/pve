@@ -2,7 +2,7 @@
 
 感谢 Proxmox VE 的免费订阅支持
 
-[英文说明](README_EN.md)
+[中文](README.md) | [English](README_EN.md)
 
 ### 前言
 
