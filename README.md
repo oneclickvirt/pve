@@ -2,6 +2,8 @@
 
 感谢 Proxmox VE 的免费订阅支持
 
+[英文说明](README_EN.md)
+
 ### 前言
 
 建议debian在使用前尽量使用最新的系统
