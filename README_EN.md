@@ -2,11 +2,13 @@
 
 Thanks to Proxmox VE for the free subscription support
 
+[中文](README.md) | [English](README_EN.md)
+
 ### Preface
 
 It is recommended that debian use the latest system as much as possible before using it
 
-Non-debian11 can use [debian one-click upgrade](https://github.com/spiritLHLS/one-click-installation-script#%E4%B8%80%E9%94%AE%E5%8D%87%E7%BA%A7%E4%BD% 8E%E7%89%88%E6%9C%ACdebian%E4%B8%BAdebian11) to upgrade the system
+Non-debian11 can use [debian one-click upgrade](https://github.com/spiritLHLS/one-click-installation-script#%E4%B8%80%E9%94%AE%E5%8D%87%E7%BA%A7%E4%BD%8E%E7%89%88%E6%9C%ACdebian%E4%B8%BAdebian11) to upgrade the system
 
 Of course, it's okay not to use the latest debian system, but it's not officially supported
 
