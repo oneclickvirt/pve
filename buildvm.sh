@@ -27,7 +27,7 @@ rm -rf "vm$name"
 if [ ! -d "qcow" ]; then
   mkdir qcow
 fi
-systems=("centos7" "debian10" "debian11" "debian9" "ubuntu18" "ubuntu20" "ubuntu22" "centos9-stream" "centos8-stream")
+systems=("centos7" "debian10" "debian11" "debian9" "ubuntu18" "ubuntu20" "ubuntu22" "centos9-stream" "centos8-stream" "archlinux" "almalinux8" "almalinux9")
 for sys in ${systems[@]}; do
   if [[ "$system" == "$sys" ]]; then
     file_path="/root/qcow/${system}.qcow2"
@@ -35,7 +35,7 @@ for sys in ${systems[@]}; do
   fi
 done
 if [[ -z "$file_path" ]]; then
-  echo "无法安装对应系统，仅支持 debian9 debian10 debian11 ubuntu18 ubuntu20 ubuntu22 centos9-stream centos8-stream centos7"
+  echo "无法安装对应系统，仅支持 debian9 debian10 debian11 ubuntu18 ubuntu20 ubuntu22 centos9-stream centos8-stream centos7 archlinux almalinux8 almalinux9"
   exit 1
 fi
 url="https://github.com/spiritLHLS/Images/releases/download/v1.0/${system}.qcow2"
