@@ -35,7 +35,7 @@ for sys in ${systems[@]}; do
   fi
 done
 if [[ -z "$file_path" ]]; then
-  red "无法安装对应系统，仅支持 debian9 debian10 debian11 ubuntu18 ubuntu20 ubuntu22 centos9-stream centos8-stream centos7"
+  echo "无法安装对应系统，仅支持 debian9 debian10 debian11 ubuntu18 ubuntu20 ubuntu22 centos9-stream centos8-stream centos7"
   exit 1
 fi
 url="https://github.com/spiritLHLS/Images/releases/download/v1.0/${system}.qcow2"
