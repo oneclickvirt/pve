@@ -37,6 +37,9 @@ curl -L https://raw.githubusercontent.com/spiritLHLS/pve/main/back/rebuild.sh -o
 ./buildvm.sh 111 test10 1234567 1 512 5 40010 49001 49993 50018 50019 almalinux8
 ./buildvm.sh 112 test11 1234567 1 512 5 40011 49003 48883 50020 50021 almalinux9
 ./buildvm.sh 113 test12 1234567 1 512 5 40012 49004 48873 50022 50023 archlinux
+```
+
+```
 ./buildvm.sh 114 test13 1234567 1 512 5 40013 49005 48863 50024 50025 alpinelinux_v3_15
 ./buildvm.sh 115 test14 1234567 1 512 5 40014 49006 48864 50026 50027 alpinelinux_v3_17
 ./buildvm.sh 109 test8 1234567 1 512 5 40008 48002 48003 50014 50015 centos8-stream
