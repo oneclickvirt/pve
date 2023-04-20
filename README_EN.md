@@ -177,7 +177,8 @@ https://github.com/spiritLHLS/Images/releases/tag/v1.0
 - automatically open NAT server, the default use of Debian10 image, because the image occupies the smallest
 - Automatic internal and external network port mapping, including 22, 80, 443 ports and other 25 internal and external network port number the same port
 - After generation, you need to wait for a while for cloudinit inside the virtual machine to configure the network and login information, which takes about 5 minutes.
-- The default batch virtual machine configuration is: 1 core 512MB RAM 5G hard disk, 22, 80, 443 ports and a 25-port range of internal and external network mapping
+- The default network configuration of the batch virtual machine is: 22, 80, 443 ports and a 25-port internal and external network mapping
+- You can customize the number of cores, memory size and hard disk size for batch opening, remember to calculate the free resources for opening
 
 ```
 curl -L https://raw.githubusercontent.com/spiritLHLS/pve/main/create_vm.sh -o create_vm.sh && chmod +x create_vm.sh && bash create_vm.sh
