@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/spiritLHLS/pve
-# 2023.04.12
+# 2023.04.20
 
 # cd /root
 
@@ -76,6 +76,30 @@ build_new_vms(){
             yellow "输入无效，请输入一个正整数。"
         fi
     done
+    while true; do
+        reading "每个虚拟机分配几个CPU？(若每个虚拟机分配1核，则输入1)：" cpu_nums
+        if [[ "$cpu_nums" =~ ^[1-9][0-9]*$ ]]; then
+            break
+        else
+            yellow "输入无效，请输入一个正整数。"
+        fi
+    done
+    while true; do
+        reading "每个虚拟机分配多少内存？(若每个虚拟机分配512MB内存，则输入512)：" memory_nums
+        if [[ "$memory_nums" =~ ^[1-9][0-9]*$ ]]; then
+            break
+        else
+            yellow "输入无效，请输入一个正整数。"
+        fi
+    done
+    while true; do
+        reading "每个虚拟机分配多少硬盘？(若每个虚拟机分配5G硬盘，则输入5)：" disk_nums
+        if [[ "$disk_nums" =~ ^[1-9][0-9]*$ ]]; then
+            break
+        else
+            yellow "输入无效，请输入一个正整数。"
+        fi
+    done
     for ((i=1; i<=$new_nums; i++)); do
         vm_num=$(($vm_num + 1))
         user=$(cat /dev/urandom | tr -dc 'a-zA-Z' | fold -w 4 | head -n 1)
@@ -86,7 +110,7 @@ build_new_vms(){
         web2_port=$(($web1_port + 3))
         port_start=$(($port_end + 1))
         port_end=$(($port_start + 25))
-        ./buildvm.sh $vm_num $user $password 1 512 5 $ssh_port $web1_port $web2_port $port_start $port_end debian10
+        ./buildvm.sh $vm_num $user $password $cpu_nums $memory_nums $disk_nums $ssh_port $web1_port $web2_port $port_start $port_end debian10
         cat "vm$vm_num" >> vmlog
         rm -rf "vm$vm_num"
         sleep 60
