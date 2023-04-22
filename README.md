@@ -58,7 +58,7 @@ bash <(wget -qO- --no-check-certificate https://raw.githubusercontent.com/spirit
 - 配置完毕需要重启系统加载新内核
 
 ```
-curl -L https://raw.githubusercontent.com/spiritLHLS/pve/main/install_pve.sh -o install_pve.sh && chmod +x install_pve.sh && bash install_pve.sh
+curl -L https://raw.githubusercontent.com/spiritLHLS/pve/main/scripts/install_pve.sh -o install_pve.sh && chmod +x install_pve.sh && bash install_pve.sh
 ```
 
 - 安装过程中可能会退出安装，需要手动修复apt源，如下图所示修复完毕后再次执行本脚本
@@ -89,7 +89,7 @@ bash <(wget -qO- --no-check-certificate https://raw.githubusercontent.com/spirit
 - 加载iptables并设置回源且允许NAT端口转发
 
 ```
-bash <(wget -qO- --no-check-certificate https://raw.githubusercontent.com/spiritLHLS/pve/main/build_nat_network.sh)
+bash <(wget -qO- --no-check-certificate https://raw.githubusercontent.com/spiritLHLS/pve/main/scripts/build_nat_network.sh)
 ```
 
 ## 一键生成KVM虚拟化的NAT服务器
@@ -117,7 +117,7 @@ bash <(wget -qO- --no-check-certificate https://raw.githubusercontent.com/spirit
 - 生成后需要等待一段时间虚拟机内部的cloudinit配置好网络以及登陆信息，大概需要5分钟
 
 ```
-curl -L https://raw.githubusercontent.com/spiritLHLS/pve/main/buildvm.sh -o buildvm.sh && chmod +x buildvm.sh
+curl -L https://raw.githubusercontent.com/spiritLHLS/pve/main/scripts/buildvm.sh -o buildvm.sh && chmod +x buildvm.sh
 ```
 
 #### 使用方法
@@ -181,7 +181,7 @@ https://github.com/spiritLHLS/Images/releases/tag/v1.0
 - 可自定义批量开设的核心数，内存大小，硬盘大小，记得自己计算好空闲资源开设
 
 ```
-curl -L https://raw.githubusercontent.com/spiritLHLS/pve/main/create_vm.sh -o create_vm.sh && chmod +x create_vm.sh && bash create_vm.sh
+curl -L https://raw.githubusercontent.com/spiritLHLS/pve/main/scripts/create_vm.sh -o create_vm.sh && chmod +x create_vm.sh && bash create_vm.sh
 ```
 
 开设完毕可执行
