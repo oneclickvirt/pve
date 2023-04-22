@@ -60,14 +60,13 @@ pct exec $CTID -- apt-get update -y
 pct exec $CTID -- dpkg --configure -a
 pct exec $CTID -- apt-get update
 pct exec $CTID -- apt-get install dos2unix curl -y
-pct exec $CTID -- curl -L https://raw.githubusercontent.com/spiritLHLS/lxc/main/ssh.sh -o ssh.sh
+pct exec $CTID -- curl -L https://raw.githubusercontent.com/spiritLHLS/pve/main/scripts/ssh.sh -o ssh.sh
 pct exec $CTID -- chmod 777 ssh.sh
 pct exec $CTID -- dos2unix ssh.sh
 pct exec $CTID -- ./ssh.sh $password
-pct exec $CTID -- curl -L https://raw.githubusercontent.com/spiritLHLS/lxc/main/config.sh -o config.sh
-pct exec $CTID -- chmod +x config.sh
-pct exec $CTID -- bash config.sh
-pct exec $CTID -- history -c
+# pct exec $CTID -- curl -L https://raw.githubusercontent.com/spiritLHLS/lxc/main/config.sh -o config.sh
+# pct exec $CTID -- chmod +x config.sh
+# pct exec $CTID -- bash config.sh
 
 iptables -t nat -A PREROUTING -p tcp --dport ${sshn} -j DNAT --to-destination ${user_ip}:22
 iptables -t nat -A PREROUTING -p tcp -m tcp --dport ${web1_port} -j DNAT --to-destination ${user_ip}:80
