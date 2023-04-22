@@ -19,11 +19,6 @@ port_first="${9:-49975}"
 port_last="${10:-50000}"
 system="${12:-debian11}"
 rm -rf "ct$name"
-TMP_FILE="cloud-init.yaml"
-echo "#cloud-config" > "$TMP_FILE"
-echo "password: ${password}" >> "$TMP_FILE"
-echo "chpasswd: {expire: False}" >> "$TMP_FILE"
-echo "ssh_pwauth: True" >> "$TMP_FILE"
 system="debian-11-standard_11.6-1_amd64.tar.zst"
 
 first_digit=${CTID:0:1}
@@ -39,9 +34,12 @@ else
   num=$((first_digit - 2))$second_digit$third_digit
 fi
 user_ip="172.16.1.${num}"
-pct create $CTID local:vztmpl/$system --cores $core --cpuunits 1024 --memory $memory --swap 128 --net0 name=eth0,ip=${user_ip}/24,bridge=vmbr1,gw=172.16.1.1 --rootfs local:${disk} --onboot 1 --userdata ./cloud-init.yaml
-rm "$TMP_FILE"
+pct create $CTID local:vztmpl/$system --cores $core --cpuunits 1024 --memory $memory --swap 128 --rootfs local:${disk} --onboot 1
 pct start $CTID
+pct set $CTID --hostname $CTID
+pct set $CTID --net0 name=eth0,ip=${user_ip}/24,bridge=vmbr1,gw=172.16.1.1 
+pct set $CTID --nameserver 8.8.8.8 --nameserver 8.8.4.4
+pct set $CTID --password $password
 
 iptables -t nat -A PREROUTING -p tcp --dport ${sshn} -j DNAT --to-destination ${user_ip}:22
 iptables -t nat -A PREROUTING -p tcp -m tcp --dport ${web1_port} -j DNAT --to-destination ${user_ip}:80
