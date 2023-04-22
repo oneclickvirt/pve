@@ -23,10 +23,10 @@ web1_port="${7:-40002}"
 web2_port="${8:-40003}"
 port_first="${9:-49975}"
 port_last="${10:-50000}"
-system="${12:-debian11}"
+system_ori="${12:-debian11}"
 rm -rf "ct$name"
-en_system=$(echo "$system" | sed 's/[0-9]*//g')
-num_system=$(echo "$system" | sed 's/[a-zA-Z]*//g')
+en_system=$(echo "$system_ori" | sed 's/[0-9]*//g')
+num_system=$(echo "$system_ori" | sed 's/[a-zA-Z]*//g')
 system="$en_system-$num_system"
 system_name=$(pveam available --section system | grep "$system" | awk '{print $2}' | head -n1)
 if ! pveam available --section system | grep "$system" > /dev/null; then
