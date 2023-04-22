@@ -34,12 +34,11 @@ else
   num=$((first_digit - 2))$second_digit$third_digit
 fi
 user_ip="172.16.1.${num}"
-pct create $CTID local:vztmpl/$system --cores $core --cpuunits 1024 --memory $memory --swap 128 --rootfs local:${disk} --onboot 1
+pct create $CTID local:vztmpl/$system --cores $core --cpuunits 1024 --memory $memory --swap 128 --rootfs local:${disk} --onboot 1 -password $password
 pct start $CTID
 pct set $CTID --hostname $CTID
 pct set $CTID --net0 name=eth0,ip=${user_ip}/24,bridge=vmbr1,gw=172.16.1.1 
 pct set $CTID --nameserver 8.8.8.8 --nameserver 8.8.4.4
-pct set $CTID --password $password
 
 iptables -t nat -A PREROUTING -p tcp --dport ${sshn} -j DNAT --to-destination ${user_ip}:22
 iptables -t nat -A PREROUTING -p tcp -m tcp --dport ${web1_port} -j DNAT --to-destination ${user_ip}:80
