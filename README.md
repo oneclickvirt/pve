@@ -58,17 +58,17 @@
 
 非debian11可使用 [debian一键升级](https://github.com/spiritLHLS/one-click-installation-script#%E4%B8%80%E9%94%AE%E5%8D%87%E7%BA%A7%E4%BD%8E%E7%89%88%E6%9C%ACdebian%E4%B8%BAdebian11) 来升级系统
 
-当然不使用最新的debian系统也没问题，只不过得不到官方支持
+当然不使用最新的debian系统也没问题，只不过得不到官方支持。只适配Debian系统(非Debian无法通过APT源安装，官方只给了Debian的镜像，其他系统只能使用ISO安装)
 
-只适配Debian系统(非Debian无法通过APT源安装，官方只给了Debian的镜像，其他系统只能使用ISO安装)
-
+```
 系统要求：Debian 8+
 
 最低的硬件要求：2核2G内存x86_64架构服务器硬盘至少20G
 
-PS: 如果硬件需求不满足，可使用LXD批量开LXC的[跳转](https://github.com/spiritLHLS/lxc)
-
 可开KVM的硬件要求：VM-X或AMD-V支持-(部分VPS和全部独服支持)
+```
+
+PS: 如果硬件需求不满足，可使用LXD批量开LXC的[跳转](https://github.com/spiritLHLS/lxc)
 
 遇到选项不会选的可无脑回车安装，所有脚本内置国内外IP自动判断，使用的是不同的安装源与配置文件
 
