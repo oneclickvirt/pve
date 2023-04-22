@@ -55,8 +55,3 @@ systemctl restart networking.service
 rm -rf vm*
 ```
 
-### 创建单个CT
-
-```
-curl -L https://raw.githubusercontent.com/spiritLHLS/pve/main/back/buildct.sh -o buildct.sh && chmod +x buildct.sh && bash buildct.sh
-```
