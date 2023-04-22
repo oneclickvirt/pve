@@ -29,7 +29,13 @@ en_system=$(echo "$system" | sed 's/[0-9]*//g')
 num_system=$(echo "$system" | sed 's/[a-zA-Z]*//g')
 system="$en_system-$num_system"
 system_name=$(pveam available --section system | grep "$system" | awk '{print $2}' | head -n1)
-_green "Use $system_name"
+if ! pveam available --section system | grep "$system" > /dev/null; then
+  _red "No such system"
+  exit
+else
+  _green "Use $system_name"
+fi
+pveam download local $system_name
 
 first_digit=${CTID:0:1}
 second_digit=${CTID:1:1}
@@ -44,7 +50,7 @@ else
   num=$((first_digit - 2))$second_digit$third_digit
 fi
 user_ip="172.16.1.${num}"
-pct create $CTID local:vztmpl/$system -cores $core -cpuunits 1024 -memory $memory -swap 128 -rootfs local:${disk} --onboot 1 -password $password
+pct create $CTID local:vztmpl/$system_name -cores $core -cpuunits 1024 -memory $memory -swap 128 -rootfs local:${disk} --onboot 1 -password $password
 pct start $CTID
 pct set $CTID --hostname $CTID
 pct set $CTID --net0 name=eth0,ip=${user_ip}/24,bridge=vmbr1,gw=172.16.1.1 
