@@ -55,18 +55,19 @@ pct start $CTID
 pct set $CTID --hostname $CTID
 pct set $CTID --net0 name=eth0,ip=${user_ip}/24,bridge=vmbr1,gw=172.16.1.1 
 pct set $CTID --nameserver 8.8.8.8 --nameserver 8.8.4.4
-pct exec $CTID -- "apt update -y"
-pct exec $CTID -- "sudo dpkg --configure -a"
-pct exec $CTID -- "sudo apt-get update"
-pct exec $CTID -- "sudo apt-get install dos2unix curl -y"
-pct exec $CTID -- "curl -L https://raw.githubusercontent.com/spiritLHLS/lxc/main/ssh.sh -o ssh.sh"
-pct exec $CTID -- "chmod 777 ssh.sh"
-pct exec $CTID -- "dos2unix ssh.sh"
-pct exec $CTID -- "sudo ./ssh.sh $password"
-pct exec $CTID -- "curl -L https://raw.githubusercontent.com/spiritLHLS/lxc/main/config.sh -o config.sh"
-pct exec $CTID -- "chmod +x config.sh"
-pct exec $CTID -- "bash config.sh"
-pct exec $CTID -- "history -c"
+sleep 3
+pct exec $CTID -- apt update -y
+pct exec $CTID -- sudo dpkg --configure -a
+pct exec $CTID -- sudo apt-get update
+pct exec $CTID -- sudo apt-get install dos2unix curl -y
+pct exec $CTID -- curl -L https://raw.githubusercontent.com/spiritLHLS/lxc/main/ssh.sh -o ssh.sh
+pct exec $CTID -- chmod 777 ssh.sh
+pct exec $CTID -- dos2unix ssh.sh
+pct exec $CTID -- sudo ./ssh.sh $password
+pct exec $CTID -- curl -L https://raw.githubusercontent.com/spiritLHLS/lxc/main/config.sh -o config.sh
+pct exec $CTID -- chmod +x config.sh
+pct exec $CTID -- bash config.sh
+pct exec $CTID -- history -c
 
 iptables -t nat -A PREROUTING -p tcp --dport ${sshn} -j DNAT --to-destination ${user_ip}:22
 iptables -t nat -A PREROUTING -p tcp -m tcp --dport ${web1_port} -j DNAT --to-destination ${user_ip}:80
