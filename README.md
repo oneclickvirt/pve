@@ -6,37 +6,71 @@
 
 ### 前言
 
-建议debian在使用前尽量使用最新的系统
-
-非debian11可使用 [debian一键升级](https://github.com/spiritLHLS/one-click-installation-script#%E4%B8%80%E9%94%AE%E5%8D%87%E7%BA%A7%E4%BD%8E%E7%89%88%E6%9C%ACdebian%E4%B8%BAdebian11) 来升级系统
-
-当然不使用最新的debian系统也没问题，只不过得不到官方支持
+如果脚本有任何问题或者任何修复系统的需求，可在issues中提出，有空会解决或者回答
 
 **请确保使用前机器可以重装系统，不保证本套脚本不造成任何BUG!!!**
 
 **如果服务器是VPS而不是独服，可能会出现各种各样的BUG，请做好部署失败重装服务器的准备!!!**
 
-### 配置与系统要求
+# 目录
 
-只适配Debian系统(非Debian无法通过APT源安装，官方只给了Debian的镜像，其他系统只能使用ISO安装)
+* [系统要求与配置](#系统要求与配置)
 
-系统要求：Debian 8+
+    * [建议debian在使用前尽量使用最新的系统](#建议debian在使用前尽量使用最新的系统)
+  
+    * [检测硬件环境](#检测硬件环境)
 
-最低的硬件要求：2核2G内存x86_64架构服务器硬盘至少20G
+    * [PVE基础安装](#PVE基础安装)
+
+    * [预配置环境](#预配置环境)
+
+    * [自动配置IPV4的NAT网关](#自动配置IPV4的NAT网关)
+
+* [一键生成KVM虚拟化的NAT服务器](#一键生成KVM虚拟化的NAT服务器)
+
+    * [单独生成KVM虚拟化的VM](#单独生成KVM虚拟化的VM)
+
+    * [使用方法](#使用方法)
+
+    * [示例](#示例)
+
+    * [删除示例](#删除示例)
+
+    * [相关qcow2镜像](#相关qcow2镜像)
+
+* [批量开设NAT的KVM虚拟化的VM](#批量开设NAT的KVM虚拟化的VM)
+
+    * [删除所有虚拟机](#删除所有虚拟机)
+
+    * [注意事项](#注意事项)
+
+* [一键创建单个CT](#创建单个CT)
+
+    * [使用方法](#使用方法)
+
+    * [示例](#示例)
+
+* [致谢](#致谢)
+
+### 系统要求与配置
+
+#### 建议debian在使用前尽量使用最新的系统
+
+非debian11可使用 [debian一键升级](https://github.com/spiritLHLS/one-click-installation-script#%E4%B8%80%E9%94%AE%E5%8D%87%E7%BA%A7%E4%BD%8E%E7%89%88%E6%9C%ACdebian%E4%B8%BAdebian11) 来升级系统
+
+当然不使用最新的debian系统也没问题，只不过得不到官方支持。只适配Debian系统(非Debian无法通过APT源安装，官方只给了Debian的镜像，其他系统只能使用ISO安装)
+
+- 系统要求：Debian 8+
+
+- 最低的硬件要求：2核2G内存x86_64架构服务器硬盘至少20G
+
+- 可开KVM的硬件要求：VM-X或AMD-V支持-(部分VPS和全部独服支持)
 
 PS: 如果硬件需求不满足，可使用LXD批量开LXC的[跳转](https://github.com/spiritLHLS/lxc)
 
-可开KVM的硬件要求：VM-X或AMD-V支持-(部分VPS和全部独服支持)
-
 遇到选项不会选的可无脑回车安装，所有脚本内置国内外IP自动判断，使用的是不同的安装源与配置文件
 
-## 待开发内容
-
-- 批量开设LXC容器
-- 脚本输出支持中英文
-- 脚本说明规范输出中英文
-
-### 检测硬件环境
+#### 检测硬件环境
 
 - 本仓库脚本执行前务必执行本脚本检测环境，如果不符合安装PVE的要求则无法使用后续的脚本
 - 检测硬件配置是否满足最低要求
@@ -48,7 +82,7 @@ PS: 如果硬件需求不满足，可使用LXD批量开LXC的[跳转](https://gi
 bash <(wget -qO- --no-check-certificate https://raw.githubusercontent.com/spiritLHLS/pve/main/scripts/check_kernal.sh)
 ```
 
-### PVE基础安装(一键安装PVE)
+#### PVE基础安装
 
 - 安装的是当下apt源最新的PVE
 - 比如debian10则是pve6.4，debian11则是pve7.x
@@ -62,6 +96,8 @@ bash <(wget -qO- --no-check-certificate https://raw.githubusercontent.com/spirit
 - 检测```/etc/resolv.conf```是否为空，为空则设置检测```8.8.8.8```的开机自启添加DNS的systemd服务
 - 新增PVE的APT源链接后，下载PVE并打印输出登陆信息
 - 配置完毕需要重启系统加载新内核
+
+#### 一键安装PVE
 
 ```
 curl -L https://raw.githubusercontent.com/spiritLHLS/pve/main/scripts/install_pve.sh -o install_pve.sh && chmod +x install_pve.sh && bash install_pve.sh
@@ -213,7 +249,9 @@ rm -rf vmlog
 
 PVE修改虚拟机配置前都得停机先，再修改配置，修改完再启动，免得出现配置重载错误
 
-### 创建单个CT(LXC虚拟化的容器-自带内外网映射)
+## 一键创建单个CT
+
+(LXC虚拟化的容器-自带内外网映射)
 
 - **初次使用前需要保证当前PVE未有任何虚拟机未有进行任何端口映射，否则可能出现BUG**
 - **开设前请使用screen挂起执行，避免批量开设时间过长，SSH不稳定导致中间执行中断，推荐使用PVE自带的Shell操作母鸡**
