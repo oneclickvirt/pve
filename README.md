@@ -39,7 +39,7 @@ PS: 如果硬件需求不满足，可使用LXD批量开LXC的[跳转](https://gi
 - 不可嵌套虚拟化KVM类型的服务器也可以开LXC虚拟化的服务器
 
 ```
-bash <(wget -qO- --no-check-certificate https://raw.githubusercontent.com/spiritLHLS/pve/main/check_kernal.sh)
+bash <(wget -qO- --no-check-certificate https://raw.githubusercontent.com/spiritLHLS/pve/main/scripts/check_kernal.sh)
 ```
 
 ### PVE基础安装(一键安装PVE)
