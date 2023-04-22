@@ -27,6 +27,7 @@
     * [删除示例](#删除示例)
     * [相关qcow2镜像](#相关qcow2镜像)
 * [批量开设NAT的KVM虚拟化的VM](#批量开设NAT的KVM虚拟化的VM)
+    * [使用方法](#使用方法)
     * [删除所有虚拟机](#删除所有虚拟机)
     * [注意事项](#注意事项)
 * [一键创建单个CT也就是LXC虚拟化的NAT容器](#一键创建单个CT也就是LXC虚拟化的NAT容器)
@@ -203,6 +204,8 @@ https://github.com/spiritLHLS/Images/releases/tag/v1.0
 - 生成后需要等待一段时间虚拟机内部的cloudinit配置好网络以及登陆信息，大概需要5分钟
 - 默认批量开设的虚拟机网络配置为：22，80，443端口及一个25个端口区间的内外网映射
 - 可自定义批量开设的核心数，内存大小，硬盘大小，记得自己计算好空闲资源开设
+
+#### 使用方法
 
 ```
 curl -L https://raw.githubusercontent.com/spiritLHLS/pve/main/scripts/create_vm.sh -o create_vm.sh && chmod +x create_vm.sh && bash create_vm.sh
