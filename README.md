@@ -221,6 +221,8 @@ https://mirrors.tuna.tsinghua.edu.cn/proxmox/
 
 https://github.com/roacn/pve/blob/main/pve.sh
 
+https://github.com/spiritLHLS/lxc
+
 感谢 [@Ella-Alinda](https://github.com/Ella-Alinda) 提供的PVE指导
 
 ## 友链
