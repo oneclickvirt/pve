@@ -6,6 +6,12 @@
 # ./buildct.sh CTID 密码 CPU核数 内存 硬盘 SSH端口 80端口 443端口 外网端口起 外网端口止 系统
 # ./buildct.sh 102 1234567 1 512 5 40001 40002 40003 50000 50025 debian11
 
+# 用颜色输出信息
+_red() { echo -e "\033[31m\033[01m$@\033[0m"; }
+_green() { echo -e "\033[32m\033[01m$@\033[0m"; }
+_yellow() { echo -e "\033[33m\033[01m$@\033[0m"; }
+_blue() { echo -e "\033[36m\033[01m$@\033[0m"; }
+
 cd /root >/dev/null 2>&1
 CTID="${1:-102}"
 password="${2:-123456}"
@@ -19,7 +25,11 @@ port_first="${9:-49975}"
 port_last="${10:-50000}"
 system="${12:-debian11}"
 rm -rf "ct$name"
-system="debian-11-standard_11.6-1_amd64.tar.zst"
+en_system=$(echo "$system" | sed 's/[0-9]*//g')
+num_system=$(echo "$system" | sed 's/[a-zA-Z]*//g')
+system="$en_system-$num_system"
+system_name=$(pveam available --section system | grep "$system" | awk '{print $2}' | head -n1)
+_green "Use $system_name"
 
 first_digit=${CTID:0:1}
 second_digit=${CTID:1:1}
@@ -39,6 +49,18 @@ pct start $CTID
 pct set $CTID --hostname $CTID
 pct set $CTID --net0 name=eth0,ip=${user_ip}/24,bridge=vmbr1,gw=172.16.1.1 
 pct set $CTID --nameserver 8.8.8.8 --nameserver 8.8.4.4
+pct exec $CTID -- "apt update -y"
+pct exec $CTID -- "sudo dpkg --configure -a"
+pct exec $CTID -- "sudo apt-get update"
+pct exec $CTID -- "sudo apt-get install dos2unix curl -y"
+pct exec $CTID -- "curl -L https://raw.githubusercontent.com/spiritLHLS/lxc/main/ssh.sh -o ssh.sh"
+pct exec $CTID -- "chmod 777 ssh.sh"
+pct exec $CTID -- "dos2unix ssh.sh"
+pct exec $CTID -- "sudo ./ssh.sh $password"
+pct exec $CTID -- "curl -L https://raw.githubusercontent.com/spiritLHLS/lxc/main/config.sh -o config.sh"
+pct exec $CTID -- "chmod +x config.sh"
+pct exec $CTID -- "bash config.sh"
+pct exec $CTID -- "history -c"
 
 iptables -t nat -A PREROUTING -p tcp --dport ${sshn} -j DNAT --to-destination ${user_ip}:22
 iptables -t nat -A PREROUTING -p tcp -m tcp --dport ${web1_port} -j DNAT --to-destination ${user_ip}:80
