@@ -1,1 +1,1 @@
-qm create 100 --name test --memory 1024 --cores 1 --net0 bridge=vmbr1,firewall=0 --storage mypool --template local:vztmpl/debian-11-standard_11.6-1_amd64.tar.gz --password 123456
+pct create 100 local:vztmpl/debian-11-standard_11.6-1_amd64.tar.gz --cores 1 --cpuunits 1024 --memory 2048 --swap 128 --net0 name=eth0,ip=172.16.1.2/24,bridge=vmbr0,gw=172.16.1.1 --rootfs local:24 --onboot 1
