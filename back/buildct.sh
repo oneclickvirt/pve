@@ -63,7 +63,7 @@ pct exec $CTID -- apt-get install dos2unix curl -y
 pct exec $CTID -- curl -L https://raw.githubusercontent.com/spiritLHLS/pve/main/scripts/ssh.sh -o ssh.sh
 pct exec $CTID -- chmod 777 ssh.sh
 pct exec $CTID -- dos2unix ssh.sh
-pct exec $CTID -- ./ssh.sh $password
+pct exec $CTID -- bash ssh.sh
 # pct exec $CTID -- curl -L https://raw.githubusercontent.com/spiritLHLS/lxc/main/config.sh -o config.sh
 # pct exec $CTID -- chmod +x config.sh
 # pct exec $CTID -- bash config.sh
