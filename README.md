@@ -84,7 +84,7 @@ PS: 如果硬件需求不满足，可使用LXD批量开LXC的[跳转](https://gi
 bash <(wget -qO- --no-check-certificate https://raw.githubusercontent.com/spiritLHLS/pve/main/scripts/check_kernal.sh)
 ```
 
-### PVE基础安装(一键安装PVE)
+#### PVE基础安装
 
 - 安装的是当下apt源最新的PVE
 - 比如debian10则是pve6.4，debian11则是pve7.x
@@ -98,6 +98,8 @@ bash <(wget -qO- --no-check-certificate https://raw.githubusercontent.com/spirit
 - 检测```/etc/resolv.conf```是否为空，为空则设置检测```8.8.8.8```的开机自启添加DNS的systemd服务
 - 新增PVE的APT源链接后，下载PVE并打印输出登陆信息
 - 配置完毕需要重启系统加载新内核
+
+#### 一键安装PVE
 
 ```
 curl -L https://raw.githubusercontent.com/spiritLHLS/pve/main/scripts/install_pve.sh -o install_pve.sh && chmod +x install_pve.sh && bash install_pve.sh
