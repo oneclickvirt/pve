@@ -39,7 +39,7 @@ encounter options will not be selected can be installed by a brainless carriage 
 - Non-nestable virtualized KVM type servers can also run LXC virtualized servers
 
 ```
-bash <(wget -qO- --no-check-certificate https://raw.githubusercontent.com/spiritLHLS/pve/main/check_kernal.sh)
+bash <(wget -qO- --no-check-certificate https://raw.githubusercontent.com/spiritLHLS/pve/main/scripts/check_kernal.sh)
 ```
 
 ### PVE base installation (one-click PVE installation)
@@ -58,7 +58,7 @@ bash <(wget -qO- --no-check-certificate https://raw.githubusercontent.com/spirit
 - After configuration, you need to reboot the system to load the new kernel
 
 ```
-curl -L https://raw.githubusercontent.com/spiritLHLS/pve/main/install_pve.sh -o install_pve.sh && chmod +x install_pve.sh && bash install_pve.sh
+curl -L https://raw.githubusercontent.com/spiritLHLS/pve/main/scripts/scripts/install_pve.sh -o install_pve.sh && chmod +x install_pve.sh && bash install_pve.sh
 ```
 
 - The installation process may exit the installation, you need to repair the apt source manually, as shown in the following figure after the repair is completed, execute this script again
@@ -75,7 +75,7 @@ curl -L https://raw.githubusercontent.com/spiritLHLS/pve/main/install_pve.sh -o 
 - Detect AppArmor module and attempt to install
 
 ```
-bash <(wget -qO- --no-check-certificate https://raw.githubusercontent.com/spiritLHLS/pve/main/build_backend.sh)
+bash <(wget -qO- --no-check-certificate https://raw.githubusercontent.com/spiritLHLS/pve/main/scripts/build_backend.sh)
 ```
 
 ### Auto-configure NAT gateway for IPV4
@@ -89,7 +89,7 @@ bash <(wget -qO- --no-check-certificate https://raw.githubusercontent.com/spirit
 - Load iptables and set back to source and allow NAT port forwarding
 
 ```
-bash <(wget -qO- --no-check-certificate https://raw.githubusercontent.com/spiritLHLS/pve/main/build_nat_network.sh)
+bash <(wget -qO- --no-check-certificate https://raw.githubusercontent.com/spiritLHLS/pve/main/scripts/build_nat_network.sh)
 ```
 
 ## Generate a NAT server for KVM virtualization with one click
@@ -117,7 +117,7 @@ First stop the virtual machine and then modify it, and then turn it on after mod
 - After generation, you need to wait for a period of time to configure the network and login information by cloudinit inside the virtual machine, it takes about 5 minutes
 
 ```
-curl -L https://raw.githubusercontent.com/spiritLHLS/pve/main/buildvm.sh -o buildvm.sh && chmod +x buildvm.sh
+curl -L https://raw.githubusercontent.com/spiritLHLS/pve/main/scripts/buildvm.sh -o buildvm.sh && chmod +x buildvm.sh
 ```
 
 #### How to use
@@ -181,7 +181,7 @@ https://github.com/spiritLHLS/Images/releases/tag/v1.0
 - You can customize the number of cores, memory size and hard disk size for batch opening, remember to calculate the free resources for opening
 
 ```
-curl -L https://raw.githubusercontent.com/spiritLHLS/pve/main/create_vm.sh -o create_vm.sh && chmod +x create_vm.sh && bash create_vm.sh
+curl -L https://raw.githubusercontent.com/spiritLHLS/pve/main/scripts/create_vm.sh -o create_vm.sh && chmod +x create_vm.sh && bash create_vm.sh
 ```
 
 Executable after running
