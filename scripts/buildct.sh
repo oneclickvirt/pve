@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/spiritLHLS/pve
-# 2023.04.22
+# 2023.04.23
 
 # ./buildct.sh CTID 密码 CPU核数 内存 硬盘 SSH端口 80端口 443端口 外网端口起 外网端口止 系统
 # ./buildct.sh 102 1234567 1 512 5 40001 40002 40003 50000 50025 debian11
@@ -50,7 +50,7 @@ else
   num=$((first_digit - 2))$second_digit$third_digit
 fi
 user_ip="172.16.1.${num}"
-pct create $CTID local:vztmpl/$system_name -cores $core -cpuunits 1024 -memory $memory -swap 128 -rootfs local:${disk} --onboot 1 -password $password
+pct create $CTID local:vztmpl/$system_name -cores $core -cpuunits 1024 -memory $memory -swap 128 -rootfs local:${disk} -onboot 1 -password $password -features nesting=1
 pct start $CTID
 pct set $CTID --hostname $CTID
 pct set $CTID --net0 name=eth0,ip=${user_ip}/24,bridge=vmbr1,gw=172.16.1.1 
