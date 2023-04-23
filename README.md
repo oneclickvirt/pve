@@ -287,8 +287,11 @@ cat ct102
 
 #### 删除示例
 
+以下命令将删除所有ct容器和所有的log文件
+
 ```
-pct list | awk '{print $1}' | xargs -I {} pct destroy {}
+pct list | awk 'NR>1{print $1}' | xargs -I {} sh -c 'pct stop {}; pct destroy {}'
+rm -rf ct*
 ```
 
 ## 致谢
