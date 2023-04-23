@@ -6,7 +6,7 @@
 
 ### 前言
 
-如果脚本有任何问题或者任何修复系统的需求，可在issues中提出，有空会解决或者回答
+**国内服务器请使用国内命令，国际服务器请使用国际命令**
 
 **请确保使用前机器可以重装系统，不保证本套脚本不造成任何BUG!!!**
 
@@ -70,6 +70,12 @@
 bash <(wget -qO- --no-check-certificate https://raw.githubusercontent.com/spiritLHLS/pve/main/scripts/check_kernal.sh)
 ```
 
+国内：
+
+```
+bash <(wget -qO- --no-check-certificate https://ghproxy.com/https://raw.githubusercontent.com/spiritLHLS/pve/main/scripts/check_kernal.sh)
+```
+
 #### PVE基础安装
 
 - 安装的是当下apt源最新的PVE
@@ -91,6 +97,12 @@ bash <(wget -qO- --no-check-certificate https://raw.githubusercontent.com/spirit
 curl -L https://raw.githubusercontent.com/spiritLHLS/pve/main/scripts/install_pve.sh -o install_pve.sh && chmod +x install_pve.sh && bash install_pve.sh
 ```
 
+国内：
+
+```
+curl -L https://ghproxy.com/https://raw.githubusercontent.com/spiritLHLS/pve/main/scripts/install_pve.sh -o install_pve.sh && chmod +x install_pve.sh && bash install_pve.sh
+```
+
 - 安装过程中可能会退出安装，需要手动修复apt源，如下图所示修复完毕后再次执行本脚本
 
 ![图片](https://user-images.githubusercontent.com/103393591/220104992-9eed2601-c170-46b9-b8b7-de141eeb6da4.png)
@@ -108,6 +120,12 @@ curl -L https://raw.githubusercontent.com/spiritLHLS/pve/main/scripts/install_pv
 bash <(wget -qO- --no-check-certificate https://raw.githubusercontent.com/spiritLHLS/pve/main/scripts/build_backend.sh)
 ```
 
+国内
+
+```
+bash <(wget -qO- --no-check-certificate https://ghproxy.com/https://raw.githubusercontent.com/spiritLHLS/pve/main/scripts/build_backend.sh)
+```
+
 ### 自动配置IPV4的NAT网关
 
 - **使用前请保证重启过服务器且PVE能正常使用WEB端再执行**
@@ -120,6 +138,12 @@ bash <(wget -qO- --no-check-certificate https://raw.githubusercontent.com/spirit
 
 ```
 bash <(wget -qO- --no-check-certificate https://raw.githubusercontent.com/spiritLHLS/pve/main/scripts/build_nat_network.sh)
+```
+
+国内
+
+```
+bash <(wget -qO- --no-check-certificate https://ghproxy.com/https://raw.githubusercontent.com/spiritLHLS/pve/main/scripts/build_nat_network.sh)
 ```
 
 ## 一键生成KVM虚拟化的NAT服务器
@@ -148,6 +172,12 @@ bash <(wget -qO- --no-check-certificate https://raw.githubusercontent.com/spirit
 
 ```
 curl -L https://raw.githubusercontent.com/spiritLHLS/pve/main/scripts/buildvm.sh -o buildvm.sh && chmod +x buildvm.sh
+```
+
+国内
+
+```
+curl -L https://ghproxy.com/https://raw.githubusercontent.com/spiritLHLS/pve/main/scripts/buildvm.sh -o buildvm.sh && chmod +x buildvm.sh
 ```
 
 #### 单个生成的使用方法
@@ -216,6 +246,12 @@ https://github.com/spiritLHLS/Images/releases/tag/v1.0
 curl -L https://raw.githubusercontent.com/spiritLHLS/pve/main/scripts/create_vm.sh -o create_vm.sh && chmod +x create_vm.sh && bash create_vm.sh
 ```
 
+国内
+
+```
+curl -L https://ghproxy.com/https://raw.githubusercontent.com/spiritLHLS/pve/main/scripts/create_vm.sh -o create_vm.sh && chmod +x create_vm.sh && bash create_vm.sh
+```
+
 开设完毕可执行
 
 ```
@@ -256,6 +292,12 @@ LXC虚拟化的容器-自带内外网映射
 
 ```
 curl -L https://raw.githubusercontent.com/spiritLHLS/pve/main/scripts/buildct.sh -o buildct.sh && chmod +x buildct.sh
+```
+
+国内
+
+```
+curl -L https://ghproxy.com/https://raw.githubusercontent.com/spiritLHLS/pve/main/scripts/buildct.sh -o buildct.sh && chmod +x buildct.sh
 ```
 
 #### 如何使用
@@ -316,6 +358,12 @@ systemctl restart networking.service
 
 ```
 curl -L https://raw.githubusercontent.com/spiritLHLS/pve/main/scripts/create_ct.sh -o create_ct.sh && chmod +x create_ct.sh && bash create_ct.sh
+```
+
+国内
+
+```
+curl -L https://ghproxy.com/https://raw.githubusercontent.com/spiritLHLS/pve/main/scripts/create_ct.sh -o create_ct.sh && chmod +x create_ct.sh && bash create_ct.sh
 ```
 
 开设完毕可执行
