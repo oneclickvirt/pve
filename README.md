@@ -28,7 +28,7 @@
     * [自动配置IPV4的NAT网关](#自动配置IPV4的NAT网关)
 * [一键生成KVM虚拟化的NAT服务器](#一键生成KVM虚拟化的NAT服务器)
     * [单独生成KVM虚拟化的VM](#单独生成KVM虚拟化的VM)
-    * [使用方法](#使用方法)
+    * [单个生成的使用方法](#单个生成的使用方法)
     * [示例](#示例)
     * [删除示例](#删除示例)
     * [相关qcow2镜像](#相关qcow2镜像)
@@ -38,8 +38,8 @@
     * [注意事项](#注意事项)
 * [一键创建单个CT也就是LXC虚拟化的NAT容器](#一键创建单个CT也就是LXC虚拟化的NAT容器)
     * [使用方法](#使用方法)
-    * [示例](#示例)
-    * [删除示例](#删除示例)
+    * [CT示例](#CT示例)
+    * [删除所有CT](#删除所有CT)
 * [致谢](#致谢)
 
 ### 系统要求与配置
@@ -149,7 +149,7 @@ bash <(wget -qO- --no-check-certificate https://raw.githubusercontent.com/spirit
 curl -L https://raw.githubusercontent.com/spiritLHLS/pve/main/scripts/buildvm.sh -o buildvm.sh && chmod +x buildvm.sh
 ```
 
-#### 使用方法
+#### 单个生成的使用方法
 
 - 系统支持：详见 [跳转](https://github.com/spiritLHLS/Images/releases/tag/v1.0) 中列出的系统，使用时只需写文件名字，不需要.qcow2尾缀
 - **注意这里的用户名不能是纯数字，会造成cloudinit出问题，最好是纯英文或英文开头**
@@ -265,7 +265,7 @@ curl -L https://raw.githubusercontent.com/spiritLHLS/pve/main/scripts/buildct.sh
 ./buildct.sh CTID 密码 CPU核数 内存 硬盘 SSH端口 80端口 443端口 外网端口起 外网端口止 系统
 ```
 
-#### 示例
+#### CT示例
 
 测试开一个NAT服务器
 
@@ -285,7 +285,7 @@ cat ct102
 
 查看信息
 
-#### 删除示例
+#### 删除所有CT
 
 以下命令将删除所有ct容器和所有的log文件
 
