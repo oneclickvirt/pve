@@ -20,9 +20,9 @@ pre_check(){
     if ! command -v dos2unix > /dev/null 2>&1; then
         apt-get install dos2unix -y
     fi
-    if [ ! -f "buildvm.sh" ]; then
+    if [ ! -f "buildct.sh" ]; then
       curl -L https://raw.githubusercontent.com/spiritLHLS/pve/main/scripts/buildct.sh -o buildct.sh && chmod +x buildct.sh
-      dos2unix buildvm.sh
+      dos2unix buildct.sh
     fi
 }
 
