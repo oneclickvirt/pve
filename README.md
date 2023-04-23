@@ -129,10 +129,9 @@ bash <(wget -qO- --no-check-certificate https://ghproxy.com/https://raw.githubus
 ### 自动配置IPV4的NAT网关
 
 - **使用前请保证重启过服务器且PVE能正常使用WEB端再执行，这一步是最容易造成SSH断开的，推荐screen中执行避免连接中断**
-- 创建vmbr0，母鸡允许addr和gateway为内网IP或外网IP，已自动识别
+- 创建vmbr0，母鸡允许addr和gateway为内网IP或外网IP，已自动识别，测试腾讯云可用
 - 创建vmbr1(NAT网关)
-- 开NAT虚拟机时网关（IPV4）使用```172.16.1.1```，IPV4/CIDR使用```172.16.1.x/24```，这里的x不能是1
-- 可能需要web端手动点应用配置按钮应用一下
+- 开NAT虚拟机时网关（IPV4）使用```172.16.1.1```，IPV4/CIDR使用```172.16.1.x/24```，这里的x不能是1，当然如果后续使用本套脚本无需关注这点细枝末节的东西
 - 想查看完整设置可以执行```cat /etc/network/interfaces```查看
 - 加载iptables并设置回源且允许NAT端口转发
 
