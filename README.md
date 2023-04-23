@@ -14,7 +14,6 @@
 
 待开发内容:
 
-- 国内腾讯云模板的gateway是内网IP，使用一键配置NAT网络会造成服务器失联，待修复
 - 文档以及脚本输出修改支持双语
 - 创建带IPV6独立地址的VM虚拟机或CT容器
 
@@ -130,7 +129,7 @@ bash <(wget -qO- --no-check-certificate https://ghproxy.com/https://raw.githubus
 ### 自动配置IPV4的NAT网关
 
 - **使用前请保证重启过服务器且PVE能正常使用WEB端再执行，这一步是最容易造成SSH断开的，推荐screen中执行避免连接中断**
-- 创建vmbr0
+- 创建vmbr0，母鸡允许addr和gateway为内网IP或外网IP，已自动识别
 - 创建vmbr1(NAT网关)
 - 开NAT虚拟机时网关（IPV4）使用```172.16.1.1```，IPV4/CIDR使用```172.16.1.x/24```，这里的x不能是1
 - 可能需要web端手动点应用配置按钮应用一下
