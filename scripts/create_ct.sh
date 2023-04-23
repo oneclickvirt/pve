@@ -30,7 +30,7 @@ pre_check(){
 # if [ -n "$files" ]; then
 #   for file in $files
 #   do
-#     cat "$file" >> vmlog
+#     cat "$file" >> ctlog
 #   done
 # fi
 
@@ -66,7 +66,7 @@ check_info(){
     fi
 }
 
-build_new_vms(){
+build_new_cts(){
     while true; do
         reading "还需要生成几个NAT服务器？(输入新增几个NAT服务器)：" new_nums
         if [[ "$new_nums" =~ ^[1-9][0-9]*$ ]]; then
@@ -117,5 +117,5 @@ build_new_vms(){
 
 pre_check
 check_info
-build_new_vms
+build_new_cts
 check_info
