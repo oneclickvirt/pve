@@ -55,7 +55,7 @@ check_info(){
       port_end="${last_line_array[6]}"
       system="${last_line_array[7]}"
       green "当前最后一个NAT服务器对应的信息："
-      echo "NAT服务器: $vm_num"
+      echo "NAT服务器: $ct_num"
     #   echo "用户名: $user"
     #   echo "密码: $password"
       echo "外网SSH端口: $ssh_port"
