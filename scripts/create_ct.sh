@@ -35,9 +35,9 @@ pre_check(){
 # fi
 
 check_info(){
-    log_file="vmlog"
-    if [ ! -f "vmlog" ]; then
-      yellow "当前目录下不存在vmlog文件"
+    log_file="ctlog"
+    if [ ! -f "ctlog" ]; then
+      yellow "当前目录下不存在ctlog文件"
       ct_num=302
       web2_port=20003
       port_end=30025
@@ -109,7 +109,7 @@ build_new_vms(){
         port_start=$(($port_end + 1))
         port_end=$(($port_start + 25))
         ./buildct.sh $ct_num $password $cpu_nums $memory_nums $disk_nums $ssh_port $web1_port $web2_port $port_start $port_end debian10
-        cat "ct$ct_num" >> vmlog
+        cat "ct$ct_num" >> ctlog
         rm -rf "ct$ct_num"
         sleep 60
     done
