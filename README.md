@@ -40,7 +40,7 @@
     * [如何使用](#如何使用)
     * [CT示例](#CT示例)
     * [删除所有CT](#删除所有CT)
-* [批量开设NAT的LXC虚拟化的CT](#批量开设NAT的LXC虚拟化的CT)
+* [批量开设NAT的LXC虚拟化的CT容器](#批量开设NAT的LXC虚拟化的CT容器)
     * [一键命令](#一键命令)
 * [致谢](#致谢)
 
@@ -302,18 +302,29 @@ service networking restart
 systemctl restart networking.service
 ```
 
-## 批量开设NAT的LXC虚拟化的CT
+## 批量开设NAT的LXC虚拟化的CT容器
+
+- 自带内外网映射
+- 可重复运行继承配置
 
 #### 一键命令
 
 - **初次使用前需要保证当前PVE未有任何CT容器未有进行任何端口映射，否则可能出现BUG**
 - **开设前请使用screen挂起执行，避免批量开设时间过长，SSH不稳定导致中间执行中断，推荐使用PVE自带的Shell操作母鸡**
-- 可多次运行批量生成VM，但需要注意的是母鸡内存记得开点swap免得机器炸了[开SWAP点我跳转](https://github.com/spiritLHLS/addswap)
+- 可多次运行批量生成CT容器，但需要注意的是母鸡内存记得开点swap免得机器炸了[开SWAP点我跳转](https://github.com/spiritLHLS/addswap)
 - 可自定义批量开设的核心数，内存大小，硬盘大小，记得自己计算好空闲资源开设
 
 ```
 curl -L https://raw.githubusercontent.com/spiritLHLS/pve/main/scripts/create_ct.sh -o create_ct.sh && chmod +x create_ct.sh && bash create_ct.sh
 ```
+
+开设完毕可执行
+
+```
+cat ctlog
+```
+
+查看信息
 
 ## 致谢
 
