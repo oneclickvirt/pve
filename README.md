@@ -159,7 +159,7 @@ bash <(wget -qO- --no-check-certificate https://ghproxy.com/https://raw.githubus
 
 ![图片](https://user-images.githubusercontent.com/103393591/231160449-82911a57-4b49-47ec-8fad-2100c6059017.png)
 
-先停止虚拟机再修改，修改完后再开机才能使用NOVNC，不关闭可能导致这个虚拟机有BUG无法使用
+先停止虚拟机再修改，修改完后再开机才能使用NOVNC，不关闭可能导致这个虚拟机有BUG无法使用，如果强行安装PVE开KVM，启动不了的也可以关闭这个虚拟化试试能不能启动虚拟机
 
 ### 单独生成KVM虚拟化的VM
 
