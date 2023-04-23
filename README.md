@@ -15,7 +15,7 @@
 待开发内容:
 
 - 文档以及脚本输出修改支持双语
-- 创建带IPV6独立地址的VM或CT容器
+- 创建带IPV6独立地址的VM虚拟机或CT容器
 
 # 目录
 
@@ -312,6 +312,7 @@ systemctl restart networking.service
 - **开设前请使用screen挂起执行，避免批量开设时间过长，SSH不稳定导致中间执行中断，推荐使用PVE自带的Shell操作母鸡**
 - 可多次运行批量生成CT容器，但需要注意的是母鸡内存记得开点swap免得机器炸了[开SWAP点我跳转](https://github.com/spiritLHLS/addswap)
 - 可自定义批量开设的核心数，内存大小，硬盘大小，记得自己计算好空闲资源开设
+- 开设的CT默认已启用SSH且允许root登陆，且已设置支持使用docker的嵌套虚拟化
 
 ```
 curl -L https://raw.githubusercontent.com/spiritLHLS/pve/main/scripts/create_ct.sh -o create_ct.sh && chmod +x create_ct.sh && bash create_ct.sh
