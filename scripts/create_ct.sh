@@ -105,7 +105,7 @@ build_new_cts(){
         password=${ori: 2: 9}
         ssh_port=$(($web2_port + 1))
         web1_port=$(($web2_port + 2)) 
-        web2_port=$(($web1_port + 3))
+        web2_port=$(($web1_port + 1))
         port_start=$(($port_end + 1))
         port_end=$(($port_start + 25))
         ./buildct.sh $ct_num $password $cpu_nums $memory_nums $disk_nums $ssh_port $web1_port $web2_port $port_start $port_end debian10
