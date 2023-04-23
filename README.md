@@ -37,7 +37,7 @@
     * [删除所有虚拟机](#删除所有虚拟机)
     * [注意事项](#注意事项)
 * [一键生成单个CT也就是LXC虚拟化的NAT容器](#一键生成单个CT也就是LXC虚拟化的NAT容器)
-    * [使用方法](#使用方法)
+    * [如何使用](#如何使用)
     * [CT示例](#CT示例)
     * [删除所有CT](#删除所有CT)
 * [致谢](#致谢)
@@ -257,7 +257,7 @@ LXC虚拟化的容器-自带内外网映射
 curl -L https://raw.githubusercontent.com/spiritLHLS/pve/main/scripts/buildct.sh -o buildct.sh && chmod +x buildct.sh
 ```
 
-#### 使用方法
+#### 如何使用
 
 - 系统支持：debian10，debian11，ubuntu18，ubuntu20，ubuntu22
 - 其他系统可能支持可能不支持，自行测试
