@@ -28,8 +28,6 @@ PS: If the hardware requirements are not met, you can use LXD batch open LXC [ju
 
 Hardware requirements to open KVM: VM-X or AMD-V support - (part of the VPS and all unique service support)
 
-encounter options will not be selected can be installed by a brainless carriage return, all scripts built-in domestic and foreign IP automatic judgment, using a different installation source and configuration file
-
 ### Checking hardware environment
 
 - This script must be executed before the execution of this repository script to test the environment, if it does not meet the requirements for the installation of PVE, then the subsequent scripts cannot be used
