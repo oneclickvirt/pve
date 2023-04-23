@@ -4,7 +4,7 @@
 # 2023.04.23
 
 # ./buildct.sh CTID 密码 CPU核数 内存 硬盘 SSH端口 80端口 443端口 外网端口起 外网端口止 系统
-# ./buildct.sh 102 1234567 1 512 5 40001 40002 40003 50000 50025 debian11
+# ./buildct.sh 102 1234567 1 512 5 20001 20002 20003 30000 30025 debian11
 
 # 用颜色输出信息
 _red() { echo -e "\033[31m\033[01m$@\033[0m"; }
@@ -18,11 +18,11 @@ password="${2:-123456}"
 core="${3:-1}"
 memory="${4:-512}"
 disk="${5:-5}"
-sshn="${6:-40001}"
-web1_port="${7:-40002}"
-web2_port="${8:-40003}"
-port_first="${9:-49975}"
-port_last="${10:-50000}"
+sshn="${6:-20001}"
+web1_port="${7:-20002}"
+web2_port="${8:-20003}"
+port_first="${9:-29975}"
+port_last="${10:-30000}"
 system_ori="${12:-debian11}"
 rm -rf "ct$name"
 en_system=$(echo "$system_ori" | sed 's/[0-9]*//g')
