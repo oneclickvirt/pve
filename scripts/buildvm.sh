@@ -24,6 +24,35 @@ system="${12:-debian10}"
 # out="${13:-300}"
 rm -rf "vm$name"
 
+red() { echo -e "\033[31m\033[01m$@\033[0m"; }
+green() { echo -e "\033[32m\033[01m$@\033[0m"; }
+yellow() { echo -e "\033[33m\033[01m$@\033[0m"; }
+blue() { echo -e "\033[36m\033[01m$@\033[0m"; }
+reading(){ read -rp "$(green "$1")" "$2"; }
+
+check_cdn() {
+  local o_url=$1
+  for cdn_url in "${cdn_urls[@]}"; do
+    if curl -sL -k "$cdn_url$o_url" --max-time 6 | grep -q "success" > /dev/null 2>&1; then
+      export cdn_success_url="$cdn_url"
+      return
+    fi
+    sleep 0.5
+  done
+  export cdn_success_url=""
+}
+
+check_cdn_file() {
+    check_cdn "https://raw.githubusercontent.com/spiritLHLS/ecs/main/back/test"
+    if [ -n "$cdn_success_url" ]; then
+        yellow "CDN available, using CDN"
+    else
+        yellow "No CDN available, no use CDN"
+    fi
+}
+
+cdn_urls=("https://cdn.spiritlhl.workers.dev/" "https://shrill-pond-3e81.hunsh.workers.dev/" "https://ghproxy.com/" "http://104.168.128.181:7823/" "https://gh.api.99988866.xyz/")
+check_cdn_file
 if [ ! -d "qcow" ]; then
   mkdir qcow
 fi
@@ -40,7 +69,7 @@ if [[ -z "$file_path" ]]; then
   echo "无法安装对应系统，仅支持 debian9 debian10 debian11 ubuntu18 ubuntu20 ubuntu22 archlinux"
   exit 1
 fi
-url="https://github.com/spiritLHLS/Images/releases/download/v1.0/${system}.qcow2"
+url="${cdn_success_url}https://github.com/spiritLHLS/Images/releases/download/v1.0/${system}.qcow2"
 if [ ! -f "$file_path" ]; then
   curl -L -o "$file_path" "$url"
 fi
