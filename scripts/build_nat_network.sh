@@ -20,7 +20,15 @@ IPV4=$(curl -s4m8 "$IP_API")
 
 # 查询信息
 interface=$(lshw -C network | awk '/logical name:/{print $3}' | head -1)
-ip=${IPV4}/24
+if [ -z "$interface" ]; then
+  interface="eth0"
+fi
+in_ip=$(ifconfig ${interface} | grep "inet " | awk '{print $2}')
+if [ -z "$in_ip" ]; then
+  ip=${IPV4}/24
+else
+  ip=${in_ip}/24
+fi
 gateway=$(ip route | awk '/default/ {print $3}')
 
 # 录入网关
