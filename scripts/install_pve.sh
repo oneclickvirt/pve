@@ -17,7 +17,6 @@ else
 fi
 
 
-
 # 前置环境安装
 if [ "$(id -u)" != "0" ]; then
    _red "This script must be run as root" 1>&2
@@ -51,6 +50,30 @@ fi
 if ! command -v iptables > /dev/null 2>&1; then
       apt-get install -y iptables
 fi
+
+check_cdn() {
+  local o_url=$1
+  for cdn_url in "${cdn_urls[@]}"; do
+    if curl -sL -k "$cdn_url$o_url" --max-time 6 | grep -q "success" > /dev/null 2>&1; then
+      export cdn_success_url="$cdn_url"
+      return
+    fi
+    sleep 0.5
+  done
+  export cdn_success_url=""
+}
+
+check_cdn_file() {
+    check_cdn "https://raw.githubusercontent.com/spiritLHLS/ecs/main/back/test"
+    if [ -n "$cdn_success_url" ]; then
+        _yellow "CDN available, using CDN"
+    else
+        _yellow "No CDN available, no use CDN"
+    fi
+}
+
+cdn_urls=("https://cdn.spiritlhl.workers.dev/" "https://shrill-pond-3e81.hunsh.workers.dev/" "https://ghproxy.com/" "http://104.168.128.181:7823/" "https://gh.api.99988866.xyz/")
+check_cdn_file
 
 # /etc/hosts文件修改
 ip=$(curl -s ipv4.ip.sb)
@@ -251,8 +274,8 @@ then
     chattr +i /etc/resolv.conf
 fi
 if [[ -n "${CN}" ]]; then
-   wget https://ghproxy.com/https://raw.githubusercontent.com/spiritLHLS/pve/main/scripts/check-dns.sh -O /usr/local/bin/check-dns.sh
-   wget https://ghproxy.com/https://raw.githubusercontent.com/spiritLHLS/pve/main/scripts/check-dns.service -O /etc/systemd/system/check-dns.service
+   wget ${cdn_success_url}https://raw.githubusercontent.com/spiritLHLS/pve/main/scripts/check-dns.sh -O /usr/local/bin/check-dns.sh
+   wget ${cdn_success_url}https://raw.githubusercontent.com/spiritLHLS/pve/main/scripts/check-dns.service -O /etc/systemd/system/check-dns.service
 else
    wget https://raw.githubusercontent.com/spiritLHLS/pve/main/scripts/check-dns.sh -O /usr/local/bin/check-dns.sh
    wget https://raw.githubusercontent.com/spiritLHLS/pve/main/scripts/check-dns.service -O /etc/systemd/system/check-dns.service
