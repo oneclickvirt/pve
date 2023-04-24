@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/spiritLHLS/pve
-# 2023.04.23
+# 2023.04.24
 
 # ./buildct.sh CTID 密码 CPU核数 内存 硬盘 SSH端口 80端口 443端口 外网端口起 外网端口止 系统
 # ./buildct.sh 102 1234567 1 512 5 20001 20002 20003 30000 30025 debian11
@@ -11,8 +11,15 @@ _red() { echo -e "\033[31m\033[01m$@\033[0m"; }
 _green() { echo -e "\033[32m\033[01m$@\033[0m"; }
 _yellow() { echo -e "\033[33m\033[01m$@\033[0m"; }
 _blue() { echo -e "\033[36m\033[01m$@\033[0m"; }
-export LC_ALL=en_US.utf8
-export LANG=en_US.utf8
+reading(){ read -rp "$(green "$1")" "$2"; }
+utf8_locale=$(locale -a 2>/dev/null | grep -i -m 1 utf8)
+if [[ -z "$utf8_locale" ]]; then
+  _yellow "No UTF-8 locale found"
+else
+  export LC_ALL="$utf8_locale"
+  export LANG="$utf8_locale"
+  _green "Locale set to $utf8_locale"
+fi
 
 
 cd /root >/dev/null 2>&1
