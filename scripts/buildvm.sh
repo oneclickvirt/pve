@@ -24,14 +24,19 @@ system="${12:-debian10}"
 # out="${13:-300}"
 rm -rf "vm$name"
 
-red() { echo -e "\033[31m\033[01m$@\033[0m"; }
-green() { echo -e "\033[32m\033[01m$@\033[0m"; }
-yellow() { echo -e "\033[33m\033[01m$@\033[0m"; }
-blue() { echo -e "\033[36m\033[01m$@\033[0m"; }
+_red() { echo -e "\033[31m\033[01m$@\033[0m"; }
+_green() { echo -e "\033[32m\033[01m$@\033[0m"; }
+_yellow() { echo -e "\033[33m\033[01m$@\033[0m"; }
+_blue() { echo -e "\033[36m\033[01m$@\033[0m"; }
 reading(){ read -rp "$(green "$1")" "$2"; }
-export LC_ALL=en_US.utf8
-export LANG=en_US.utf8
-
+utf8_locale=$(locale -a 2>/dev/null | grep -i -m 1 utf8)
+if [[ -z "$utf8_locale" ]]; then
+  _yellow "No UTF-8 locale found"
+else
+  export LC_ALL="$utf8_locale"
+  export LANG="$utf8_locale"
+  _green "Locale set to $utf8_locale"
+fi
 
 check_cdn() {
   local o_url=$1
@@ -48,9 +53,9 @@ check_cdn() {
 check_cdn_file() {
     check_cdn "https://raw.githubusercontent.com/spiritLHLS/ecs/main/back/test"
     if [ -n "$cdn_success_url" ]; then
-        yellow "CDN available, using CDN"
+        _yellow "CDN available, using CDN"
     else
-        yellow "No CDN available, no use CDN"
+        _yellow "No CDN available, no use CDN"
     fi
 }
 
