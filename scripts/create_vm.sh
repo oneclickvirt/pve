@@ -19,6 +19,30 @@ else
   _green "Locale set to $utf8_locale"
 fi
 
+check_cdn() {
+  local o_url=$1
+  for cdn_url in "${cdn_urls[@]}"; do
+    if curl -sL -k "$cdn_url$o_url" --max-time 6 | grep -q "success" > /dev/null 2>&1; then
+      export cdn_success_url="$cdn_url"
+      return
+    fi
+    sleep 0.5
+  done
+  export cdn_success_url=""
+}
+
+check_cdn_file() {
+    check_cdn "https://raw.githubusercontent.com/spiritLHLS/ecs/main/back/test"
+    if [ -n "$cdn_success_url" ]; then
+        _yellow "CDN available, using CDN"
+    else
+        _yellow "No CDN available, no use CDN"
+    fi
+}
+
+cdn_urls=("https://cdn.spiritlhl.workers.dev/" "https://shrill-pond-3e81.hunsh.workers.dev/" "https://ghproxy.com/" "http://104.168.128.181:7823/" "https://gh.api.99988866.xyz/")
+check_cdn_file
+
 pre_check(){
     home_dir=$(eval echo "~$(whoami)")
     if [ "$home_dir" != "/root" ]; then
@@ -29,7 +53,7 @@ pre_check(){
         apt-get install dos2unix -y
     fi
     if [ ! -f "buildvm.sh" ]; then
-      curl -L https://raw.githubusercontent.com/spiritLHLS/pve/main/scripts/buildvm.sh -o buildvm.sh && chmod +x buildvm.sh
+      curl -L ${cdn_success_url}https://raw.githubusercontent.com/spiritLHLS/pve/main/scripts/buildvm.sh -o buildvm.sh && chmod +x buildvm.sh
       dos2unix buildvm.sh
     fi
 }
