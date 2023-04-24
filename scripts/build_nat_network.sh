@@ -6,8 +6,15 @@ _red() { echo -e "\033[31m\033[01m$@\033[0m"; }
 _green() { echo -e "\033[32m\033[01m$@\033[0m"; }
 _yellow() { echo -e "\033[33m\033[01m$@\033[0m"; }
 _blue() { echo -e "\033[36m\033[01m$@\033[0m"; }
-export LC_ALL=en_US.utf8
-export LANG=en_US.utf8
+reading(){ read -rp "$(green "$1")" "$2"; }
+utf8_locale=$(locale -a 2>/dev/null | grep -i -m 1 utf8)
+if [[ -z "$utf8_locale" ]]; then
+  _yellow "No UTF-8 locale found"
+else
+  export LC_ALL="$utf8_locale"
+  export LANG="$utf8_locale"
+  _green "Locale set to $utf8_locale"
+fi
 
 API_NET=("ip.sb" "ipget.net" "ip.ping0.cc" "https://ip4.seeip.org" "https://api.my-ip.io/ip" "https://ipv4.icanhazip.com" "api.ipify.org")
 for p in "${API_NET[@]}"; do
