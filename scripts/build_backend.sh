@@ -28,8 +28,19 @@ else
 fi
 
 # 移除订阅弹窗
-cp -rf /usr/share/javascript/proxmox-widget-toolkit/proxmoxlib.js /usr/share/javascript/proxmox-widget-toolkit/proxmoxlib.js.bak
-sed -Ezi.bak "s/(Ext.Msg.show\(\{\s+title: gettext\('No valid sub)/void\(\{ \/\/\1/g" /usr/share/javascript/proxmox-widget-toolkit/proxmoxlib.js
+pve_version=$(dpkg-query -f '${Version}' -W proxmox-ve 2>/dev/null | cut -d'-' -f1)
+if [[ "$pve_version" == 7.* ]]; then
+    # pve7.x
+    cp -rf /usr/share/javascript/proxmox-widget-toolkit/proxmoxlib.js /usr/share/javascript/proxmox-widget-toolkit/proxmoxlib.js.bak
+    sed -Ezi.bak "s/(Ext.Msg.show\(\{\s+title: gettext\('No valid sub)/void\(\{ \/\/\1/g" /usr/share/javascript/proxmox-widget-toolkit/proxmoxlib.js
+elif [[ "$pve_version" == 6.* ]]; then
+    # pve6.x
+    cp -rf /usr/share/pve-manager/js/pvemanagerlib.js /usr/share/pve-manager/js/pvemanagerlib.js.bak
+    sed -Ezi.bak "s/(Ext.Msg.show\(\{\s+title: gettext\('No valid sub)/void\(\{ \/\/\1/g" /usr/share/pve-manager/js/pvemanagerlib.js
+else
+    # 不支持的版本
+    echo "Unsupported Proxmox VE version: $pve_version"
+fi
 
 # 开启硬件直通
 if [ `dmesg | grep -e DMAR -e IOMMU|wc -l` = 0 ];then
