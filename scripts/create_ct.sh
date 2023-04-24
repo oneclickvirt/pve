@@ -10,6 +10,9 @@ green() { echo -e "\033[32m\033[01m$@\033[0m"; }
 yellow() { echo -e "\033[33m\033[01m$@\033[0m"; }
 blue() { echo -e "\033[36m\033[01m$@\033[0m"; }
 reading(){ read -rp "$(green "$1")" "$2"; }
+export LC_ALL=en_US.utf8
+export LANG=en_US.utf8
+
 
 pre_check(){
     home_dir=$(eval echo "~$(whoami)")
