@@ -1,20 +1,28 @@
 #!/bin/bash
 # from
 # https://github.com/spiritLHLS/pve
-# 2023.04.23
+# 2023.04.24
 
 # cd /root
 
-red() { echo -e "\033[31m\033[01m$@\033[0m"; }
-green() { echo -e "\033[32m\033[01m$@\033[0m"; }
-yellow() { echo -e "\033[33m\033[01m$@\033[0m"; }
-blue() { echo -e "\033[36m\033[01m$@\033[0m"; }
+_red() { echo -e "\033[31m\033[01m$@\033[0m"; }
+_green() { echo -e "\033[32m\033[01m$@\033[0m"; }
+_yellow() { echo -e "\033[33m\033[01m$@\033[0m"; }
+_blue() { echo -e "\033[36m\033[01m$@\033[0m"; }
 reading(){ read -rp "$(green "$1")" "$2"; }
+utf8_locale=$(locale -a 2>/dev/null | grep -i -m 1 utf8)
+if [[ -z "$utf8_locale" ]]; then
+  _yellow "No UTF-8 locale found"
+else
+  export LC_ALL="$utf8_locale"
+  export LANG="$utf8_locale"
+  _green "Locale set to $utf8_locale"
+fi
 
 pre_check(){
     home_dir=$(eval echo "~$(whoami)")
     if [ "$home_dir" != "/root" ]; then
-        red "当前路径不是/root，脚本将退出。"
+        _red "当前路径不是/root，脚本将退出。"
         exit 1
     fi
     if ! command -v dos2unix > /dev/null 2>&1; then
@@ -37,7 +45,7 @@ pre_check(){
 check_info(){
     log_file="vmlog"
     if [ ! -f "vmlog" ]; then
-      yellow "当前目录下不存在vmlog文件"
+      _yellow "当前目录下不存在vmlog文件"
       vm_num=202
       web2_port=40003
       port_end=50025
@@ -55,7 +63,7 @@ check_info(){
       port_start="${last_line_array[9]}"
       port_end="${last_line_array[10]}"
       system="${last_line_array[11]}"
-      green "当前最后一个NAT服务器对应的信息："
+      _green "当前最后一个NAT服务器对应的信息："
       echo "NAT服务器: $vm_num"
     #   echo "用户名: $user"
     #   echo "密码: $password"
@@ -73,7 +81,7 @@ build_new_vms(){
         if [[ "$new_nums" =~ ^[1-9][0-9]*$ ]]; then
             break
         else
-            yellow "输入无效，请输入一个正整数。"
+            _yellow "输入无效，请输入一个正整数。"
         fi
     done
     while true; do
@@ -81,7 +89,7 @@ build_new_vms(){
         if [[ "$cpu_nums" =~ ^[1-9][0-9]*$ ]]; then
             break
         else
-            yellow "输入无效，请输入一个正整数。"
+            _yellow "输入无效，请输入一个正整数。"
         fi
     done
     while true; do
@@ -89,7 +97,7 @@ build_new_vms(){
         if [[ "$memory_nums" =~ ^[1-9][0-9]*$ ]]; then
             break
         else
-            yellow "输入无效，请输入一个正整数。"
+            _yellow "输入无效，请输入一个正整数。"
         fi
     done
     while true; do
@@ -97,7 +105,7 @@ build_new_vms(){
         if [[ "$disk_nums" =~ ^[1-9][0-9]*$ ]]; then
             break
         else
-            yellow "输入无效，请输入一个正整数。"
+            _yellow "输入无效，请输入一个正整数。"
         fi
     done
     for ((i=1; i<=$new_nums; i++)); do
