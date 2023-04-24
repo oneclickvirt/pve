@@ -37,6 +37,30 @@ else
 fi
 pveam download local $system_name
 
+check_cdn() {
+  local o_url=$1
+  for cdn_url in "${cdn_urls[@]}"; do
+    if curl -sL -k "$cdn_url$o_url" --max-time 6 | grep -q "success" > /dev/null 2>&1; then
+      export cdn_success_url="$cdn_url"
+      return
+    fi
+    sleep 0.5
+  done
+  export cdn_success_url=""
+}
+
+check_cdn_file() {
+    check_cdn "https://raw.githubusercontent.com/spiritLHLS/ecs/main/back/test"
+    if [ -n "$cdn_success_url" ]; then
+        _yellow "CDN available, using CDN"
+    else
+        _yellow "No CDN available, no use CDN"
+    fi
+}
+
+cdn_urls=("https://cdn.spiritlhl.workers.dev/" "https://shrill-pond-3e81.hunsh.workers.dev/" "https://ghproxy.com/" "http://104.168.128.181:7823/" "https://gh.api.99988866.xyz/")
+check_cdn_file
+
 first_digit=${CTID:0:1}
 second_digit=${CTID:1:1}
 third_digit=${CTID:2:1}
@@ -60,11 +84,11 @@ pct exec $CTID -- apt-get update -y
 pct exec $CTID -- dpkg --configure -a
 pct exec $CTID -- apt-get update
 pct exec $CTID -- apt-get install dos2unix curl -y
-pct exec $CTID -- curl -L https://raw.githubusercontent.com/spiritLHLS/pve/main/scripts/ssh.sh -o ssh.sh
+pct exec $CTID -- curl -L ${cdn_success_url}https://raw.githubusercontent.com/spiritLHLS/pve/main/scripts/ssh.sh -o ssh.sh
 pct exec $CTID -- chmod 777 ssh.sh
 pct exec $CTID -- dos2unix ssh.sh
 pct exec $CTID -- bash ssh.sh
-# pct exec $CTID -- curl -L https://raw.githubusercontent.com/spiritLHLS/lxc/main/config.sh -o config.sh
+# pct exec $CTID -- curl -L ${cdn_success_url}https://raw.githubusercontent.com/spiritLHLS/lxc/main/config.sh -o config.sh
 # pct exec $CTID -- chmod +x config.sh
 # pct exec $CTID -- bash config.sh
 
