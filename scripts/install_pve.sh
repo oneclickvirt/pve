@@ -7,6 +7,9 @@ _green() { echo -e "\033[32m\033[01m$@\033[0m"; }
 _yellow() { echo -e "\033[33m\033[01m$@\033[0m"; }
 _blue() { echo -e "\033[36m\033[01m$@\033[0m"; }
 reading(){ read -rp "$(_green "$1")" "$2"; }
+export LC_ALL=en_US.utf8
+export LANG=en_US.utf8
+
 
 # 前置环境安装
 if [ "$(id -u)" != "0" ]; then
