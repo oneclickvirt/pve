@@ -59,6 +59,7 @@ check_config(){
     cpu_cores=$(grep -c ^processor /proc/cpuinfo)
     if [ "$cpu_cores" -lt 2 ]; then
         _red "本机配置不满足最低要求：至少2核CPU"
+        _red "本机配置无法安装PVE"
         return
     fi
 
@@ -66,6 +67,7 @@ check_config(){
     total_mem=$(free -m | awk '/^Mem:/{print $2}')
     if [ "$total_mem" -lt 2048 ]; then
         _red "本机配置不满足最低要求：至少2G内存"
+        _red "本机配置无法安装PVE"
         return
     fi
 
@@ -74,6 +76,7 @@ check_config(){
     total_disk_num=$(echo $total_disk | sed 's/G//')
     if [ "$total_disk_num" -lt 20 ]; then
         _red "本机配置不满足最低要求：至少20G硬盘"
+        _red "本机配置无法安装PVE"
         return
     fi
 
