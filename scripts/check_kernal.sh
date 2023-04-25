@@ -34,7 +34,7 @@ else
 fi
 
 # 查询系统是否支持
-if [ "$(cat /sys/module/kvm_intel/parameters/nested)" = "Y" ]; then
+if [ -e "/sys/module/kvm_intel/parameters/nested" ] && [ "$(cat /sys/module/kvm_intel/parameters/nested | tr '[:upper:]' '[:lower:]')" = "y" ]; then
     if lsmod | grep -q kvm; then
         _green "本机系统支持KVM硬件嵌套虚拟化"
         _green "本机符合要求：可以使用PVE虚拟化KVM服务器，并可以在开出来的KVM服务器选项中开启KVM硬件虚拟化"
