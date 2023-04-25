@@ -19,7 +19,7 @@ fi
 
 # 检查CPU是否支持硬件虚拟化
 if [ "$(egrep -c '(vmx|svm)' /proc/cpuinfo)" -eq 0 ]; then
-    _red "CPU不支持硬件虚拟化，无法嵌套虚拟化KVM服务器，但可以开LXC服务器(CT)"
+    _yellow "CPU不支持硬件虚拟化，无法嵌套虚拟化KVM服务器，但可以开LXC服务器(CT)"
     exit 1
 else
     _green "本机CPU支持KVM硬件嵌套虚拟化"
@@ -27,7 +27,7 @@ fi
 
 # 检查虚拟化选项是否启用
 if [ "$(grep -E -c '(vmx|svm)' /proc/cpuinfo)" -eq 0 ]; then
-    _red "BIOS中未启用硬件虚拟化，无法嵌套虚拟化KVM服务器，但可以开LXC服务器(CT)"
+    _yellow "BIOS中未启用硬件虚拟化，无法嵌套虚拟化KVM服务器，但可以开LXC服务器(CT)"
     exit 1
 else
     _green "本机BIOS支持KVM硬件嵌套虚拟化"
