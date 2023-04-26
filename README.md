@@ -20,7 +20,7 @@
 # 目录
 
 * [系统要求与配置](#系统要求与配置)
-    * [建议debian在使用前尽量使用最新的系统](#建议debian在使用前尽量使用最新的系统)
+    * [各种要求](#各种要求)
     * [检测硬件环境](#检测硬件环境)
     * [PVE基础安装](#PVE基础安装)
     * [预配置环境](#预配置环境)
@@ -45,7 +45,9 @@
 
 ### 系统要求与配置
 
-#### 建议debian在使用前尽量使用最新的系统
+#### 各种要求
+
+建议debian在使用前尽量使用最新的系统
 
 非debian11可使用 [debian一键升级](https://github.com/spiritLHLS/one-click-installation-script#%E4%B8%80%E9%94%AE%E5%8D%87%E7%BA%A7%E4%BD%8E%E7%89%88%E6%9C%ACdebian%E4%B8%BAdebian11) 来升级系统
 
