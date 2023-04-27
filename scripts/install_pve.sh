@@ -8,13 +8,13 @@ _yellow() { echo -e "\033[33m\033[01m$@\033[0m"; }
 _blue() { echo -e "\033[36m\033[01m$@\033[0m"; }
 reading(){ read -rp "$(_green "$1")" "$2"; }
 export DEBIAN_FRONTEND=noninteractive
-
-utf8_locale=$(locale -a 2>/dev/null | grep -i -m 1 utf8)
+utf8_locale=$(locale -a 2>/dev/null | grep -i -m 1 -E "utf8|UTF-8")
 if [[ -z "$utf8_locale" ]]; then
   _yellow "No UTF-8 locale found"
 else
   export LC_ALL="$utf8_locale"
   export LANG="$utf8_locale"
+  export LANGUAGE="$utf8_locale"
   _green "Locale set to $utf8_locale"
 fi
 
