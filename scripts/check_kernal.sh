@@ -17,6 +17,37 @@ else
   echo "Locale set to $utf8_locale"
 fi
 
+check_config(){
+    # 检查CPU核心数
+    cpu_cores=$(grep -c ^processor /proc/cpuinfo)
+    if [ "$cpu_cores" -lt 2 ]; then
+        _red "本机配置不满足最低要求：至少2核CPU"
+        _red "本机配置无法安装PVE"
+        return
+    fi
+
+    # 检查内存大小
+    total_mem=$(free -m | awk '/^Mem:/{print $2}')
+    if [ "$total_mem" -lt 2048 ]; then
+        _red "本机配置不满足最低要求：至少2G内存"
+        _red "本机配置无法安装PVE"
+        return
+    fi
+
+    # 检查硬盘大小
+    total_disk=$(df -h / | awk '/\//{print $2}')
+    total_disk_num=$(echo $total_disk | sed 's/G//')
+    if [ "$total_disk_num" -lt 20 ]; then
+        _red "本机配置不满足最低要求：至少20G硬盘"
+        _red "本机配置无法安装PVE"
+        return
+    fi
+
+    _green "本机配置满足至少2核2G内存20G硬盘的最低要求"
+}
+
+check_config
+
 # 检查CPU是否支持硬件虚拟化
 if [ "$(egrep -c '(vmx|svm)' /proc/cpuinfo)" -eq 0 ]; then
     _yellow "CPU不支持硬件虚拟化，无法嵌套虚拟化KVM服务器，但可以开LXC服务器(CT)"
@@ -53,34 +84,3 @@ if ! lsmod | grep -q kvm; then
     echo "kvm" >> /etc/modules
     _green "KVM模块已加载并添加到 /etc/modules，可以尝试使用PVE虚拟化KVM服务器，也可以开LXC服务器(CT)"
 fi
-
-check_config(){
-    # 检查CPU核心数
-    cpu_cores=$(grep -c ^processor /proc/cpuinfo)
-    if [ "$cpu_cores" -lt 2 ]; then
-        _red "本机配置不满足最低要求：至少2核CPU"
-        _red "本机配置无法安装PVE"
-        return
-    fi
-
-    # 检查内存大小
-    total_mem=$(free -m | awk '/^Mem:/{print $2}')
-    if [ "$total_mem" -lt 2048 ]; then
-        _red "本机配置不满足最低要求：至少2G内存"
-        _red "本机配置无法安装PVE"
-        return
-    fi
-
-    # 检查硬盘大小
-    total_disk=$(df -h / | awk '/\//{print $2}')
-    total_disk_num=$(echo $total_disk | sed 's/G//')
-    if [ "$total_disk_num" -lt 20 ]; then
-        _red "本机配置不满足最低要求：至少20G硬盘"
-        _red "本机配置无法安装PVE"
-        return
-    fi
-
-    _green "本机配置满足至少2核2G内存20G硬盘的最低要求"
-}
-
-check_config
