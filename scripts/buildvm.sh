@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/spiritLHLS/pve
-# 2023.04.24
+# 2023.05.03
 
 # ./buildvm.sh VMID 用户名 密码 CPU核数 内存 硬盘 SSH端口 80端口 443端口 外网端口起 外网端口止 系统
 # ./buildvm.sh 102 test1 1234567 1 512 5 40001 40002 40003 50000 50025 debian11
@@ -65,8 +65,8 @@ check_cdn_file
 if [ ! -d "qcow" ]; then
   mkdir qcow
 fi
-# "centos9-stream" "centos8-stream" "centos7" "almalinux8" "almalinux9"
-systems=("debian10" "debian11" "debian9" "ubuntu18" "ubuntu20" "ubuntu22" "archlinux")
+# "centos9-stream" "centos8-stream" "centos7" "almalinux8" "almalinux9"  "alpinelinux_v3_15" "alpinelinux_v3_17"
+systems=("debian10" "debian11" "debian9" "ubuntu18" "ubuntu20" "ubuntu22" "archlinux" "alpinelinux_v3_15" "alpinelinux_v3_17")
 for sys in ${systems[@]}; do
   if [[ "$system" == "$sys" ]]; then
     file_path="/root/qcow/${system}.qcow2"
