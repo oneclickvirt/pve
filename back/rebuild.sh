@@ -11,6 +11,7 @@ for image in almalinux8.qcow2 almalinux9.qcow2 alpinelinux_v3_15.qcow2 alpinelin
 #   curl -o $image "https://github.com/spiritLHLS/Images/releases/download/v1.0/$image"
   chmod 777 $image
 done
-for image in almalinux8.qcow2 almalinux9.qcow2 alpinelinux_v3_15.qcow2 alpinelinux_v3_17.qcow2 centos7.qcow2 centos8-stream.qcow2 centos9-stream.qcow2; do
+# alpinelinux_v3_15.qcow2 alpinelinux_v3_17.qcow2
+for image in almalinux8.qcow2 almalinux9.qcow2 centos7.qcow2 centos8-stream.qcow2 centos9-stream.qcow2; do
   ./rebuild_qcow2.sh $image
 done
