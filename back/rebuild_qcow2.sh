@@ -1,4 +1,5 @@
 #!/bin/bash
+# from https://github.com/spiritLHLS/pve
 
 if ! command -v virt-customize &> /dev/null
 then
@@ -49,6 +50,7 @@ if [[ "$qcow_file" == *"debian"* || "$qcow_file" == *"ubuntu"* || "$qcow_file" =
     virt-customize -a $qcow_file --run-command "systemctl restart sshd"
     virt-customize -a $qcow_file --run-command "systemctl restart ssh"
 elif [[ "$qcow_file" == *"alpine"* ]]; then
+    virt-customize -a $qcow_file --run-command "sed -i 's/disable_root:[[:space:]]*1/disable_root: 0/g' /etc/cloud/cloud.cfg"
     virt-customize -a $qcow_file --run-command "sed -i 's/ssh_pwauth:[[:space:]]*0/ssh_pwauth: 1/g' /etc/cloud/cloud.cfg"
     virt-customize -a $qcow_file --run-command "echo 'Modified from https://github.com/spiritLHLS/Images' >> /etc/motd"
     virt-customize -a $qcow_file --run-command "echo 'Related repo https://github.com/spiritLHLS/pve' >> /etc/motd"
@@ -66,6 +68,7 @@ elif [[ "$qcow_file" == *"alpine"* ]]; then
     # virt-customize -a $qcow_file --run-command "sed -i.bak 's/^#\?Port.*/Port 22/' /etc/ssh/sshd_config"
     # virt-customize -a $qcow_file --run-command "/usr/sbin/sshd"
 elif [[ "$qcow_file" == *"almalinux9"* ]]; then
+    virt-customize -a $qcow_file --run-command "sed -i 's/ssh_pwauth:[[:space:]]*0/ssh_pwauth: 1/g' /etc/cloud/cloud.cfg"
     virt-customize -a $qcow_file --run-command "echo 'Modified from https://github.com/spiritLHLS/Images' >> /etc/motd"
     virt-customize -a $qcow_file --run-command "echo 'Related repo https://github.com/spiritLHLS/pve' >> /etc/motd"
     virt-customize -a $qcow_file --run-command "echo '--by https://t.me/spiritlhl' >> /etc/motd"
@@ -114,6 +117,7 @@ elif [[ "$qcow_file" == *"almalinux"* || "$qcow_file" == *"centos9-stream"* || "
     virt-customize -a $qcow_file --run-command "systemctl restart sshd"
     virt-customize -a $qcow_file --run-command "systemctl restart ssh"
 else
+    virt-customize -a $qcow_file --run-command "sed -i 's/disable_root:[[:space:]]*1/disable_root: 0/g' /etc/cloud/cloud.cfg"
     virt-customize -a $qcow_file --run-command "sed -i 's/ssh_pwauth:[[:space:]]*0/ssh_pwauth: 1/g' /etc/cloud/cloud.cfg"
     virt-customize -a $qcow_file --run-command "echo 'Modified from https://github.com/spiritLHLS/Images' >> /etc/motd"
     virt-customize -a $qcow_file --run-command "echo 'Related repo https://github.com/spiritLHLS/pve' >> /etc/motd"
