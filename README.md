@@ -22,7 +22,8 @@
 * [系统要求与配置](#系统要求与配置)
     * [各种要求](#各种要求)
     * [检测硬件环境](#检测硬件环境)
-    * [PVE基础安装](#PVE基础安装)
+    * [PVE基础安装说明](#PVE基础安装说明)
+    * [一键安装PVE](#一键安装PVE)
     * [预配置环境](#预配置环境)
     * [自动配置IPV4的NAT网关](#自动配置IPV4的NAT网关)
 * [一键生成KVM虚拟化的NAT服务器](#一键生成KVM虚拟化的NAT服务器)
@@ -78,7 +79,7 @@ bash <(wget -qO- --no-check-certificate https://raw.githubusercontent.com/spirit
 bash <(wget -qO- --no-check-certificate https://ghproxy.com/https://raw.githubusercontent.com/spiritLHLS/pve/main/scripts/check_kernal.sh)
 ```
 
-#### PVE基础安装
+#### PVE基础安装说明
 
 - 安装的是当下apt源最新的PVE
 - 比如debian10则是pve6.4，debian11则是pve7.x
