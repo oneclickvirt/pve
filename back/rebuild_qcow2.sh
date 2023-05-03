@@ -19,13 +19,13 @@ fi
 # export LIBGUESTFS_DEBUG=1 LIBGUESTFS_TRACE=1
 qcow_file=$1
 echo "转换文件$qcow_file中......"
-if [[ "$qcow_file" == *"alpine"* ]]; then
-    virt-sysprep --enable alpine -a "$qcow_file"
-elif [[ "$qcow_file" == *"centos"* ]]; then
-    virt-sysprep --enable centos -a "$qcow_file"
-elif [[ "$qcow_file" == *"almalinux"* ]]; then
-    virt-sysprep --enable almalinux -a "$qcow_file"
-fi
+# if [[ "$qcow_file" == *"alpine"* ]]; then
+#     virt-sysprep --enable alpine -a "$qcow_file"
+# elif [[ "$qcow_file" == *"centos"* ]]; then
+#     virt-sysprep --enable centos -a "$qcow_file"
+# elif [[ "$qcow_file" == *"almalinux"* ]]; then
+#     virt-sysprep --enable almalinux -a "$qcow_file"
+# fi
 if [[ "$qcow_file" == *"debian"* || "$qcow_file" == *"ubuntu"* || "$qcow_file" == *"arch"* ]]; then
     virt-customize -a $qcow_file --run-command "sed -i 's/ssh_pwauth:[[:space:]]*0/ssh_pwauth: 1/g' /etc/cloud/cloud.cfg"
     virt-customize -a $qcow_file --run-command "echo 'Modified from https://github.com/spiritLHLS/Images' >> /etc/motd"
