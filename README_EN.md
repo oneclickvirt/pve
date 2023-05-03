@@ -14,7 +14,7 @@ Of course, it's okay not to use the latest debian system, but it's not officiall
 
 **Please make sure that the machine can be reinstalled before use, there is no guarantee that this script will not cause any bugs!!! **
 
-**If the server is a VPS and not a solo service, there may be various bugs, please be ready to reinstall the server if the deployment fails!!!! **
+**If the server is a VPS and not a dedicated server , there may be various bugs, please be ready to reinstall the server if the deployment fails!!!! **
 
 ### Configuration and system requirements
 
