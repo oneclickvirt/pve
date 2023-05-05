@@ -24,6 +24,10 @@ curl -L https://raw.githubusercontent.com/spiritLHLS/pve/main/install_iso.sh -o 
 curl -L https://raw.githubusercontent.com/spiritLHLS/pve/main/back/rebuild.sh -o rebuild.sh && chmod +x rebuild.sh && bash rebuild.sh
 ```
 
+```
+guestfish -a xxx -i -c "cat /etc/ssh/sshd_config"
+```
+
 ### 创建一堆不同系统的虚拟机测试qcow2镜像
 
 ```
