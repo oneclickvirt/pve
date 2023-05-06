@@ -66,7 +66,7 @@ if [ ! -d "qcow" ]; then
   mkdir qcow
 fi
 # "centos7" "alpinelinux_v3_15" "alpinelinux_v3_17"
-systems=("debian10" "debian11" "debian9" "ubuntu18" "ubuntu20" "ubuntu22" "archlinux" "centos9-stream" "centos8-stream" "almalinux8" "almalinux9")
+systems=("debian10" "debian11" "debian9" "ubuntu18" "ubuntu20" "ubuntu22" "archlinux" "centos9-stream" "centos8-stream" "almalinux8" "almalinux9" "fedora33" "fedora34" "rockylinux8")
 for sys in ${systems[@]}; do
   if [[ "$system" == "$sys" ]]; then
     file_path="/root/qcow/${system}.qcow2"
