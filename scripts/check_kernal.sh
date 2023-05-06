@@ -61,20 +61,22 @@ if [ "$(grep -E -c '(vmx|svm)' /proc/cpuinfo)" -eq 0 ]; then
     _yellow "BIOS中未启用硬件虚拟化，无法嵌套虚拟化KVM服务器，但可以开LXC服务器(CT)"
     exit 1
 else
-    _green "本机BIOS支持KVM硬件嵌套虚拟化"
+    _green "本机BIOS已启用支持KVM硬件嵌套虚拟化"
 fi
 
 # 查询系统是否支持
 if [ -e "/sys/module/kvm_intel/parameters/nested" ] && [ "$(cat /sys/module/kvm_intel/parameters/nested | tr '[:upper:]' '[:lower:]')" = "y" ]; then
-    if lsmod | grep -q kvm; then
-        _green "本机系统支持KVM硬件嵌套虚拟化"
-        _green "本机符合要求：可以使用PVE虚拟化KVM服务器，并可以在开出来的KVM服务器选项中开启KVM硬件虚拟化"
-    else
-        _yellow "KVM模块未加载，不能使用PVE虚拟化KVM服务器，但可以开LXC服务器(CT)"
-    fi
+    CPU_TYPE="intel"
+elif [ -e "/sys/module/kvm_amd/parameters/nested" ] && [ "$(cat /sys/module/kvm_amd/parameters/nested | tr '[:upper:]' '[:lower:]')" = "1" ]; then
+    CPU_TYPE="amd"
 else
-    _yellow "本机操作系统不支持KVM硬件嵌套虚拟化，使用PVE虚拟化出来的KVM服务器不能在选项中开启KVM硬件虚拟化，记得在开出来的KVM服务器选项中关闭"
+    _yellow "本机系统不支持KVM硬件嵌套虚拟化，使用PVE虚拟化出来的KVM服务器不能在选项中开启KVM硬件虚拟化，记得在开出来的KVM服务器选项中关闭"
     exit 1
+fi
+if [ "$CPU_TYPE" = "intel" ]; then
+    _yellow "KVM模块未加载，不能使用PVE虚拟化KVM服务器，但可以开LXC服务器(CT)"
+elif [ "$CPU_TYPE" = "amd" ]; then
+    _yellow "KVM模块未加载，不能使用PVE虚拟化KVM服务器，但可以开LXC服务器(CT)"
 fi
 
 # 如果KVM模块未加载，则加载KVM模块并将其添加到/etc/modules文件中
