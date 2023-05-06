@@ -73,10 +73,15 @@ else
     _yellow "本机系统不支持KVM硬件嵌套虚拟化，使用PVE虚拟化出来的KVM服务器不能在选项中开启KVM硬件虚拟化，记得在开出来的KVM服务器选项中关闭"
     exit 1
 fi
-if [ "$CPU_TYPE" = "intel" ]; then
-    _yellow "KVM模块未加载，不能使用PVE虚拟化KVM服务器，但可以开LXC服务器(CT)"
-elif [ "$CPU_TYPE" = "amd" ]; then
-    _yellow "KVM模块未加载，不能使用PVE虚拟化KVM服务器，但可以开LXC服务器(CT)"
+
+if ! lsmod | grep -q kvm; then
+  if [ "$CPU_TYPE" = "intel" ]; then
+      _yellow "KVM模块未加载，不能使用PVE虚拟化KVM服务器，但可以开LXC服务器(CT)"
+  elif [ "$CPU_TYPE" = "amd" ]; then
+      _yellow "KVM模块未加载，不能使用PVE虚拟化KVM服务器，但可以开LXC服务器(CT)"
+  fi
+else
+  _green "本机符合要求：可以使用PVE虚拟化KVM服务器，并可以在开出来的KVM服务器选项中开启KVM硬件虚拟化"
 fi
 
 # 如果KVM模块未加载，则加载KVM模块并将其添加到/etc/modules文件中
@@ -84,5 +89,5 @@ if ! lsmod | grep -q kvm; then
     _yellow "尝试加载KVM模块……"
     modprobe kvm
     echo "kvm" >> /etc/modules
-    _green "KVM模块已加载并添加到 /etc/modules，可以尝试使用PVE虚拟化KVM服务器，也可以开LXC服务器(CT)"
+    _green "KVM模块已尝试加载并添加到 /etc/modules，可以尝试使用PVE虚拟化KVM服务器，也可以开LXC服务器(CT)"
 fi
