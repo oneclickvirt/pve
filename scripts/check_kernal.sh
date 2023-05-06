@@ -70,7 +70,7 @@ if [ -e "/sys/module/kvm_intel/parameters/nested" ] && [ "$(cat /sys/module/kvm_
 elif [ -e "/sys/module/kvm_amd/parameters/nested" ] && [ "$(cat /sys/module/kvm_amd/parameters/nested | tr '[:upper:]' '[:lower:]')" = "1" ]; then
     CPU_TYPE="amd"
 else
-    _yellow "本机系统不支持KVM硬件嵌套虚拟化，使用PVE虚拟化出来的KVM服务器不能在选项中开启KVM硬件虚拟化，记得在开出来的KVM服务器选项中关闭"
+    _yellow "本机系统配置文件识别到不支持KVM硬件嵌套虚拟化，使用PVE虚拟化出来的KVM服务器可能不能在选项中开启KVM硬件虚拟化，如果使用NOVNC有问题记得在开出来的KVM服务器选项中关闭，以实际能否使用为准"
     exit 1
 fi
 
