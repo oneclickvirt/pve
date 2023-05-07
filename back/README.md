@@ -28,6 +28,10 @@ curl -L https://raw.githubusercontent.com/spiritLHLS/pve/main/back/rebuild.sh -o
 guestfish -a xxx -i -c "cat /etc/ssh/sshd_config"
 ```
 
+```
+qm exec 虚拟机ID /bin/bash
+```
+
 ### 创建一堆不同系统的虚拟机测试qcow2镜像
 
 ```
