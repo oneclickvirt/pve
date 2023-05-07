@@ -109,6 +109,7 @@ qm set $vm_num --searchdomain 8.8.4.4
 user_ip="172.16.1.${num}"
 qm set $vm_num --ipconfig0 ip=${user_ip}/24,gw=172.16.1.1
 qm set $vm_num --cipassword $password --ciuser $user
+# qm set $vm_num --agent 1
 qm resize $vm_num scsi0 ${disk}G
 qm start $vm_num
 
