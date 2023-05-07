@@ -49,6 +49,10 @@ if [[ "$qcow_file" == *"debian"* || "$qcow_file" == *"ubuntu"* || "$qcow_file" =
     virt-customize -a $qcow_file --run-command "service sshd restart"
     virt-customize -a $qcow_file --run-command "systemctl restart sshd"
     virt-customize -a $qcow_file --run-command "systemctl restart ssh"
+    if [[ "$qcow_file" == *"debian"* || "$qcow_file" == *"ubuntu"* ]]; then
+        virt-customize -a $qcow_file --run-command "apt-get update -y && apt-get install qemu-guest-agent -y"
+        virt-customize -a $qcow_file --run-command "systemctl start qemu-guest-agent"
+    fi
 elif [[ "$qcow_file" == *"alpine"* ]]; then
     virt-customize -a $qcow_file --run-command "sed -i 's/disable_root:[[:space:]]*1/disable_root: 0/g' /etc/cloud/cloud.cfg"
     virt-customize -a $qcow_file --run-command "sed -i 's/ssh_pwauth:[[:space:]]*0/ssh_pwauth: 1/g' /etc/cloud/cloud.cfg"
@@ -92,6 +96,8 @@ elif [[ "$qcow_file" == *"almalinux9"* ]]; then
     virt-customize -a $qcow_file --run-command "service sshd restart"
     virt-customize -a $qcow_file --run-command "systemctl restart sshd"
     virt-customize -a $qcow_file --run-command "systemctl restart ssh"
+    virt-customize -a $qcow_file --run-command "yum update -y && yum install qemu-guest-agent -y"
+    virt-customize -a $qcow_file --run-command "systemctl start qemu-guest-agent"
 elif [[ "$qcow_file" == *"almalinux"* || "$qcow_file" == *"centos9-stream"* || "$qcow_file" == *"centos8-stream"* || "$qcow_file" == *"centos7"* ]]; then
     virt-customize -a $qcow_file --run-command "sed -i 's/ssh_pwauth:[[:space:]]*0/ssh_pwauth: 1/g' /etc/cloud/cloud.cfg"
     virt-customize -a $qcow_file --run-command "echo 'Modified from https://github.com/spiritLHLS/Images' >> /etc/motd"
@@ -116,6 +122,8 @@ elif [[ "$qcow_file" == *"almalinux"* || "$qcow_file" == *"centos9-stream"* || "
     virt-customize -a $qcow_file --run-command "service sshd restart"
     virt-customize -a $qcow_file --run-command "systemctl restart sshd"
     virt-customize -a $qcow_file --run-command "systemctl restart ssh"
+    virt-customize -a $qcow_file --run-command "yum update -y && yum install qemu-guest-agent -y"
+    virt-customize -a $qcow_file --run-command "systemctl start qemu-guest-agent"
 else
     virt-customize -a $qcow_file --run-command "sed -i 's/disable_root:[[:space:]]*1/disable_root: 0/g' /etc/cloud/cloud.cfg"
     virt-customize -a $qcow_file --run-command "sed -i 's/ssh_pwauth:[[:space:]]*0/ssh_pwauth: 1/g' /etc/cloud/cloud.cfg"
