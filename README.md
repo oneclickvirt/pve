@@ -159,11 +159,13 @@ bash <(wget -qO- --no-check-certificate https://ghproxy.com/https://raw.githubus
 
 ![图片](https://user-images.githubusercontent.com/103393591/231160070-c317607c-8b0c-4aa4-bfa2-e75ec6626b24.png)
 
-查询如上的在使用后续脚本创建了虚拟机后，需要手动修改WEB端设置，需要关闭对应每个虚拟机的硬件嵌套虚拟化，如下图
+查询如上的在使用后续脚本创建了虚拟机后，**可能**需要手动修改WEB端设置，需要关闭对应每个虚拟机的硬件嵌套虚拟化，如下图
 
 ![图片](https://user-images.githubusercontent.com/103393591/231160449-82911a57-4b49-47ec-8fad-2100c6059017.png)
 
-先停止虚拟机再修改，修改完后再开机才能使用NOVNC，不关闭可能导致这个虚拟机有BUG无法使用，如果强行安装PVE开KVM，启动不了的也可以关闭这个虚拟化试试能不能启动虚拟机
+先停止虚拟机再修改，修改完后再开机才能使用NOVNC，不关闭**可能**导致这个虚拟机有BUG无法使用
+
+如果强行安装PVE开KVM，启动不了的也可以关闭这个选项试试能不能启动虚拟机
 
 ### 单独生成KVM虚拟化的VM
 
