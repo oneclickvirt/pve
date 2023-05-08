@@ -75,9 +75,11 @@ for sys in ${systems[@]}; do
 done
 if [[ -z "$file_path" ]]; then
   # centos9-stream centos8-stream centos7 almalinux8 almalinux9
-  echo "无法安装对应系统，仅支持 debian9 debian10 debian11 ubuntu18 ubuntu20 ubuntu22 archlinux"
+  echo "无法安装对应系统，请查看 https://github.com/spiritLHLS/Images/ 支持的系统镜像 "
   exit 1
 fi
+# v1.0 基础安装包预安装
+# v1.1 增加agent安装包预安装，方便在宿主机上看到虚拟机的进程
 url="${cdn_success_url}https://github.com/spiritLHLS/Images/releases/download/v1.0/${system}.qcow2"
 if [ ! -f "$file_path" ]; then
   curl -L -o "$file_path" "$url"
