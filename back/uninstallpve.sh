@@ -7,6 +7,12 @@ iptables -t filter -F
 service networking restart
 systemctl restart networking.service
 rm -rf vm*
+pct list | awk 'NR>1{print $1}' | xargs -I {} sh -c 'pct stop {}; pct destroy {}'
+rm -rf ct*
+iptables -t nat -F
+iptables -t filter -F
+service networking restart
+systemctl restart networking.service
 systemctl stop pve-cluster.service
 systemctl stop pvedaemon.service
 systemctl stop pvestatd.service
