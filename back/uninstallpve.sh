@@ -17,9 +17,17 @@ systemctl stop pve-cluster.service
 systemctl stop pvedaemon.service
 systemctl stop pvestatd.service
 systemctl stop pveproxy.service
-apt-get remove --purge -y proxmox-ve pve-manager pve-kernel-4.15 pve-kernel-5.11
+# apt-get remove --purge -y proxmox-ve 
+apt-get remove --purge -y pve-manager 
+apt-get remove --purge -y pve-kernel-4.15 
+apt-get remove --purge -y pve-kernel-5.11
 apt-get remove --purge -y postfix
 apt-get remove --purge -y open-iscsi
+touch '/please-remove-proxmox-ve'
+apt-get purge proxmox-ve -y
+apt-get autoremove -y
+# dpkg --configure -a
+# apt-get install -f
 if [ -f /etc/network/interfaces.d/50-cloud-init.bak ]; then
     chattr -i /etc/network/interfaces.d/50-cloud-init
     mv /etc/network/interfaces.d/50-cloud-init.bak /etc/network/interfaces.d/50-cloud-init
@@ -45,4 +53,5 @@ rm -rf /var/lib/mysql/
 rm -rf /var/log/pve/
 rm -rf /var/log/mysql/
 rm -rf /var/spool/postfix/
+apt-get autoremove -y
 # reboot
