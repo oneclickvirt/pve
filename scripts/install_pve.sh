@@ -251,6 +251,7 @@ if grep -q "source /etc/network/interfaces.d/*" /etc/network/interfaces; then
   if [ -f /etc/network/interfaces.d/50-cloud-init ]; then
     # 检查50-cloud-init文件中是否有iface eth0 inet dhcp行
     if grep -q "iface eth0 inet dhcp" /etc/network/interfaces.d/50-cloud-init; then
+      cp /etc/network/interfaces.d/50-cloud-init /etc/network/interfaces.d/50-cloud-init.bak
       # 获取ipv4、subnet、gateway信息
       gateway=$(ip route | awk '/default/ {print $3}')
       eth0info=$(ip -o -4 addr show dev eth0 | awk '{print $4}')
@@ -271,6 +272,7 @@ fi
 systemctl restart networking
 if [ ! -s "/etc/resolv.conf" ]
 then
+    cp /etc/resolv.conf /etc/resolv.conf.bak
     chattr -i /etc/resolv.conf
     echo "nameserver 8.8.8.8" | sudo tee /etc/resolv.conf > /dev/null
     chattr +i /etc/resolv.conf
