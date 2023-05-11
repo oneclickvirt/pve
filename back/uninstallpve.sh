@@ -26,8 +26,11 @@ apt-get remove --purge -y open-iscsi
 touch '/please-remove-proxmox-ve'
 apt-get purge proxmox-ve -y
 apt-get autoremove -y
-# dpkg --configure -a
-# apt-get install -f
+sudo dpkg --configure -a
+sudo apt-get install -f
+sudo dpkg --remove --force-remove-reinstreq initramfs-tools
+sudo apt-get purge initramfs-tools
+
 if [ -f /etc/network/interfaces.d/50-cloud-init.bak ]; then
     chattr -i /etc/network/interfaces.d/50-cloud-init
     mv /etc/network/interfaces.d/50-cloud-init.bak /etc/network/interfaces.d/50-cloud-init
