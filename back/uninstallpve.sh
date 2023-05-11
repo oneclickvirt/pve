@@ -14,6 +14,25 @@ systemctl stop pveproxy.service
 apt-get remove --purge -y proxmox-ve pve-manager pve-kernel-4.15 pve-kernel-5.11
 apt-get remove --purge -y postfix
 apt-get remove --purge -y open-iscsi
+if [ -f /etc/network/interfaces.d/50-cloud-init.bak ]; then
+    chattr -i /etc/network/interfaces.d/50-cloud-init
+    mv /etc/network/interfaces.d/50-cloud-init.bak /etc/network/interfaces.d/50-cloud-init
+    chattr +i /etc/network/interfaces.d/50-cloud-init
+fi
+systemctl stop check-dns.service
+systemctl disable check-dns.service
+rm /usr/local/bin/check-dns.sh
+rm /etc/systemd/system/check-dns.service
+if [ -f /etc/resolv.conf.bak ]; then
+    chattr -i /etc/resolv.conf
+    mv /etc/resolv.conf.bak /etc/resolv.conf
+    chattr +i /etc/resolv.conf
+fi
+systemctl daemon-reload
+systemctl restart networking
+sed -i '/^deb.*pve-no-subscription/d' /etc/apt/sources.list
+rm -f /etc/apt/trusted.gpg.d/proxmox-ve-release-6.x.gpg
+rm -f /etc/apt/trusted.gpg.d/proxmox-release-bullseye.gpg
 rm -rf /etc/pve/
 rm -rf /var/lib/vz/
 rm -rf /var/lib/mysql/
