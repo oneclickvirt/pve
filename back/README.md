@@ -45,6 +45,8 @@ rm -rf vm*
 
 ### 卸载PVE整体环境
 
+尝试失败，因为已自动替换过为PVE的内核，如需卸载需要先替换为原生内核
+
 ```
 curl -L https://raw.githubusercontent.com/spiritLHLS/pve/main/back/uninstallpve.sh -o uninstallpve.sh && chmod +x uninstallpve.sh && bash uninstallpve.sh
 ```
