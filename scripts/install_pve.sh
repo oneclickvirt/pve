@@ -113,6 +113,16 @@ if [ "${hostname}" != "pve" ]; then
    # fi
    chattr +i /etc/hosts
 fi
+if [ -f "/etc/cloud/cloud.cfg" ]; then
+  if grep -q "preserve_hostname: false" "/etc/cloud/cloud.cfg"; then
+    sed -i 's/preserve_hostname: false/preserve_hostname: true/g' "/etc/cloud/cloud.cfg"
+    echo "change preserve_hostname to true"
+  else
+    echo "preserve_hostname is true"
+  fi
+else
+  echo "can not find /etc/cloud/cloud.cfg"
+fi
 
 ## ChinaIP检测
 if [[ -z "${CN}" ]]; then
