@@ -212,6 +212,8 @@ curl -L https://ghproxy.com/https://raw.githubusercontent.com/spiritLHLS/pve/mai
 cat vm102
 ```
 
+登陆后可使用```sudo -i```切换到root用户
+
 查看信息
 
 #### 删除示例
@@ -264,6 +266,8 @@ cat vmlog
 ```
 
 查看信息
+
+登陆后可使用```sudo -i```切换到root用户
 
 #### 删除所有虚拟机
 
