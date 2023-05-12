@@ -79,8 +79,8 @@ check_cdn_file
 
 # /etc/hosts文件修改
 if [ -f "/etc/cloud/cloud.cfg" ]; then
-  if grep -q "preserve_hostname: false" "/etc/cloud/cloud.cfg"; then
-    sed -i 's/preserve_hostname: false/preserve_hostname: true/g' "/etc/cloud/cloud.cfg"
+  if grep -q "preserve_hostname" "/etc/cloud/cloud.cfg"; then
+    sed -E -i 's/preserve_hostname:[[:space:]]*false/preserve_hostname: true/g' "/etc/cloud/cloud.cfg"
     echo "change preserve_hostname to true"
   else
     echo "preserve_hostname is true"
