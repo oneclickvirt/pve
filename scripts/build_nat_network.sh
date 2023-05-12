@@ -43,6 +43,7 @@ fi
 gateway=$(ip route | awk '/default/ {print $3}')
 
 # 录入网关
+cp /etc/network/interfaces /etc/network/interfaces.bak
 if grep -q "vmbr0" /etc/network/interfaces; then
     echo "vmbr0 已存在在 /etc/network/interfaces"
 else
