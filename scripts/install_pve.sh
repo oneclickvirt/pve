@@ -275,8 +275,8 @@ if grep -q "source /etc/network/interfaces.d/*" /etc/network/interfaces; then
         netmask $subnet\n\
         gateway $gateway\n\
         dns-nameservers 8.8.8.8 8.8.4.4" /etc/network/interfaces.d/50-cloud-init
-      chattr +i /etc/network/interfaces.d/50-cloud-init
     fi
+    chattr +i /etc/network/interfaces.d/50-cloud-init
   fi
 fi
 systemctl restart networking
