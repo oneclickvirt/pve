@@ -159,6 +159,7 @@ else
 fi
 
 # 新增pve源
+apt-get install lsb-release -y
 version=$(lsb_release -cs)
 case $version in
   wheezy|squeeze|jessie|stretch|buster|bullseye)
