@@ -33,7 +33,7 @@ web1_port="${7:-20002}"
 web2_port="${8:-20003}"
 port_first="${9:-29975}"
 port_last="${10:-30000}"
-system_ori="${12:-debian11}"
+system_ori="${11:-debian11}"
 rm -rf "ct$name"
 en_system=$(echo "$system_ori" | sed 's/[0-9]*//g')
 num_system=$(echo "$system_ori" | sed 's/[a-zA-Z]*//g')
