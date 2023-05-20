@@ -1,10 +1,10 @@
 #!/bin/bash
 # from
 # https://github.com/spiritLHLS/pve
-# 2023.05.06
+# 2023.05.20
 
-# ./buildvm.sh VMID 用户名 密码 CPU核数 内存 硬盘 SSH端口 80端口 443端口 外网端口起 外网端口止 系统
-# ./buildvm.sh 102 test1 1234567 1 512 5 40001 40002 40003 50000 50025 debian11
+# ./buildvm.sh VMID 用户名 密码 CPU核数 内存 硬盘 SSH端口 80端口 443端口 外网端口起 外网端口止 系统 存储盘
+# ./buildvm.sh 102 test1 1234567 1 512 5 40001 40002 40003 50000 50025 debian11 local
 
 cd /root >/dev/null 2>&1
 # 创建容器
@@ -20,6 +20,7 @@ web2_port="${9:-40003}"
 port_first="${10:-49975}"
 port_last="${11:-50000}"
 system="${12:-debian10}"
+storage="${13:-local}"
 # in="${12:-300}"
 # out="${13:-300}"
 rm -rf "vm$name"
@@ -100,7 +101,7 @@ fi
 
 qm create $vm_num --agent 1 --scsihw virtio-scsi-single --serial0 socket --cores $core --sockets 1 --cpu host --net0 virtio,bridge=vmbr1,firewall=0
 qm importdisk $vm_num /root/qcow/${system}.qcow2 local
-qm set $vm_num --scsihw virtio-scsi-pci --scsi0 local:${vm_num}/vm-${vm_num}-disk-0.raw
+qm set $vm_num --scsihw virtio-scsi-pci --scsi0 ${storage}:${vm_num}/vm-${vm_num}-disk-0.raw
 qm set $vm_num --bootdisk scsi0
 qm set $vm_num --boot order=scsi0
 qm set $vm_num --memory $memory
