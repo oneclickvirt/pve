@@ -113,5 +113,5 @@ if [ ! -f "/etc/iptables/rules.v4" ]; then
 fi
 iptables-save > /etc/iptables/rules.v4
 service netfilter-persistent restart
-echo "$CTID $password $core $memory $disk $sshn $web1_port $web2_port $port_first $port_last $system_ori" >> "ct${CTID}"
+echo "$CTID $password $core $memory $disk $sshn $web1_port $web2_port $port_first $port_last $system_ori $storage" >> "ct${CTID}"
 cat "ct${CTID}"
