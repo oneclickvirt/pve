@@ -126,5 +126,5 @@ if [ ! -f "/etc/iptables/rules.v4" ]; then
 fi
 iptables-save > /etc/iptables/rules.v4
 service netfilter-persistent restart
-echo "$vm_num $user $password $core $memory $disk $sshn $web1_port $web2_port $port_first $port_last $system" >> "vm${vm_num}"
+echo "$vm_num $user $password $core $memory $disk $sshn $web1_port $web2_port $port_first $port_last $system $storage" >> "vm${vm_num}"
 cat "vm${vm_num}"
