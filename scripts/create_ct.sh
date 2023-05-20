@@ -87,6 +87,7 @@ check_info(){
       port_start="${last_line_array[8]}"
       port_end="${last_line_array[9]}"
       system="${last_line_array[10]}"
+      storage="${last_line_array[11]}"
       _green "当前最后一个NAT服务器对应的信息："
       echo "NAT服务器: $ct_num"
     #   echo "用户名: $user"
@@ -96,6 +97,7 @@ check_info(){
       echo "外网443端口: $web2_port"
       echo "外网其他端口范围: $port_start-$port_end"
       echo "系统：$system"
+      echo "存储盘：$storage"
     fi
 }
 
@@ -125,6 +127,19 @@ build_new_cts(){
         fi
     done
     while true; do
+        reading "虚拟机们开设在哪个存储盘上？(若虚拟机要开设在系统盘上，则留空或输入local)：" storage
+        if [ -z "$storage" ]; then
+          storage="local"
+        fi
+        output=$(pvesm list | grep "$storage")
+        if [ -n "$output" ]; then
+          echo "存储盘 '$storage' 存在于Proxmox VE中。"
+          break
+        else
+          echo "存储盘 '$storage' 不存在于Proxmox VE中，请重新输入"
+        fi
+    done
+    while true; do
         reading "每个虚拟机分配多少硬盘？(若每个虚拟机分配5G硬盘，则输入5)：" disk_nums
         if [[ "$disk_nums" =~ ^[1-9][0-9]*$ ]]; then
             break
@@ -141,7 +156,7 @@ build_new_cts(){
         web2_port=$(($web1_port + 1))
         port_start=$(($port_end + 1))
         port_end=$(($port_start + 25))
-        ./buildct.sh $ct_num $password $cpu_nums $memory_nums $disk_nums $ssh_port $web1_port $web2_port $port_start $port_end debian10
+        ./buildct.sh $ct_num $password $cpu_nums $memory_nums $disk_nums $ssh_port $web1_port $web2_port $port_start $port_end debian10 $storage
         cat "ct$ct_num" >> ctlog
         rm -rf "ct$ct_num"
         sleep 60
