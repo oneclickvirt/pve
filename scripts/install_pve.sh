@@ -235,7 +235,7 @@ cp /etc/apt/sources.list.d/pve-enterprise.list /etc/apt/sources.list.d/pve-enter
 rm -rf /etc/apt/sources.list.d/pve-enterprise.list
 apt-get update
 install_required_modules() {
-    modules=("sudo" "ifupdown2" "lshw" "iproute2" "net-tools" "cloud-init" "novnc") # "isc-dhcp-server"
+    modules=("sudo" "lshw" "iproute2" "net-tools" "cloud-init" "novnc") # "isc-dhcp-server" "ifupdown2"
     for module in "${modules[@]}"
     do
         if dpkg -s $module > /dev/null 2>&1 ; then
