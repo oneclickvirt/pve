@@ -328,10 +328,10 @@ curl -L https://ghproxy.com/https://raw.githubusercontent.com/spiritLHLS/pve/mai
 
 以下示例开设CTID为102的容器，用户名是root，密码是1234567，CPU是1核，内存是512MB，硬盘是5G，SSH端口是20001，80端口是20002，443端口是20003
 
-同时内外网映射端口一致的区间是30000到30025，系统使用的是debian10，使用宿主机的存储盘是local盘
+同时内外网映射端口一致的区间是30000到30025，系统使用的是debian11，使用宿主机的存储盘是local盘
 
 ```
-./buildct.sh 102 1234567 1 512 5 20001 20002 20003 30000 30025 debian10 local
+./buildct.sh 102 1234567 1 512 5 20001 20002 20003 30000 30025 debian11 local
 ```
 
 开设完毕可执行
