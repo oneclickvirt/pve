@@ -156,7 +156,7 @@ build_new_cts(){
         web2_port=$(($web1_port + 1))
         port_start=$(($port_end + 1))
         port_end=$(($port_start + 25))
-        ./buildct.sh $ct_num $password $cpu_nums $memory_nums $disk_nums $ssh_port $web1_port $web2_port $port_start $port_end debian10 $storage
+        ./buildct.sh $ct_num $password $cpu_nums $memory_nums $disk_nums $ssh_port $web1_port $web2_port $port_start $port_end debian11 $storage
         cat "ct$ct_num" >> ctlog
         rm -rf "ct$ct_num"
         sleep 60
