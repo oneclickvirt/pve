@@ -103,6 +103,7 @@ if [ -f "/etc/cloud/cloud.cfg" ]; then
       echo "$updated_content" > "/etc/cloud/cloud.cfg"
     fi
   fi
+  sed -i '/^\s*- set-passwords/s/^/#/' /etc/cloud/cloud.cfg
   chattr +i /etc/cloud/cloud.cfg
 fi
 }
