@@ -78,6 +78,7 @@ cdn_urls=("https://cdn.spiritlhl.workers.dev/" "https://cdn3.spiritlhl.net/" "ht
 check_cdn_file
 
 # cloud-init文件修改
+rebuild_cloud_init(){
 if [ -f "/etc/cloud/cloud.cfg" ]; then
   chattr -i /etc/cloud/cloud.cfg
   if grep -q "preserve_hostname: true" "/etc/cloud/cloud.cfg"; then
@@ -94,6 +95,8 @@ if [ -f "/etc/cloud/cloud.cfg" ]; then
   fi
   chattr +i /etc/cloud/cloud.cfg
 fi
+}
+rebuild_cloud_init
 
 # /etc/hosts文件修改
 ip=$(curl -s ipv4.ip.sb)
@@ -255,6 +258,7 @@ install_required_modules() {
     done
 }
 install_required_modules
+rebuild_cloud_init
 
 # 打印内核
 running_kernel=$(uname -r)
