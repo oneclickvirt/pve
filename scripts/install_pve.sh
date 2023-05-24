@@ -95,12 +95,12 @@ if [ -f "/etc/cloud/cloud.cfg" ]; then
   fi
   chattr -i /etc/cloud/cloud.cfg
   content=$(cat /etc/cloud/cloud.cfg)
-  line_number=$(grep -n "^system_info:" "$file" | cut -d ':' -f 1)
+  line_number=$(grep -n "^system_info:" "/etc/cloud/cloud.cfg" | cut -d ':' -f 1)
   if [ -n "$line_number" ]; then
     lines_after_system_info=$(echo "$content" | sed -n "$((line_number+1)),\$p")
     if [ -n "$lines_after_system_info" ]; then
       updated_content=$(echo "$content" | sed "$((line_number+1)),\$d")
-      echo "$updated_content" > "$file"
+      echo "$updated_content" > "/etc/cloud/cloud.cfg"
     fi
   fi
   chattr +i /etc/cloud/cloud.cfg
