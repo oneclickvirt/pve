@@ -93,6 +93,16 @@ if [ -f "/etc/cloud/cloud.cfg" ]; then
     sed -E -i 's/disable_root:[[:space:]]*true/disable_root: false/g' "/etc/cloud/cloud.cfg"
     echo "change disable_root to false"
   fi
+  chattr -i /etc/cloud/cloud.cfg
+  content=$(cat /etc/cloud/cloud.cfg)
+  line_number=$(grep -n "^system_info:" "$file" | cut -d ':' -f 1)
+  if [ -n "$line_number" ]; then
+    lines_after_system_info=$(echo "$content" | sed -n "$((line_number+1)),\$p")
+    if [ -n "$lines_after_system_info" ]; then
+      updated_content=$(echo "$content" | sed "$((line_number+1)),\$d")
+      echo "$updated_content" > "$file"
+    fi
+  fi
   chattr +i /etc/cloud/cloud.cfg
 fi
 }
