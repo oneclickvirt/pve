@@ -113,8 +113,11 @@ if [ "${hostname}" != "pve" ]; then
    else
        _blue "已存在 ${ip} ${hostname} ${hostname} 的记录，无需添加"
    fi
+   chattr -i /etc/hostname
    hostnamectl set-hostname pve
+   chattr +i /etc/hostname
    hostname=$(hostname)
+   chattr -i /etc/hosts
    if ! grep -q "::1 localhost" /etc/hosts; then
        echo "::1 localhost" >> /etc/hosts
        echo "Added ::1 localhost to /etc/hosts"
