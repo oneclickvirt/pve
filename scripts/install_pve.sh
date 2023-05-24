@@ -117,7 +117,6 @@ if [ "${hostname}" != "pve" ]; then
    hostnamectl set-hostname pve
    chattr +i /etc/hostname
    hostname=$(hostname)
-   chattr -i /etc/hosts
    if ! grep -q "::1 localhost" /etc/hosts; then
        echo "::1 localhost" >> /etc/hosts
        echo "Added ::1 localhost to /etc/hosts"
