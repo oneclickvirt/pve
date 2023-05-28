@@ -110,7 +110,7 @@ fi
 rebuild_cloud_init
 
 # 检测IPV4
-ip=$(ip -4 addr show | grep global | awk 'NR==1{print $2}' | cut -d '/' -f1)
+ip=$(ip -4 addr show | grep global | awk '{print $2}' | cut -d '/' -f1 | head -n 1)
 
 # /etc/hosts文件修改
 hostname=$(hostname)
