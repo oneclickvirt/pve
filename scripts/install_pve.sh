@@ -148,6 +148,9 @@ if [ "${hostname}" != "pve" ]; then
    chattr +i /etc/hosts
 fi
 
+## 更改网络优先级为IPV4优先
+sed -i 's/.*precedence ::ffff:0:0\/96.*/precedence ::ffff:0:0\/96  100/g' /etc/gai.conf && systemctl restart networking
+
 ## ChinaIP检测
 if [[ -z "${CN}" ]]; then
   if [[ $(curl -m 10 -s https://ipapi.co/json | grep 'China') != "" ]]; then
