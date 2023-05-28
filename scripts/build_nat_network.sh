@@ -18,16 +18,17 @@ else
   echo "Locale set to $utf8_locale"
 fi
 
-API_NET=("ip.sb" "ipget.net" "ip.ping0.cc" "https://ip4.seeip.org" "https://api.my-ip.io/ip" "https://ipv4.icanhazip.com" "api.ipify.org")
-for p in "${API_NET[@]}"; do
-  response=$(curl -s4m8 "$p")
-  sleep 1
-  if [ $? -eq 0 ] && ! echo "$response" | grep -q "error"; then
-    IP_API="$p"
-    break
-  fi
-done
-IPV4=$(curl -s4m8 "$IP_API")
+# API_NET=("ip.sb" "ipget.net" "ip.ping0.cc" "https://ip4.seeip.org" "https://api.my-ip.io/ip" "https://ipv4.icanhazip.com" "api.ipify.org")
+# for p in "${API_NET[@]}"; do
+#   response=$(curl -s4m8 "$p")
+#   sleep 1
+#   if [ $? -eq 0 ] && ! echo "$response" | grep -q "error"; then
+#     IP_API="$p"
+#     break
+#   fi
+# done
+# IPV4=$(curl -s4m8 "$IP_API")
+IPV4=$(ip -4 addr show | grep global | awk '{print $2}' | cut -d '/' -f1 | head -n 1)
 
 # 查询信息
 interface=$(lshw -C network | awk '/logical name:/{print $3}' | head -1)
