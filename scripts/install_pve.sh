@@ -110,20 +110,16 @@ fi
 rebuild_cloud_init
 
 # 检测IPV4
-check_ipv4(){
-  API_NET=("ip.sb" "ipget.net" "ip.ping0.cc" "https://ip4.seeip.org" "https://api.my-ip.io/ip" "https://ipv4.icanhazip.com" "api.ipify.org")
-  for p in "${API_NET[@]}"; do
-    response=$(curl -s4m6 "$p")
-    sleep 1
-    if [ $? -eq 0 ] && ! echo "$response" | grep -q "error"; then
-      IP_API="$p"
-      ip=$(curl -s4m6 "$IP_API")
-      break
-    fi
-  done
-  export ip
-}
-check_ipv4
+API_NET=("ip.sb" "ipget.net" "ip.ping0.cc" "https://ip4.seeip.org" "https://api.my-ip.io/ip" "https://ipv4.icanhazip.com" "api.ipify.org")
+for p in "${API_NET[@]}"; do
+  response=$(curl -s4m8 "$p")
+  sleep 1
+  if [ $? -eq 0 ] && ! echo "$response" | grep -q "error"; then
+    IP_API="$p"
+    break
+  fi
+done
+ip=$(curl -s4m6 "$IP_API")
 
 # /etc/hosts文件修改
 hostname=$(hostname)
