@@ -18,34 +18,30 @@ else
 fi
 
 check_config(){
-    # 检查CPU核心数
-    cpu_cores=$(grep -c ^processor /proc/cpuinfo)
-    if [ "$cpu_cores" -lt 2 ]; then
-        _red "本机配置不满足最低要求：至少2核CPU"
-        _red "本机配置无法安装PVE"
-        return
-    fi
-
-    # 检查内存大小
-    total_mem=$(free -m | awk '/^Mem:/{print $2}')
-    if [ "$total_mem" -lt 2048 ]; then
-        _red "本机配置不满足最低要求：至少2G内存"
-        _red "本机配置无法安装PVE"
-        return
-    fi
-
+    _green "本机配置应当满足至少2核2G内存20G硬盘的最低要求"
+    
     # 检查硬盘大小
     total_disk=$(df -h / | awk '/\//{print $2}')
     total_disk_num=$(echo $total_disk | sed 's/G//')
     if [ "$total_disk_num" -lt 20 ]; then
         _red "本机配置不满足最低要求：至少20G硬盘"
-        _red "本机配置无法安装PVE"
-        return
+        _red "本机硬盘配置无法安装PVE"
     fi
-
-    _green "本机配置满足至少2核2G内存20G硬盘的最低要求"
+    
+    # 检查CPU核心数
+    cpu_cores=$(grep -c ^processor /proc/cpuinfo)
+    if [ "$cpu_cores" -lt 2 ]; then
+        _red "本机配置不满足最低要求：至少2核CPU"
+        _red "本机CPU数量配置无法安装PVE"
+    fi
+    
+    # 检查内存大小
+    total_mem=$(free -m | awk '/^Mem:/{print $2}')
+    if [ "$total_mem" -lt 2048 ]; then
+        _red "本机配置不满足最低要求：至少2G内存"
+        _red "本机内存配置无法安装PVE (未计算SWAP，如若SWAP的虚拟内存加上本机实际内存大于2G请忽略本提示)"
+    fi
 }
-
 check_config
 
 # 检查CPU是否支持硬件虚拟化
