@@ -304,6 +304,7 @@ LXC虚拟化的容器-自带内外网映射
 - 可自定义开设的核心数，内存大小，硬盘大小，使用宿主机哪个存储盘，记得自己计算好空闲资源开设
 - 可在命令中指定存储盘位置，默认不指定时为local盘即系统盘，可指定为PVE中显示的挂载盘
 - 开设的CT默认已启用SSH且允许root登陆，且已设置支持使用docker的嵌套虚拟化
+- 容器的相关信息将会存储到对应的容器的NOTE中，可在WEB端查看
 
 ```
 curl -L https://raw.githubusercontent.com/spiritLHLS/pve/main/scripts/buildct.sh -o buildct.sh && chmod +x buildct.sh
@@ -370,6 +371,7 @@ systemctl restart networking.service
 - 可多次运行批量生成CT容器，但需要注意的是母鸡内存记得开点swap免得机器炸了[开SWAP点我跳转](https://github.com/spiritLHLS/addswap)
 - 可自定义批量开设的核心数，内存大小，硬盘大小，使用宿主机哪个存储盘，记得自己计算好空闲资源开设
 - 开设的CT默认已启用SSH且允许root登陆，且已设置支持使用docker的嵌套虚拟化
+- 容器的相关信息将会存储到对应的容器的NOTE中，可在WEB端查看
 
 ```
 curl -L https://raw.githubusercontent.com/spiritLHLS/pve/main/scripts/create_ct.sh -o create_ct.sh && chmod +x create_ct.sh && bash create_ct.sh
