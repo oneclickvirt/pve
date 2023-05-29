@@ -122,6 +122,7 @@ length=${#data_array[@]}
 for ((i=0; i<$length; i++))
 do
   echo "${data_array[$i]} ${values_array[$i]}"
+  echo ""
 done > "/tmp/temp${CTID}.txt"
 sed -i 's/^/# /' "/tmp/temp${CTID}.txt"
 cat "/etc/pve/lxc/${CTID}.conf" >> "/tmp/temp${CTID}.txt"
