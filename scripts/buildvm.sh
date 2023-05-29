@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/spiritLHLS/pve
-# 2023.05.20
+# 2023.05.29
 
 # ./buildvm.sh VMID 用户名 密码 CPU核数 内存 硬盘 SSH端口 80端口 443端口 外网端口起 外网端口止 系统 存储盘
 # ./buildvm.sh 102 test1 1234567 1 512 5 40001 40002 40003 50000 50025 debian11 local
@@ -127,4 +127,19 @@ fi
 iptables-save > /etc/iptables/rules.v4
 service netfilter-persistent restart
 echo "$vm_num $user $password $core $memory $disk $sshn $web1_port $web2_port $port_first $port_last $system $storage" >> "vm${vm_num}"
+# 虚拟机的相关信息将会存储到对应的虚拟机的NOTE中，可在WEB端查看
+data=$(echo " VMID 用户名 密码 CPU核数 内存 硬盘 SSH端口 80端口 443端口 外网端口起 外网端口止 系统 存储盘")
+values=$(cat "vm${vm_num}")
+IFS=' ' read -ra data_array <<< "$data"
+IFS=' ' read -ra values_array <<< "$values"
+length=${#data_array[@]}
+for ((i=0; i<$length; i++))
+do
+  echo "${data_array[$i]} ${values_array[$i]}"
+  echo ""
+done > "/tmp/temp${vm_num}.txt"
+sed -i 's/^/# /' "/tmp/temp${vm_num}.txt"
+cat "/etc/pve/qemu-server/${vm_num}.conf" >> "/tmp/temp${vm_num}.txt"
+cp "/tmp/temp${vm_num}.txt" "/etc/pve/qemu-server/${vm_num}.conf"
+rm -rf "/tmp/temp${vm_num}.txt"
 cat "vm${vm_num}"
