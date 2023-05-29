@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/spiritLHLS/pve
-# 2023.05.20
+# 2023.05.29
 
 # ./buildct.sh CTID 密码 CPU核数 内存 硬盘 SSH端口 80端口 443端口 外网端口起 外网端口止 系统 存储盘
 # ./buildct.sh 102 1234567 1 512 5 20001 20002 20003 30000 30025 debian11 local
