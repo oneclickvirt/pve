@@ -114,4 +114,17 @@ fi
 iptables-save > /etc/iptables/rules.v4
 service netfilter-persistent restart
 echo "$CTID $password $core $memory $disk $sshn $web1_port $web2_port $port_first $port_last $system_ori $storage" >> "ct${CTID}"
+data=$(echo " CTID root密码 CPU核数 内存 硬盘 SSH端口 80端口 443端口 外网端口起 外网端口止 系统 存储盘")
+values=$(cat "ct${CTID}")
+IFS=' ' read -ra data_array <<< "$data"
+IFS=' ' read -ra values_array <<< "$values"
+length=${#data_array[@]}
+for ((i=0; i<$length; i++))
+do
+  echo "${data_array[$i]} ${values_array[$i]}"
+done > "/tmp/temp${CTID}.txt"
+sed -i 's/^/# /' "/tmp/temp${CTID}.txt"
+cat "/etc/pve/lxc/${CTID}.conf" >> "/tmp/temp${CTID}.txt"
+cp "/tmp/temp${CTID}.txt" "/etc/pve/lxc/${CTID}.conf"
+rm -rf "/tmp/temp${CTID}.txt"
 cat "ct${CTID}"
