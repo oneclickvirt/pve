@@ -114,6 +114,7 @@ fi
 iptables-save > /etc/iptables/rules.v4
 service netfilter-persistent restart
 echo "$CTID $password $core $memory $disk $sshn $web1_port $web2_port $port_first $port_last $system_ori $storage" >> "ct${CTID}"
+# 容器的相关信息将会存储到对应的容器的NOTE中，可在WEB端查看
 data=$(echo " CTID root密码 CPU核数 内存 硬盘 SSH端口 80端口 443端口 外网端口起 外网端口止 系统 存储盘")
 values=$(cat "ct${CTID}")
 IFS=' ' read -ra data_array <<< "$data"
