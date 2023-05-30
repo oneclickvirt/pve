@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/spiritLHLS/pve
-# 2023.04.30
+# 2023.05.30
 
 # cd /root
 
@@ -131,13 +131,7 @@ build_new_cts(){
         if [ -z "$storage" ]; then
           storage="local"
         fi
-        output=$(pvesm list | grep "$storage")
-        if [ -n "$output" ]; then
-          echo "存储盘 '$storage' 存在于Proxmox VE中。"
-          break
-        else
-          echo "存储盘 '$storage' 不存在于Proxmox VE中，请重新输入"
-        fi
+        break
     done
     while true; do
         reading "每个虚拟机分配多少硬盘？(若每个虚拟机分配5G硬盘，则输入5)：" disk_nums
@@ -146,6 +140,14 @@ build_new_cts(){
         else
             _yellow "输入无效，请输入一个正整数。"
         fi
+    done
+    while true; do
+        reading "每个虚拟机都使用什么系统？(若都使用debian11，则输入debian11或留空)：" system
+        if [ -z "$system" ]; then
+          system="debian11"
+        fi
+        # 这块待增加系统列表查询
+        break
     done
     for ((i=1; i<=$new_nums; i++)); do
         ct_num=$(($ct_num + 1))
@@ -156,7 +158,7 @@ build_new_cts(){
         web2_port=$(($web1_port + 1))
         port_start=$(($port_end + 1))
         port_end=$(($port_start + 25))
-        ./buildct.sh $ct_num $password $cpu_nums $memory_nums $disk_nums $ssh_port $web1_port $web2_port $port_start $port_end debian11 $storage
+        ./buildct.sh $ct_num $password $cpu_nums $memory_nums $disk_nums $ssh_port $web1_port $web2_port $port_start $port_end $system $storage
         cat "ct$ct_num" >> ctlog
         rm -rf "ct$ct_num"
         sleep 60
