@@ -144,7 +144,7 @@ build_new_vms(){
     done
     while true; do
         sys_status="false"
-        reading "每个虚拟机都使用什么系统？(若都使用debian11，则输入debian11或留空)：" system
+        reading "每个虚拟机都使用什么系统？(若都使用debian11，则留空或输入debian11)：" system
         if [ -z "$system" ]; then
           system="debian11"
         fi
