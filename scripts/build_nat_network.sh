@@ -43,20 +43,22 @@ else
 fi
 gateway=$(ip route | awk '/default/ {print $3}')
 
-# 获取母鸡子网前缀
-SUBNET_PREFIX=$(ip -6 addr show | grep -E 'inet6.*global' | awk '{print $2}' | awk -F'/' '{print $1}' | head -n 1 | cut -d ':' -f1-5):
+# # 获取母鸡子网前缀
+# SUBNET_PREFIX=$(ip -6 addr show | grep -E 'inet6.*global' | awk '{print $2}' | awk -F'/' '{print $1}' | head -n 1 | cut -d ':' -f1-5):
+# # 提取IPV6地址
+# content=$(cat /etc/network/interfaces.d/50-cloud-init)
+# ipv6_line=$(echo "$content" | grep "address 2a12:bec0:150:1a::a/64")
+# ipv6_address=$(echo "$ipv6_line" | awk '{print $2}')
+# # 检查是否存在 IPV6 
+# if [ -z "$SUBNET_PREFIX" ]; then
+#     _red "无 IPV6 子网，不进行自动映射"
+# else
+#     _blue "母鸡的IPV6子网前缀为 $SUBNET_PREFIX"
+# fi
 
-# 提取IPV6地址
-content=$(cat /etc/network/interfaces.d/50-cloud-init)
-ipv6_line=$(echo "$content" | grep "address 2a12:bec0:150:1a::a/64")
-ipv6_address=$(echo "$ipv6_line" | awk '{print $2}')
-
-# 检查是否存在 IPV6 
-if [ -z "$SUBNET_PREFIX" ]; then
-    _red "无 IPV6 子网，不进行自动映射"
-else
-    _blue "母鸡的IPV6子网前缀为 $SUBNET_PREFIX"
-fi
+# iface vmbr0 inet6 static
+#     address $ipv6_address
+#     gateway ${SUBNET_PREFIX}1
 
 # 录入网关
 cp /etc/network/interfaces /etc/network/interfaces.bak
@@ -71,9 +73,6 @@ iface vmbr0 inet static
     bridge_ports $interface
     bridge_stp off
     bridge_fd 0
-iface vmbr0 inet6 static
-    address $ipv6_address
-    gateway ${SUBNET_PREFIX}1
 EOF
 fi
 if grep -q "vmbr1" /etc/network/interfaces; then
