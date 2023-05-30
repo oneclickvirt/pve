@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/spiritLHLS/pve
-# 2023.04.24
+# 2023.05.30
 
 # cd /root
 
@@ -132,13 +132,7 @@ build_new_vms(){
         if [ -z "$storage" ]; then
           storage="local"
         fi
-        output=$(pvesm list | grep "$storage")
-        if [ -n "$output" ]; then
-          echo "存储盘 '$storage' 存在于Proxmox VE中。"
-          break
-        else
-          echo "存储盘 '$storage' 不存在于Proxmox VE中，请重新输入"
-        fi
+        break
     done
     while true; do
         reading "每个虚拟机分配多少硬盘？(若每个虚拟机分配5G硬盘，则输入5)：" disk_nums
