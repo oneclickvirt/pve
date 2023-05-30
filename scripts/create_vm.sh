@@ -142,6 +142,25 @@ build_new_vms(){
             _yellow "输入无效，请输入一个正整数。"
         fi
     done
+    while true; do
+        sys_status="false"
+        reading "每个虚拟机都使用什么系统？(若都使用debian11，则输入debian11或留空)：" system
+        if [ -z "$system" ]; then
+          system="debian11"
+        fi
+        systems=("debian10" "debian11" "debian9" "ubuntu18" "ubuntu20" "ubuntu22" "archlinux" "centos9-stream" "centos8-stream" "almalinux8" "almalinux9" "fedora33" "fedora34" "opensuse-leap-15")
+        for sys in ${systems[@]}; do
+          if [[ "$system" == "$sys" ]]; then
+            sys_status="true"
+            break
+          fi
+        done
+        if [ "$sys_status" = "true" ]; then
+          break
+        else
+          _yellow "不支持该系统，请查看 https://github.com/spiritLHLS/Images 支持的系统名字"
+        fi
+    done
     for ((i=1; i<=$new_nums; i++)); do
         vm_num=$(($vm_num + 1))
         user=$(cat /dev/urandom | tr -dc 'a-zA-Z' | fold -w 4 | head -n 1)
@@ -152,7 +171,7 @@ build_new_vms(){
         web2_port=$(($web1_port + 1))
         port_start=$(($port_end + 1))
         port_end=$(($port_start + 25))
-        ./buildvm.sh $vm_num $user $password $cpu_nums $memory_nums $disk_nums $ssh_port $web1_port $web2_port $port_start $port_end debian10 $storage
+        ./buildvm.sh $vm_num $user $password $cpu_nums $memory_nums $disk_nums $ssh_port $web1_port $web2_port $port_start $port_end $system $storage
         cat "vm$vm_num" >> vmlog
         rm -rf "vm$vm_num"
         sleep 60
