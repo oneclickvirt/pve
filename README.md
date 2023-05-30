@@ -49,9 +49,10 @@
 * [一键生成单个CT也就是LXC虚拟化的NAT容器](#一键生成单个CT也就是LXC虚拟化的NAT容器)
     * [如何使用](#如何使用)
     * [CT示例](#CT示例)
-    * [删除所有CT](#删除所有CT)
+    * [删除示例CT](#删除示例CT)
 * [批量开设NAT的LXC虚拟化的CT容器](#批量开设NAT的LXC虚拟化的CT容器)
     * [一键命令](#一键命令)
+    * [删除所有CT](#删除所有CT)
 * [致谢](#致谢)
 
 ### 系统要求与配置
@@ -358,13 +359,14 @@ cat ct102
 
 查看信息
 
-#### 删除所有CT
+#### 删除示例CT
 
-以下命令将删除所有CT和所有的log文件，删除所有nat的端口映射并重启网络
+以下命令将删除示例CT和log文件，删除所有的nat的端口映射并重启网络
 
 ```
-pct list | awk 'NR>1{print $1}' | xargs -I {} sh -c 'pct stop {}; pct destroy {}'
-rm -rf ct*
+pct stop ct102
+pct destroy ct102
+rm -rf ct102
 iptables -t nat -F
 iptables -t filter -F
 service networking restart
@@ -403,6 +405,20 @@ cat ctlog
 ```
 
 查看信息
+
+
+#### 删除所有CT
+
+以下命令将删除所有CT和所有的log文件，删除所有nat的端口映射并重启网络
+
+```
+pct list | awk 'NR>1{print $1}' | xargs -I {} sh -c 'pct stop {}; pct destroy {}'
+rm -rf ct*
+iptables -t nat -F
+iptables -t filter -F
+service networking restart
+systemctl restart networking.service
+```
 
 ## 致谢
 
