@@ -17,7 +17,7 @@ else
   export LANGUAGE="$utf8_locale"
   echo "Locale set to $utf8_locale"
 fi
-
+temp_file_apt_fix="/tmp/apt_fix.txt"
 
 # 前置环境安装
 if [ "$(id -u)" != "0" ]; then
@@ -32,21 +32,19 @@ fi
 if [ $? -ne 0 ]; then
    apt-get install gnupg -y
 fi
-if command -v apt-get > /dev/null 2>&1; then
-    apt_update_output=$(apt-get update 2>&1)
-    echo "$apt_update_output" > "$temp_file_apt_fix"
-    if grep -q 'NO_PUBKEY' "$temp_file_apt_fix"; then
-	public_keys=$(grep -oE 'NO_PUBKEY [0-9A-F]+' "$temp_file_apt_fix" | awk '{ print $2 }')
-	joined_keys=$(echo "$public_keys" | paste -sd " ")
-	_yellow "No Public Keys: ${joined_keys}"
-	apt-key adv --keyserver keyserver.ubuntu.com --recv-keys ${joined_keys}
-	apt-get update
-	if [ $? -eq 0 ]; then
-	    _green "Fixed"
-	fi
+apt_update_output=$(apt-get update 2>&1)
+echo "$apt_update_output" > "$temp_file_apt_fix"
+if grep -q 'NO_PUBKEY' "$temp_file_apt_fix"; then
+    public_keys=$(grep -oE 'NO_PUBKEY [0-9A-F]+' "$temp_file_apt_fix" | awk '{ print $2 }')
+    joined_keys=$(echo "$public_keys" | paste -sd " ")
+    _yellow "No Public Keys: ${joined_keys}"
+    apt-key adv --keyserver keyserver.ubuntu.com --recv-keys ${joined_keys}
+    apt-get update
+    if [ $? -eq 0 ]; then
+        _green "Fixed"
     fi
-    rm "$temp_file_apt_fix"
-fi 
+fi
+rm "$temp_file_apt_fix"
 if ! command -v wget > /dev/null 2>&1; then
       apt-get install -y wget
 fi
@@ -243,16 +241,17 @@ if [ $? -ne 0 ]; then
    apt-get install debian-keyring debian-archive-keyring -y
    apt-get update -y && apt-get full-upgrade -y
 fi
-output=$(apt-get update 2>&1)
-if echo $output | grep -q "NO_PUBKEY"; then
-  echo "Some keys are missing, attempting to retrieve them now..."
-  missing_keys=$(echo $output | grep "NO_PUBKEY" | awk -F' ' '{print $NF}')
-  for key in $missing_keys; do
-    sudo apt-key adv --keyserver keyserver.ubuntu.com --recv-keys $key
-  done
-  apt-get update
-else
-  echo "All keys are present."
+apt_update_output=$(apt-get update 2>&1)
+echo "$apt_update_output" > "$temp_file_apt_fix"
+if grep -q 'NO_PUBKEY' "$temp_file_apt_fix"; then
+    public_keys=$(grep -oE 'NO_PUBKEY [0-9A-F]+' "$temp_file_apt_fix" | awk '{ print $2 }')
+    joined_keys=$(echo "$public_keys" | paste -sd " ")
+    _yellow "No Public Keys: ${joined_keys}"
+    apt-key adv --keyserver keyserver.ubuntu.com --recv-keys ${joined_keys}
+    apt-get update
+    if [ $? -eq 0 ]; then
+        _green "Fixed"
+    fi
 fi
 output=$(apt-get update 2>&1)
 if echo $output | grep -q "NO_PUBKEY"; then
