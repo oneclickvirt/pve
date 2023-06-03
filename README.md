@@ -22,6 +22,7 @@
 2023.06.03
 
 - 更新支持自动修复apt源缺失公钥的问题，不再需要手动修复
+- 暂时移除静态动态地址转换，默认的是DHCP或静态的IP不再进行识别和转换，后续替换为别的方式解决
 - 更新中文文档部分说明
 
 [更新日志](CHANGELOG.md)
@@ -100,7 +101,6 @@ bash <(wget -qO- --no-check-certificate https://ghproxy.com/https://raw.githubus
 - 安装PVE开虚拟机需要的必备工具包
 - 替换apt源中的企业订阅为社区源
 - 打印查询Linux系统内核和PVE内核是否已安装
-- 查询网络配置是否为dhcp配置的V4网络，如果是则转换为静态地址避免重启后dhcp失效，已设置为只读模式，如需修改请使用```chattr -i /etc/network/interfaces.d/50-cloud-init```取消只读锁定，修改完毕请执行```chattr +i /etc/network/interfaces.d/50-cloud-init```只读锁定
 - 检测```/etc/resolv.conf```是否为空，为空则设置检测```8.8.8.8```的开机自启添加DNS的systemd服务
 - 新增PVE的APT源链接后，下载PVE并打印输出登陆信息
 - 配置完毕需要重启系统加载新内核
