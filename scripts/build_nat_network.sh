@@ -31,7 +31,9 @@ fi
 IPV4=$(ip -4 addr show | grep global | awk '{print $2}' | cut -d '/' -f1 | head -n 1)
 
 # 查询信息
-apt-get install lshw -y
+if ! command -v lshw > /dev/null 2>&1; then
+      apt-get install -y lshw
+fi
 interface=$(lshw -C network | awk '/logical name:/{print $3}' | head -1)
 if [ -z "$interface" ]; then
   interface="eth0"
