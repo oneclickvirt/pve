@@ -85,7 +85,7 @@ else
   num=$((first_digit - 2))$second_digit$third_digit
 fi
 user_ip="172.16.1.${num}"
-pct create $CTID ${storage}:vztmpl/$system_name -cores $core -cpuunits 1024 -memory $memory -swap 128 -rootfs local:${disk} -onboot 1 -password $password -features nesting=1
+pct create $CTID ${storage}:vztmpl/$system_name -cores $core -cpuunits 1024 -memory $memory -swap 128 -rootfs ${storage}:${disk} -onboot 1 -password $password -features nesting=1
 pct start $CTID
 pct set $CTID --hostname $CTID
 pct set $CTID --net0 name=eth0,ip=${user_ip}/24,bridge=vmbr1,gw=172.16.1.1 
