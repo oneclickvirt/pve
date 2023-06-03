@@ -100,7 +100,7 @@ else
 fi
 
 qm create $vm_num --agent 1 --scsihw virtio-scsi-single --serial0 socket --cores $core --sockets 1 --cpu host --net0 virtio,bridge=vmbr1,firewall=0
-qm importdisk $vm_num /root/qcow/${system}.qcow2 local
+qm importdisk $vm_num /root/qcow/${system}.qcow2 ${storage}
 qm set $vm_num --scsihw virtio-scsi-pci --scsi0 ${storage}:${vm_num}/vm-${vm_num}-disk-0.raw
 qm set $vm_num --bootdisk scsi0
 qm set $vm_num --boot order=scsi0
