@@ -300,23 +300,23 @@ apt-get install ipcalc -y
 if grep -q "source /etc/network/interfaces.d/*" /etc/network/interfaces; then
   # 检查/etc/network/interfaces.d/文件夹下是否有50-cloud-init文件
   if [ -f /etc/network/interfaces.d/50-cloud-init ]; then
-    # 检查50-cloud-init文件中是否有iface eth0 inet dhcp行
-    if grep -q "iface eth0 inet dhcp" /etc/network/interfaces.d/50-cloud-init; then
-      cp /etc/network/interfaces.d/50-cloud-init /etc/network/interfaces.d/50-cloud-init.bak
-      # 获取ipv4、subnet、gateway信息
-      gateway=$(ip route | awk '/default/ {print $3}')
-      eth0info=$(ip -o -4 addr show dev eth0 | awk '{print $4}')
-      ipv4=$(echo $eth0info | cut -d'/' -f1)
-      subnet=$(echo $eth0info | cut -d'/' -f2)
-      subnet=$(ipcalc -n "$ipv4/$subnet" | grep -oP 'Netmask:\s+\K.*' | awk '{print $1}')
-      chattr -i /etc/network/interfaces.d/50-cloud-init
-      sed -i "/iface eth0 inet dhcp/c\
-        iface eth0 inet static\n\
-        address $ipv4\n\
-        netmask $subnet\n\
-        gateway $gateway\n\
-        dns-nameservers 8.8.8.8 8.8.4.4" /etc/network/interfaces.d/50-cloud-init
-    fi
+#     # 检查50-cloud-init文件中是否有iface eth0 inet dhcp行
+#     if grep -q "iface eth0 inet dhcp" /etc/network/interfaces.d/50-cloud-init; then
+#       cp /etc/network/interfaces.d/50-cloud-init /etc/network/interfaces.d/50-cloud-init.bak
+#       # 获取ipv4、subnet、gateway信息
+#       gateway=$(ip route | awk '/default/ {print $3}')
+#       eth0info=$(ip -o -4 addr show dev eth0 | awk '{print $4}')
+#       ipv4=$(echo $eth0info | cut -d'/' -f1)
+#       subnet=$(echo $eth0info | cut -d'/' -f2)
+#       subnet=$(ipcalc -n "$ipv4/$subnet" | grep -oP 'Netmask:\s+\K.*' | awk '{print $1}')
+#       chattr -i /etc/network/interfaces.d/50-cloud-init
+#       sed -i "/iface eth0 inet dhcp/c\
+#         iface eth0 inet static\n\
+#         address $ipv4\n\
+#         netmask $subnet\n\
+#         gateway $gateway\n\
+#         dns-nameservers 8.8.8.8 8.8.4.4" /etc/network/interfaces.d/50-cloud-init
+#     fi
     chattr +i /etc/network/interfaces.d/50-cloud-init
   fi
 fi
