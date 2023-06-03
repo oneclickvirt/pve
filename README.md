@@ -19,10 +19,9 @@
 
 ### 更新
 
-2023.05.30
+2023.06.03
 
-- 更新支持批量开设的虚拟机或容器自定义系统，默认留空为debian11系统
-- 更新修复使用批量开设前检测挂载盘系统盘的问题，暂时移除检测，后续修复检测
+- 更新支持自动修复apt源缺失公钥的问题，不再需要手动修复
 - 更新中文文档部分说明
 
 [更新日志](CHANGELOG.md)
@@ -118,12 +117,6 @@ curl -L https://raw.githubusercontent.com/spiritLHLS/pve/main/scripts/install_pv
 ```
 curl -L https://ghproxy.com/https://raw.githubusercontent.com/spiritLHLS/pve/main/scripts/install_pve.sh -o install_pve.sh && chmod +x install_pve.sh && bash install_pve.sh
 ```
-
-- 安装过程中可能会退出安装，需要手动修复apt源，如下图所示修复完毕后再次执行本脚本
-
-![图片](https://user-images.githubusercontent.com/103393591/220104992-9eed2601-c170-46b9-b8b7-de141eeb6da4.png)
-
-![图片](https://user-images.githubusercontent.com/103393591/220105032-72623188-4c44-43c0-b3f1-7ce267163687.png)
 
 ### 预配置环境
 
