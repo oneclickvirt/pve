@@ -253,6 +253,7 @@ if grep -q 'NO_PUBKEY' "$temp_file_apt_fix"; then
         _green "Fixed"
     fi
 fi
+rm "$temp_file_apt_fix"
 output=$(apt-get update 2>&1)
 if echo $output | grep -q "NO_PUBKEY"; then
    _yellow "try sudo apt-key adv --keyserver keyserver.ubuntu.com --recv-keys missing key"
