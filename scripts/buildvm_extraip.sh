@@ -55,7 +55,6 @@ check_cdn_file() {
 }
 
 cdn_urls=("https://cdn.spiritlhl.workers.dev/" "https://cdn3.spiritlhl.net/" "https://cdn1.spiritlhl.net/" "https://ghproxy.com/" "https://cdn2.spiritlhl.net/")
-check_cdn_file
 if [ ! -d "qcow" ]; then
   mkdir qcow
 fi
@@ -72,10 +71,11 @@ if [[ -z "$file_path" ]]; then
   echo "无法安装对应系统，请查看 https://github.com/spiritLHLS/Images/ 支持的系统镜像 "
   exit 1
 fi
-# v1.0 基础安装包预安装
-# v1.1 增加agent安装包预安装，方便在宿主机上看到虚拟机的进程
-url="${cdn_success_url}https://github.com/spiritLHLS/Images/releases/download/v1.1/${system}.qcow2"
 if [ ! -f "$file_path" ]; then
+  # v1.0 基础安装包预安装
+  # v1.1 增加agent安装包预安装，方便在宿主机上看到虚拟机的进程
+  check_cdn_file
+  url="${cdn_success_url}https://github.com/spiritLHLS/Images/releases/download/v1.1/${system}.qcow2"
   curl -L -o "$file_path" "$url"
 fi
 
@@ -107,15 +107,16 @@ user_main_ip=$(echo "$user_main_ip_range" | cut -d'/' -f1)
 user_ip_range=$(echo "$user_main_ip_range" | cut -d'/' -f2)
 ip_range=$((32 - user_ip_range))
 # 子网长度-1
-range=$((2 ** ip_range - 2))
+range=$((2 ** ip_range - 3))
 IFS='.' read -r -a octets <<< "$user_main_ip"
 ip_list=()
-for ((i=0; i<=$range; i++)); do
+for ((i=0; i<$range; i++)); do
   octet=$((i % 256))
   ip="${octets[0]}.${octets[1]}.${octets[2]}.$((octets[3] + octet))"
   ip_list+=("$ip")
 done
 # 宿主机的IP列表
+_green "当前宿主机可用的外网IP列表"
 for ip in "${ip_list[@]}"; do
   echo "$ip"
 done
@@ -128,38 +129,38 @@ for ip in "${ip_list[@]}"; do
 done
 # 宿主机的网关
 gateway=$(grep -E "iface $interface" -A 2 "/etc/network/interfaces" | grep "gateway" | awk '{print $2}')
-echo "ip=${user_ip}/${ip_range},gw=${gateway}"
+# echo "ip=${user_ip}/${user_ip_range},gw=${gateway}"
 
-# qm create $vm_num --agent 1 --scsihw virtio-scsi-single --serial0 socket --cores $core --sockets 1 --cpu host --net0 virtio,bridge=vmbr0,firewall=0
-# qm importdisk $vm_num /root/qcow/${system}.qcow2 ${storage}
-# qm set $vm_num --scsihw virtio-scsi-pci --scsi0 ${storage}:${vm_num}/vm-${vm_num}-disk-0.raw
-# qm set $vm_num --bootdisk scsi0
-# qm set $vm_num --boot order=scsi0
-# qm set $vm_num --memory $memory
-# # --swap 256
-# qm set $vm_num --ide2 ${storage}:cloudinit
-# qm set $vm_num --nameserver 8.8.8.8
-# qm set $vm_num --searchdomain 8.8.4.4
-# qm set $vm_num --ipconfig0 ip=${user_ip}/${ip_range},gw=${gateway}
-# qm set $vm_num --cipassword $password --ciuser $user
-# # qm set $vm_num --agent 1
-# qm resize $vm_num scsi0 ${disk}G
-# qm start $vm_num
+qm create $vm_num --agent 1 --scsihw virtio-scsi-single --serial0 socket --cores $core --sockets 1 --cpu host --net0 virtio,bridge=vmbr0,firewall=0
+qm importdisk $vm_num /root/qcow/${system}.qcow2 ${storage}
+qm set $vm_num --scsihw virtio-scsi-pci --scsi0 ${storage}:${vm_num}/vm-${vm_num}-disk-0.raw
+qm set $vm_num --bootdisk scsi0
+qm set $vm_num --boot order=scsi0
+qm set $vm_num --memory $memory
+# --swap 256
+qm set $vm_num --ide2 ${storage}:cloudinit
+qm set $vm_num --nameserver 8.8.8.8
+qm set $vm_num --searchdomain 8.8.4.4
+qm set $vm_num --ipconfig0 ip=${user_ip}/${user_ip_range},gw=${gateway}
+qm set $vm_num --cipassword $password --ciuser $user
+# qm set $vm_num --agent 1
+qm resize $vm_num scsi0 ${disk}G
+qm start $vm_num
 
-# echo "$vm_num $user $password $core $memory $disk $system $storage $user_ip" >> "vm${vm_num}"
-# # 虚拟机的相关信息将会存储到对应的虚拟机的NOTE中，可在WEB端查看
-# data=$(echo " VMID 用户名 密码 CPU核数 内存 硬盘 系统 存储盘 外网独立IP")
-# values=$(cat "vm${vm_num}")
-# IFS=' ' read -ra data_array <<< "$data"
-# IFS=' ' read -ra values_array <<< "$values"
-# length=${#data_array[@]}
-# for ((i=0; i<$length; i++))
-# do
-#   echo "${data_array[$i]} ${values_array[$i]}"
-#   echo ""
-# done > "/tmp/temp${vm_num}.txt"
-# sed -i 's/^/# /' "/tmp/temp${vm_num}.txt"
-# cat "/etc/pve/qemu-server/${vm_num}.conf" >> "/tmp/temp${vm_num}.txt"
-# cp "/tmp/temp${vm_num}.txt" "/etc/pve/qemu-server/${vm_num}.conf"
-# rm -rf "/tmp/temp${vm_num}.txt"
-# cat "vm${vm_num}"
+echo "$vm_num $user $password $core $memory $disk $system $storage $user_ip" >> "vm${vm_num}"
+# 虚拟机的相关信息将会存储到对应的虚拟机的NOTE中，可在WEB端查看
+data=$(echo " VMID 用户名 密码 CPU核数 内存 硬盘 系统 存储盘 外网独立IP")
+values=$(cat "vm${vm_num}")
+IFS=' ' read -ra data_array <<< "$data"
+IFS=' ' read -ra values_array <<< "$values"
+length=${#data_array[@]}
+for ((i=0; i<$length; i++))
+do
+  echo "${data_array[$i]} ${values_array[$i]}"
+  echo ""
+done > "/tmp/temp${vm_num}.txt"
+sed -i 's/^/# /' "/tmp/temp${vm_num}.txt"
+cat "/etc/pve/qemu-server/${vm_num}.conf" >> "/tmp/temp${vm_num}.txt"
+cp "/tmp/temp${vm_num}.txt" "/etc/pve/qemu-server/${vm_num}.conf"
+rm -rf "/tmp/temp${vm_num}.txt"
+cat "vm${vm_num}"
