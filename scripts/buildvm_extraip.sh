@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/spiritLHLS/pve
-# 2023.06.03
+# 2023.06.04
 
 # ./buildvm_extraip.sh VMID 用户名 密码 CPU核数 内存 硬盘 系统 存储盘
 # ./buildvm_extraip.sh 152 test1 1234567 1 512 5 debian11 local
@@ -92,40 +92,70 @@ else
   num=$((first_digit - 2))$second_digit$third_digit
 fi
 
-# user_ip="子网IP"
-# ip_range="网段"
-# gateway="从宿主机获取"
+# 查询信息
+if ! command -v lshw > /dev/null 2>&1; then
+      apt-get install -y lshw
+fi
+interface=$(lshw -C network | awk '/logical name:/{print $3}' | head -1)
+user_main_ip_range=$(grep -A 1 "iface ${interface}" /etc/network/interfaces | grep "address" | awk '{print $2}')
+# 宿主机IP
+user_main_ip=$(echo "$user_main_ip_range" | cut -d'/' -f1)
+user_ip_range=$(echo "$user_main_ip_range" | cut -d'/' -f2)
+ip_range=$((32 - user_ip_range))
+# 子网长度-1
+range=$((2 ** ip_range - 2))
+IFS='.' read -r -a octets <<< "$user_main_ip"
+ip_list=()
+for ((i=0; i<=$range; i++)); do
+  octet=$((i % 256))
+  ip="${octets[0]}.${octets[1]}.${octets[2]}.$((octets[3] + octet))"
+  ip_list+=("$ip")
+done
+# 打印IP列表
+for ip in "${ip_list[@]}"; do
+  echo "$ip"
+done
+for ip in "${ip_list[@]}"; do
+  if ! ping -c 1 "$ip" >/dev/null; then
+    # 未使用的IP之一
+    user_ip="$ip"
+    break
+  fi
+done
+# 宿主机的网关
+gateway=$(grep -E "iface $interface" -A 2 "/etc/network/interfaces" | grep "gateway" | awk '{print $2}')
+echo "ip=${user_ip}/${ip_range},gw=${gateway}"
 
-qm create $vm_num --agent 1 --scsihw virtio-scsi-single --serial0 socket --cores $core --sockets 1 --cpu host --net0 virtio,bridge=vmbr0,firewall=0
-qm importdisk $vm_num /root/qcow/${system}.qcow2 ${storage}
-qm set $vm_num --scsihw virtio-scsi-pci --scsi0 ${storage}:${vm_num}/vm-${vm_num}-disk-0.raw
-qm set $vm_num --bootdisk scsi0
-qm set $vm_num --boot order=scsi0
-qm set $vm_num --memory $memory
-# --swap 256
-qm set $vm_num --ide2 ${storage}:cloudinit
-qm set $vm_num --nameserver 8.8.8.8
-qm set $vm_num --searchdomain 8.8.4.4
-qm set $vm_num --ipconfig0 ip=${user_ip}/${ip_range},gw=${gateway}
-qm set $vm_num --cipassword $password --ciuser $user
-# qm set $vm_num --agent 1
-qm resize $vm_num scsi0 ${disk}G
-qm start $vm_num
+# qm create $vm_num --agent 1 --scsihw virtio-scsi-single --serial0 socket --cores $core --sockets 1 --cpu host --net0 virtio,bridge=vmbr0,firewall=0
+# qm importdisk $vm_num /root/qcow/${system}.qcow2 ${storage}
+# qm set $vm_num --scsihw virtio-scsi-pci --scsi0 ${storage}:${vm_num}/vm-${vm_num}-disk-0.raw
+# qm set $vm_num --bootdisk scsi0
+# qm set $vm_num --boot order=scsi0
+# qm set $vm_num --memory $memory
+# # --swap 256
+# qm set $vm_num --ide2 ${storage}:cloudinit
+# qm set $vm_num --nameserver 8.8.8.8
+# qm set $vm_num --searchdomain 8.8.4.4
+# qm set $vm_num --ipconfig0 ip=${user_ip}/${ip_range},gw=${gateway}
+# qm set $vm_num --cipassword $password --ciuser $user
+# # qm set $vm_num --agent 1
+# qm resize $vm_num scsi0 ${disk}G
+# qm start $vm_num
 
-echo "$vm_num $user $password $core $memory $disk $system $storage $user_ip" >> "vm${vm_num}"
-# 虚拟机的相关信息将会存储到对应的虚拟机的NOTE中，可在WEB端查看
-data=$(echo " VMID 用户名 密码 CPU核数 内存 硬盘 系统 存储盘 外网独立IP")
-values=$(cat "vm${vm_num}")
-IFS=' ' read -ra data_array <<< "$data"
-IFS=' ' read -ra values_array <<< "$values"
-length=${#data_array[@]}
-for ((i=0; i<$length; i++))
-do
-  echo "${data_array[$i]} ${values_array[$i]}"
-  echo ""
-done > "/tmp/temp${vm_num}.txt"
-sed -i 's/^/# /' "/tmp/temp${vm_num}.txt"
-cat "/etc/pve/qemu-server/${vm_num}.conf" >> "/tmp/temp${vm_num}.txt"
-cp "/tmp/temp${vm_num}.txt" "/etc/pve/qemu-server/${vm_num}.conf"
-rm -rf "/tmp/temp${vm_num}.txt"
-cat "vm${vm_num}"
+# echo "$vm_num $user $password $core $memory $disk $system $storage $user_ip" >> "vm${vm_num}"
+# # 虚拟机的相关信息将会存储到对应的虚拟机的NOTE中，可在WEB端查看
+# data=$(echo " VMID 用户名 密码 CPU核数 内存 硬盘 系统 存储盘 外网独立IP")
+# values=$(cat "vm${vm_num}")
+# IFS=' ' read -ra data_array <<< "$data"
+# IFS=' ' read -ra values_array <<< "$values"
+# length=${#data_array[@]}
+# for ((i=0; i<$length; i++))
+# do
+#   echo "${data_array[$i]} ${values_array[$i]}"
+#   echo ""
+# done > "/tmp/temp${vm_num}.txt"
+# sed -i 's/^/# /' "/tmp/temp${vm_num}.txt"
+# cat "/etc/pve/qemu-server/${vm_num}.conf" >> "/tmp/temp${vm_num}.txt"
+# cp "/tmp/temp${vm_num}.txt" "/etc/pve/qemu-server/${vm_num}.conf"
+# rm -rf "/tmp/temp${vm_num}.txt"
+# cat "vm${vm_num}"
