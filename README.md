@@ -19,11 +19,10 @@
 
 ### 更新
 
-2023.06.03
+2023.06.04
 
-- 更新支持自动修复apt源缺失公钥的问题，不再需要手动修复
-- 暂时移除静态动态地址转换，默认的是DHCP或静态的IP不再进行识别和转换，后续替换为别的方式解决
-- NAT网络构建前检测lshw包是否存在是否需要下载，保证物理设备的识别能成功(部分奇葩的系统模板不自带该工具包)
+- 增加一键开设独立IPV4虚拟机的脚本，支持一键生成独立IPV4的KVM虚拟化的虚拟机
+- 修改创建KVM虚拟机过程中预下载镜像前CDN检测的逻辑问题，如果已存在镜像则不再检测CDN有效性，因为无需通过CDN下载镜像文件
 - 更新中文文档部分说明
 
 [更新日志](CHANGELOG.md)
@@ -47,6 +46,10 @@
     * [使用方法](#使用方法)
     * [删除所有虚拟机](#删除所有虚拟机)
     * [注意事项](#注意事项)
+* [一键开设独立IPV4地址的虚拟机](#一键开设独立IPV4地址的虚拟机)
+    * [方法](#方法)
+    * [删除独立IPV4的虚拟机](#删除独立IPV4的虚拟机)
+    * [注意](#注意)
 * [一键生成单个CT也就是LXC虚拟化的NAT容器](#一键生成单个CT也就是LXC虚拟化的NAT容器)
     * [如何使用](#如何使用)
     * [CT示例](#CT示例)
@@ -297,6 +300,49 @@ rm -rf vmlog
 ### 注意事项
 
 PVE修改虚拟机配置前都得停机先，再修改配置，修改完再启动，免得出现配置重载错误
+
+## 一键开设独立IPV4地址的虚拟机
+
+- **使用前需要保证当前宿主机带了至少2个IP，且有空余的IP未配置，该空余的IP未绑定宿主机**
+- **开设前请使用screen挂起执行，避免批量开设时间过长，SSH不稳定导致中间执行中断**
+- 自动检测可用的IP区间，通过ping检测空余可使用的IP，选取其中之一绑定到虚拟机上
+- 系统的相关信息将会存储到对应的虚拟机的NOTE中，可在WEB端查看
+
+### 方法
+
+下载脚本
+
+```
+curl -L https://raw.githubusercontent.com/spiritLHLS/pve/main/scripts/buildvm_extraip.sh -o buildvm_extraip.sh && chmod +x buildvm_extraip.sh
+```
+
+国内下载
+
+```
+curl -L https://ghproxy.com/https://raw.githubusercontent.com/spiritLHLS/pve/main/scripts/buildvm_extraip.sh -o buildvm_extraip.sh && chmod +x buildvm_extraip.sh
+```
+
+示例创建
+
+```
+./buildvm_extraip.sh VMID 用户名 密码 CPU核数 内存大小以MB计算 硬盘大小以GB计算 系统 存储盘
+```
+
+```
+./buildvm_extraip.sh 152 test1 1234567 1 1024 10 ubuntu20 local
+```
+
+上述命令意义为开设一个带独立IPV4地址的虚拟机，VMID是152，用户名是test1，密码是1234567，CPU是1核，内存是1024MB，硬盘是10G，系统是Ubuntu20，存储盘是local盘也就是系统盘
+
+### 删除独立IPV4的虚拟机
+
+删除示例
+
+```
+qm stop 152
+qm destroy 152
+rm -rf vm152
+```
 
 ## 一键生成单个CT也就是LXC虚拟化的NAT容器
 
