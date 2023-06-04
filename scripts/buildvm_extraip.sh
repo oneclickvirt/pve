@@ -150,7 +150,7 @@ qm start $vm_num
 
 echo "$vm_num $user $password $core $memory $disk $system $storage $user_ip" >> "vm${vm_num}"
 # 虚拟机的相关信息将会存储到对应的虚拟机的NOTE中，可在WEB端查看
-data=$(echo " VMID 用户名 密码 CPU核数 内存 硬盘 系统 存储盘 外网独立IP")
+data=$(echo " VMID 用户名 密码 CPU核数 内存 硬盘 系统 存储盘 外网IP地址")
 values=$(cat "vm${vm_num}")
 IFS=' ' read -ra data_array <<< "$data"
 IFS=' ' read -ra values_array <<< "$values"
