@@ -17,6 +17,9 @@ disk="${6:-5}"
 system="${7:-debian10}"
 storage="${8:-local}"
 rm -rf "vm$name"
+user_ip=""
+user_ip_range=""
+gateway=""
 
 _red() { echo -e "\033[31m\033[01m$@\033[0m"; }
 _green() { echo -e "\033[32m\033[01m$@\033[0m"; }
@@ -131,6 +134,19 @@ done
 gateway=$(grep -E "iface $interface" -A 2 "/etc/network/interfaces" | grep "gateway" | awk '{print $2}')
 _green "当前虚拟机将绑定的IP为：${user_ip}"
 # echo "ip=${user_ip}/${user_ip_range},gw=${gateway}"
+# 检查变量是否为空并执行相应操作
+if [ -z "$gateway" ]; then
+  echo "宿主机网关查询失败"
+  exit 1
+fi
+if [ -z "$user_ip" ]; then
+  echo "可使用的IP列表查询失败"
+  exit 1
+fi
+if [ -z "$user_ip_range" ]; then
+  echo "本虚拟机将要绑定的IP选择失败"
+  exit 1
+fi
 
 qm create $vm_num --agent 1 --scsihw virtio-scsi-single --serial0 socket --cores $core --sockets 1 --cpu host --net0 virtio,bridge=vmbr0,firewall=0
 qm importdisk $vm_num /root/qcow/${system}.qcow2 ${storage}
