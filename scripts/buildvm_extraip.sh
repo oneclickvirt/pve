@@ -96,6 +96,10 @@ fi
 if ! command -v lshw > /dev/null 2>&1; then
       apt-get install -y lshw
 fi
+if ! command -v ping > /dev/null 2>&1; then
+      apt-get install -y iputils-ping
+      apt-get install -y ping
+fi
 interface=$(lshw -C network | awk '/logical name:/{print $3}' | head -1)
 user_main_ip_range=$(grep -A 1 "iface ${interface}" /etc/network/interfaces | grep "address" | awk '{print $2}')
 # 宿主机IP
@@ -111,7 +115,7 @@ for ((i=0; i<=$range; i++)); do
   ip="${octets[0]}.${octets[1]}.${octets[2]}.$((octets[3] + octet))"
   ip_list+=("$ip")
 done
-# 打印IP列表
+# 宿主机的IP列表
 for ip in "${ip_list[@]}"; do
   echo "$ip"
 done
