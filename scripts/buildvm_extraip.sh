@@ -116,7 +116,7 @@ for ((i=0; i<$range; i++)); do
   ip_list+=("$ip")
 done
 # 宿主机的IP列表
-_green "当前宿主机可用的外网IP列表"
+_green "当前宿主机可用的外网IP列表："
 for ip in "${ip_list[@]}"; do
   echo "$ip"
 done
@@ -129,6 +129,7 @@ for ip in "${ip_list[@]}"; do
 done
 # 宿主机的网关
 gateway=$(grep -E "iface $interface" -A 2 "/etc/network/interfaces" | grep "gateway" | awk '{print $2}')
+_green "当前虚拟机将绑定的IP为：${user_ip}"
 # echo "ip=${user_ip}/${user_ip_range},gw=${gateway}"
 
 qm create $vm_num --agent 1 --scsihw virtio-scsi-single --serial0 socket --cores $core --sockets 1 --cpu host --net0 virtio,bridge=vmbr0,firewall=0
