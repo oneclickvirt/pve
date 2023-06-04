@@ -62,7 +62,6 @@ check_cdn_file() {
 }
 
 cdn_urls=("https://cdn.spiritlhl.workers.dev/" "https://cdn3.spiritlhl.net/" "https://cdn1.spiritlhl.net/" "https://ghproxy.com/" "https://cdn2.spiritlhl.net/")
-check_cdn_file
 if [ ! -d "qcow" ]; then
   mkdir qcow
 fi
@@ -79,10 +78,11 @@ if [[ -z "$file_path" ]]; then
   echo "无法安装对应系统，请查看 https://github.com/spiritLHLS/Images/ 支持的系统镜像 "
   exit 1
 fi
-# v1.0 基础安装包预安装
-# v1.1 增加agent安装包预安装，方便在宿主机上看到虚拟机的进程
-url="${cdn_success_url}https://github.com/spiritLHLS/Images/releases/download/v1.0/${system}.qcow2"
 if [ ! -f "$file_path" ]; then
+  # v1.0 基础安装包预安装
+  # v1.1 增加agent安装包预安装，方便在宿主机上看到虚拟机的进程
+  check_cdn_file
+  url="${cdn_success_url}https://github.com/spiritLHLS/Images/releases/download/v1.0/${system}.qcow2"
   curl -L -o "$file_path" "$url"
 fi
 
