@@ -137,13 +137,18 @@ for ip in "${ip_list[@]}"; do
   fi
 done
 # 宿主机的网关
-gateway=$(grep -E "iface $interface" -A 2 "/etc/network/interfaces" | grep "gateway" | awk '{print $2}')
+gateway=$(grep -E "iface $interface" -A 3 "/etc/network/interfaces" | grep "gateway" | awk '{print $2}' | head -n 1)
+if [ -z "$gateway" ]; then
+  if [ -f /etc/network/interfaces.d/50-cloud-init ]; then
+    gateway=$(grep -E "iface $interface" -A 3 "/etc/network/interfaces.d/50-cloud-init" | grep "gateway" | awk '{print $2}' | head -n 1)
+  fi
+  if [ -z "$gateway" ]; then
+    echo "宿主机网关查询失败"
+    exit 1
+  fi
+fi
 # echo "ip=${user_ip}/${user_ip_range},gw=${gateway}"
 # 检查变量是否为空并执行相应操作
-if [ -z "$gateway" ]; then
-  echo "宿主机网关查询失败"
-  exit 1
-fi
 if [ -z "$user_ip" ]; then
   echo "可使用的IP列表查询失败"
   exit 1
