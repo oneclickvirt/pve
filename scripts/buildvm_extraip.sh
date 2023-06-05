@@ -106,8 +106,13 @@ fi
 interface=$(lshw -C network | awk '/logical name:/{print $3}' | head -1)
 user_main_ip_range=$(grep -A 1 "iface ${interface}" /etc/network/interfaces | grep "address" | awk '{print $2}')
 if [ -z "$user_main_ip_range" ]; then
-  echo "宿主机可用IP区间查询失败"
-  exit 1
+  if [ -f /etc/network/interfaces.d/50-cloud-init ]; then
+    user_main_ip_range=$(grep -A 1 "iface ${interface}" /etc/network/interfaces.d/50-cloud-init | grep "address" | awk '{print $2}' | head -n 1)
+  fi
+  if [ -z "$user_main_ip_range" ]; then
+    echo "宿主机可用IP区间查询失败"
+    exit 1
+  fi
 fi
 # 宿主机IP
 user_main_ip=$(echo "$user_main_ip_range" | cut -d'/' -f1)
