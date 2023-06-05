@@ -19,11 +19,11 @@
 
 ### 更新
 
-2023.06.04
+2023.06.05
 
-- 增加一键开设独立IPV4虚拟机的脚本，支持一键生成独立IPV4的KVM虚拟化的虚拟机
-- 修改创建KVM虚拟机过程中预下载镜像前CDN检测的逻辑问题，如果已存在镜像则不再检测CDN有效性，因为无需通过CDN下载镜像文件
-- 更新中文文档部分说明
+- 创建IPV4的NAT网关时检测IPV4的方法改为使用ip addr show检测，不再使用ip route，这样可以带上IP区间不写死
+- 自动检测IPV6子网是否存在，如果存在则绑定vmbr0，不存在则只绑定IPV4
+- 更改部分说明的描述
 
 [更新日志](CHANGELOG.md)
 
@@ -35,7 +35,7 @@
     * [PVE基础安装说明](#PVE基础安装说明)
     * [一键安装PVE](#一键安装PVE)
     * [预配置环境](#预配置环境)
-    * [自动配置IPV4的NAT网关](#自动配置IPV4的NAT网关)
+    * [自动配置宿主机的网关](#自动配置宿主机的网关)
 * [一键生成KVM虚拟化的NAT服务器](#一键生成KVM虚拟化的NAT服务器)
     * [单独生成KVM虚拟化的VM](#单独生成KVM虚拟化的VM)
     * [单个生成的使用方法](#单个生成的使用方法)
@@ -140,11 +140,12 @@ bash <(wget -qO- --no-check-certificate https://raw.githubusercontent.com/spirit
 bash <(wget -qO- --no-check-certificate https://ghproxy.com/https://raw.githubusercontent.com/spiritLHLS/pve/main/scripts/build_backend.sh)
 ```
 
-### 自动配置IPV4的NAT网关
+### 自动配置宿主机的网关
 
 - **使用前请保证重启过服务器且此时PVE能正常使用WEB端再执行，重启机器后不要立即执行此命令，至少等几分钟待WEB端启动成功后再执行**
 - **这一步是最容易造成SSH断开的，原因是未等待PVE内核启动就修改网络会造成设置冲突，所以至少等几分钟待内核启动也就是WEB端启动成功后再执行**
-- 创建vmbr0，母鸡允许addr和gateway为内网IP或外网IP，已自动识别，测试腾讯云可用
+- 创建vmbr0，母鸡允许addr和gateway为内网IP或外网IP，已自动识别
+- vmbr0创建支持纯IPV4或双栈服务器，自动识别IPV4地址和IPV6地址，自动识别对应的IP区间
 - 创建vmbr1(NAT网关)
 - 开NAT虚拟机时网关（IPV4）使用```172.16.1.1```，IPV4/CIDR使用```172.16.1.x/24```，这里的x不能是1，当然如果后续使用本套脚本无需关注这点细枝末节的东西
 - 想查看完整设置可以执行```cat /etc/network/interfaces```查看
