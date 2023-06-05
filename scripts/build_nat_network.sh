@@ -1,5 +1,6 @@
 #!/bin/bash
 #from https://github.com/spiritLHLS/pve
+# 2023.06.05
 
 # 打印信息
 _red() { echo -e "\033[31m\033[01m$@\033[0m"; }
@@ -18,65 +19,65 @@ else
   echo "Locale set to $utf8_locale"
 fi
 
-# API_NET=("ip.sb" "ipget.net" "ip.ping0.cc" "https://ip4.seeip.org" "https://api.my-ip.io/ip" "https://ipv4.icanhazip.com" "api.ipify.org")
-# for p in "${API_NET[@]}"; do
-#   response=$(curl -s4m8 "$p")
-#   sleep 1
-#   if [ $? -eq 0 ] && ! echo "$response" | grep -q "error"; then
-#     IP_API="$p"
-#     break
-#   fi
-# done
-# IPV4=$(curl -s4m8 "$IP_API")
-IPV4=$(ip -4 addr show | grep global | awk '{print $2}' | cut -d '/' -f1 | head -n 1)
-
 # 查询信息
 if ! command -v lshw > /dev/null 2>&1; then
       apt-get install -y lshw
 fi
+# 提取物理网卡名字
 interface=$(lshw -C network | awk '/logical name:/{print $3}' | head -1)
 if [ -z "$interface" ]; then
   interface="eth0"
 fi
-in_ip=$(ifconfig ${interface} | grep "inet " | awk '{print $2}')
-if [ -z "$in_ip" ]; then
-  ip=${IPV4}/24
-else
-  ip=${in_ip}/24
-fi
+# 提取IPV4地址
+ipv4_address=$(ip addr show | awk '/inet .*global/ && !/inet6/ {print $2}')
+# 提取IPV4网关
 gateway=$(ip route | awk '/default/ {print $3}')
-
-# # 获取母鸡子网前缀
-# SUBNET_PREFIX=$(ip -6 addr show | grep -E 'inet6.*global' | awk '{print $2}' | awk -F'/' '{print $1}' | head -n 1 | cut -d ':' -f1-5):
-# # 提取IPV6地址
-# content=$(cat /etc/network/interfaces.d/50-cloud-init)
-# ipv6_line=$(echo "$content" | grep "address 2a12:bec0:150:1a::a/64")
-# ipv6_address=$(echo "$ipv6_line" | awk '{print $2}')
-# # 检查是否存在 IPV6 
-# if [ -z "$SUBNET_PREFIX" ]; then
-#     _red "无 IPV6 子网，不进行自动映射"
-# else
-#     _blue "母鸡的IPV6子网前缀为 $SUBNET_PREFIX"
-# fi
-
-# iface vmbr0 inet6 static
-#     address $ipv6_address
-#     gateway ${SUBNET_PREFIX}1
+# 获取IPV6子网前缀
+SUBNET_PREFIX=$(ip -6 addr show | grep -E 'inet6.*global' | awk '{print $2}' | awk -F'/' '{print $1}' | head -n 1 | cut -d ':' -f1-5):
+# 提取IPV6地址
+ipv6_address=$(ip addr show | awk '/inet6.*scope global/ { print $2 }' | head -n 1)
+# 检查是否存在 IPV6 
+if [ -z "$SUBNET_PREFIX" ]; then
+    _red "无 IPV6 子网，不进行自动映射"
+else
+    _blue "母鸡的IPV6子网前缀为 $SUBNET_PREFIX"
+fi
+if [ -z "$ipv6_address" ]; then
+    _red "母机无 IPV6 地址，不进行自动映射"
+else
+    _blue "母鸡的IPV6地址为 $ipv6_address"
+fi
 
 # 录入网关
 cp /etc/network/interfaces /etc/network/interfaces.bak
 if grep -q "vmbr0" /etc/network/interfaces; then
     echo "vmbr0 已存在在 /etc/network/interfaces"
 else
+if [ -z "$SUBNET_PREFIX" ] || [ -z "$ipv6_address" ]; then
 cat << EOF | sudo tee -a /etc/network/interfaces
 auto vmbr0
 iface vmbr0 inet static
-    address $ip
+    address $ipv4_address
     gateway $gateway
     bridge_ports $interface
     bridge_stp off
     bridge_fd 0
 EOF
+else
+cat << EOF | sudo tee -a /etc/network/interfaces
+auto vmbr0
+iface vmbr0 inet static
+    address $ipv4_address
+    gateway $gateway
+    bridge_ports $interface
+    bridge_stp off
+    bridge_fd 0
+
+iface vmbr0 inet6 static
+        address ${ipv6_address}
+        gateway ${SUBNET_PREFIX}
+EOF
+fi
 fi
 if grep -q "vmbr1" /etc/network/interfaces; then
     echo "vmbr1 已存在在 /etc/network/interfaces"
