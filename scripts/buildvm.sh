@@ -7,7 +7,7 @@
 # ./buildvm.sh 102 test1 1234567 1 512 5 40001 40002 40003 50000 50025 debian11 local
 
 cd /root >/dev/null 2>&1
-# 创建容器
+# 创建NAT的虚拟机
 vm_num="${1:-102}"
 user="${2:-test}"
 password="${3:-123456}"
