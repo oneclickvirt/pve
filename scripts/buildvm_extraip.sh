@@ -7,7 +7,7 @@
 # ./buildvm_extraip.sh 152 test1 1234567 1 512 5 debian11 local
 
 cd /root >/dev/null 2>&1
-# 创建容器
+# 创建独立IPV4地址的虚拟机
 vm_num="${1:-152}"
 user="${2:-test}"
 password="${3:-123456}"
