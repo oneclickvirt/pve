@@ -104,15 +104,10 @@ if ! command -v ping > /dev/null 2>&1; then
       apt-get install -y ping
 fi
 interface=$(lshw -C network | awk '/logical name:/{print $3}' | head -1)
-user_main_ip_range=$(grep -A 1 "iface ${interface}" /etc/network/interfaces | grep "address" | awk '{print $2}')
+user_main_ip_range=$(grep -A 1 "iface ${interface}" /etc/network/interfaces | grep "address" | awk '{print $2}' | head -n 1)
 if [ -z "$user_main_ip_range" ]; then
-  if [ -f /etc/network/interfaces.d/50-cloud-init ]; then
-    user_main_ip_range=$(grep -A 1 "iface ${interface}" /etc/network/interfaces.d/50-cloud-init | grep "address" | awk '{print $2}' | head -n 1)
-  fi
-  if [ -z "$user_main_ip_range" ]; then
-    echo "宿主机可用IP区间查询失败"
-    exit 1
-  fi
+  echo "宿主机可用IP区间查询失败"
+  exit 1
 fi
 # 宿主机IP
 user_main_ip=$(echo "$user_main_ip_range" | cut -d'/' -f1)
@@ -139,13 +134,8 @@ done
 # 宿主机的网关
 gateway=$(grep -E "iface $interface" -A 3 "/etc/network/interfaces" | grep "gateway" | awk '{print $2}' | head -n 1)
 if [ -z "$gateway" ]; then
-  if [ -f /etc/network/interfaces.d/50-cloud-init ]; then
-    gateway=$(grep -E "iface $interface" -A 3 "/etc/network/interfaces.d/50-cloud-init" | grep "gateway" | awk '{print $2}' | head -n 1)
-  fi
-  if [ -z "$gateway" ]; then
-    echo "宿主机网关查询失败"
-    exit 1
-  fi
+  echo "宿主机网关查询失败"
+  exit 1
 fi
 # echo "ip=${user_ip}/${user_ip_range},gw=${gateway}"
 # 检查变量是否为空并执行相应操作
