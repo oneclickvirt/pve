@@ -128,10 +128,7 @@ for ((i=0; i<$range; i++)); do
   ip_list+=("$ip")
 done
 # 宿主机的IP列表
-_green "当前宿主机可用的外网IP列表："
-for ip in "${ip_list[@]}"; do
-  echo "$ip"
-done
+_green "当前宿主机可用的外网IP列表长度为${range}"
 for ip in "${ip_list[@]}"; do
   if ! ping -c 1 "$ip" >/dev/null; then
     # 未使用的IP之一
@@ -141,7 +138,6 @@ for ip in "${ip_list[@]}"; do
 done
 # 宿主机的网关
 gateway=$(grep -E "iface $interface" -A 2 "/etc/network/interfaces" | grep "gateway" | awk '{print $2}')
-_green "当前虚拟机将绑定的IP为：${user_ip}"
 # echo "ip=${user_ip}/${user_ip_range},gw=${gateway}"
 # 检查变量是否为空并执行相应操作
 if [ -z "$gateway" ]; then
@@ -156,6 +152,7 @@ if [ -z "$user_ip_range" ]; then
   echo "本虚拟机将要绑定的IP选择失败"
   exit 1
 fi
+_green "当前虚拟机将绑定的IP为：${user_ip}"
 
 qm create $vm_num --agent 1 --scsihw virtio-scsi-single --serial0 socket --cores $core --sockets 1 --cpu host --net0 virtio,bridge=vmbr0,firewall=0
 qm importdisk $vm_num /root/qcow/${system}.qcow2 ${storage}
