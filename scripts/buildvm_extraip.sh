@@ -119,6 +119,9 @@ IFS='.' read -r -a octets <<< "$user_main_ip"
 ip_list=()
 for ((i=0; i<$range; i++)); do
   octet=$((i % 256))
+  if [ $octet -gt 254 ]; then
+    break
+  fi
   ip="${octets[0]}.${octets[1]}.${octets[2]}.$((octets[3] + octet))"
   ip_list+=("$ip")
 done
