@@ -292,7 +292,10 @@ install_required_modules() {
             _green "$module 已经安装！"
         else
             apt-get install -y $module
-            _green "$module 已成功安装！"
+	    if [ $? -ne 0 ]; then
+	        apt-get install -y $module --fix-missing
+	    fi
+            _green "$module 已尝试过安装！"
         fi
     done
 }
