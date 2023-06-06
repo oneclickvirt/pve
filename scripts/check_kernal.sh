@@ -22,7 +22,8 @@ check_config(){
     
     # 检查硬盘大小
     total_disk=$(df -h / | awk '/\//{print $2}')
-    total_disk_num=$(echo $total_disk | sed 's/G//')
+    total_disk_num=$(echo $total_disk | sed -E 's/([0-9.]+)([GT])/\1 \2/')
+    total_disk_num=$(awk '{printf "%.0f", $1 * ($2 == "T" ? 1024 : 1)}' <<< "$total_disk_num")
     if [ "$total_disk_num" -lt 20 ]; then
         _red "本机配置不满足最低要求：至少20G硬盘"
         _red "本机硬盘配置无法安装PVE"
