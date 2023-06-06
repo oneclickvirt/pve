@@ -259,7 +259,18 @@ if echo $output | grep -q "NO_PUBKEY"; then
    _yellow "try sudo apt-key adv --keyserver keyserver.ubuntu.com --recv-keys missing key"
    exit 1
 fi
-apt-get install -y proxmox-ve postfix open-iscsi
+apt-get install -y proxmox-ve
+if [ $? -ne 0 ]; then
+    apt-get install -y proxmox-ve --fix-missing
+fi
+apt-get install -y postfix
+if [ $? -ne 0 ]; then
+    apt-get install -y postfix --fix-missing
+fi
+apt-get install -y open-iscsi
+if [ $? -ne 0 ]; then
+    apt-get install -y open-iscsi --fix-missing
+fi
 
 # 如果是国内服务器则替换CT源为国内镜像源
 if [[ -n "${CN}" ]]; then
