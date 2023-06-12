@@ -45,21 +45,25 @@ if grep -q 'NO_PUBKEY' "$temp_file_apt_fix"; then
     fi
 fi
 rm "$temp_file_apt_fix"
-if ! command -v wget > /dev/null 2>&1; then
-      apt-get install -y wget
-fi
-if ! command -v curl > /dev/null 2>&1; then
-      apt-get install -y curl
-fi
-if ! command -v sudo > /dev/null 2>&1; then
-      apt-get install -y sudo
-fi
-if ! command -v bc > /dev/null 2>&1; then
-      apt-get install -y bc
-fi
-if ! command -v iptables > /dev/null 2>&1; then
-      apt-get install -y iptables
-fi
+
+install_package() {
+    package_name=$1
+    if dpkg -s $package_name > /dev/null 2>&1 ; then
+        _green "$package_name 已经安装"
+    else
+	apt-get install -y $package_name
+	if [ $? -ne 0 ]; then
+            apt-get install -y $package_name --fix-missing
+        fi
+	_green "$package_name 已尝试安装"
+    fi
+}
+
+install_package wget
+install_package curl
+install_package sudo
+install_package bc
+install_package iptables
 
 check_cdn() {
   local o_url=$1
@@ -151,10 +155,6 @@ if [ "${hostname}" != "pve" ]; then
        echo "${ip} ${hostname}.localdomain ${hostname}" >> /etc/hosts
        echo "Added ${ip} ${hostname}.localdomain ${hostname} to /etc/hosts"
    fi
-   # if ! grep -q "${ip} pve.proxmox.com pve" /etc/hosts; then
-   #     echo "${ip} pve.proxmox.com pve" >> /etc/hosts
-   #     echo "Added ${ip} pve.proxmox.com pve to /etc/hosts"
-   # fi
    chattr +i /etc/hosts
 fi
 
@@ -199,7 +199,7 @@ fi
 apt-get install lsb-release -y
 version=$(lsb_release -cs)
 case $version in
-  wheezy|squeeze|jessie|stretch|buster|bullseye)
+  stretch|buster|bullseye|bookworm)
     repo_url="deb http://download.proxmox.com/debian/pve ${version} pve-no-subscription"
     if [[ -n "${CN}" ]]; then
       repo_url="deb https://mirrors.tuna.tsinghua.edu.cn/proxmox/debian/pve ${version} pve-no-subscription"
@@ -219,17 +219,52 @@ case $version in
     ;;
 esac
 
-# 6.x
-if [ ! -f "/etc/apt/trusted.gpg.d/proxmox-ve-release-6.x.gpg" ]; then
-  wget http://download.proxmox.com/debian/proxmox-ve-release-6.x.gpg -O /etc/apt/trusted.gpg.d/proxmox-ve-release-6.x.gpg
-  chmod +r /etc/apt/trusted.gpg.d/proxmox-ve-release-6.x.gpg
-fi
-
-# 7.x
-if [ ! -f "/etc/apt/trusted.gpg.d/proxmox-release-bullseye.gpg" ]; then
-  wget http://download.proxmox.com/debian/proxmox-release-bullseye.gpg -O /etc/apt/trusted.gpg.d/proxmox-release-bullseye.gpg
-  chmod +r /etc/apt/trusted.gpg.d/proxmox-release-bullseye.gpg
-fi
+case $version in
+  stretch)
+    if [ ! -f "/etc/apt/trusted.gpg.d/proxmox-ve-release-4.x.gpg" ]; then
+      wget http://download.proxmox.com/debian/proxmox-ve-release-4.x.gpg -O /etc/apt/trusted.gpg.d/proxmox-ve-release-4.x.gpg
+      chmod +r /etc/apt/trusted.gpg.d/proxmox-ve-release-4.x.gpg
+    fi
+    if [ ! -f "/etc/apt/trusted.gpg.d/proxmox-ve-release-6.x.gpg" ]; then
+      wget http://download.proxmox.com/debian/proxmox-ve-release-6.x.gpg -O /etc/apt/trusted.gpg.d/proxmox-ve-release-6.x.gpg
+      chmod +r /etc/apt/trusted.gpg.d/proxmox-ve-release-6.x.gpg
+    fi
+    ;;
+  buster)
+    if [ ! -f "/etc/apt/trusted.gpg.d/proxmox-ve-release-5.x.gpg" ]; then
+      wget http://download.proxmox.com/debian/proxmox-ve-release-5.x.gpg -O /etc/apt/trusted.gpg.d/proxmox-ve-release-5.x.gpg
+      chmod +r /etc/apt/trusted.gpg.d/proxmox-ve-release-5.x.gpg
+    fi
+    if [ ! -f "/etc/apt/trusted.gpg.d/proxmox-ve-release-6.x.gpg" ]; then
+      wget http://download.proxmox.com/debian/proxmox-ve-release-6.x.gpg -O /etc/apt/trusted.gpg.d/proxmox-ve-release-6.x.gpg
+      chmod +r /etc/apt/trusted.gpg.d/proxmox-ve-release-6.x.gpg
+    fi
+    ;;
+  bullseye)
+    if [ ! -f "/etc/apt/trusted.gpg.d/proxmox-ve-release-6.x.gpg" ]; then
+      wget http://download.proxmox.com/debian/proxmox-ve-release-6.x.gpg -O /etc/apt/trusted.gpg.d/proxmox-ve-release-6.x.gpg
+      chmod +r /etc/apt/trusted.gpg.d/proxmox-ve-release-6.x.gpg
+    fi
+    if [ ! -f "/etc/apt/trusted.gpg.d/proxmox-release-bullseye.gpg" ]; then
+      wget http://download.proxmox.com/debian/proxmox-release-bullseye.gpg -O /etc/apt/trusted.gpg.d/proxmox-release-bullseye.gpg
+      chmod +r /etc/apt/trusted.gpg.d/proxmox-release-bullseye.gpg
+    fi
+    ;;
+  bookworm)
+    if [ ! -f "/etc/apt/trusted.gpg.d/proxmox-release-bookworm.gpg" ]; then
+      wget http://download.proxmox.com/debian/proxmox-release-bookworm.gpg -O /etc/apt/trusted.gpg.d/proxmox-release-bookworm.gpg
+      chmod +r /etc/apt/trusted.gpg.d/proxmox-release-bookworm.gpg
+    fi
+    ;;
+  *)
+    _red "Error: Unsupported Debian version"
+    reading "是否要继续安装(非Debian系会爆上面这个警告)？(回车则默认不继续安装) [y/n] " confirm
+    echo ""
+    if [ "$confirm" != "y" ]; then
+      exit 1
+    fi
+    ;;
+esac
 
 if ! grep -q "^deb.*pve-no-subscription" /etc/apt/sources.list; then
    echo "$repo_url" >> /etc/apt/sources.list
@@ -259,18 +294,9 @@ if echo $output | grep -q "NO_PUBKEY"; then
    _yellow "try sudo apt-key adv --keyserver keyserver.ubuntu.com --recv-keys missing key"
    exit 1
 fi
-apt-get install -y proxmox-ve
-if [ $? -ne 0 ]; then
-    apt-get install -y proxmox-ve --fix-missing
-fi
-apt-get install -y postfix
-if [ $? -ne 0 ]; then
-    apt-get install -y postfix --fix-missing
-fi
-apt-get install -y open-iscsi
-if [ $? -ne 0 ]; then
-    apt-get install -y open-iscsi --fix-missing
-fi
+install_package proxmox-ve
+install_package postfix
+install_package open-iscsi
 
 # 如果是国内服务器则替换CT源为国内镜像源
 if [[ -n "${CN}" ]]; then
@@ -284,22 +310,14 @@ cp /etc/apt/sources.list.d/pve-enterprise.list /etc/apt/sources.list.d/pve-enter
 # echo "deb http://download.proxmox.com/debian/pve $(lsb_release -sc) pve-no-subscription" > /etc/apt/sources.list.d/pve-enterprise.list
 rm -rf /etc/apt/sources.list.d/pve-enterprise.list
 apt-get update
-install_required_modules() {
-    modules=("sudo" "lshw" "iproute2" "ifupdown2" "net-tools" "cloud-init" "novnc") # "isc-dhcp-server"
-    for module in "${modules[@]}"
-    do
-        if dpkg -s $module > /dev/null 2>&1 ; then
-            _green "$module 已经安装！"
-        else
-            apt-get install -y $module
-	    if [ $? -ne 0 ]; then
-	        apt-get install -y $module --fix-missing
-	    fi
-            _green "$module 已尝试过安装！"
-        fi
-    done
-}
-install_required_modules
+install_package sudo
+install_package lshw
+install_package iproute2
+install_package ifupdown2
+install_package net-tools
+install_package cloud-init
+install_package novnc
+# install_package isc-dhcp-server
 rebuild_cloud_init
 
 # 打印内核
@@ -309,7 +327,7 @@ installed_kernels=($(dpkg -l 'pve-kernel-*' | awk '/^ii/ {print $2}' | cut -d'-'
 latest_kernel=${installed_kernels[-1]}
 _green "PVE latest kernel: $latest_kernel"
 # update-grub
-apt-get install ipcalc -y
+install_package ipcalc
 # 检查/etc/network/interfaces是否有source /etc/network/interfaces.d/*行
 if grep -q "source /etc/network/interfaces.d/*" /etc/network/interfaces; then
   # 检查/etc/network/interfaces.d/文件夹下是否有50-cloud-init文件
