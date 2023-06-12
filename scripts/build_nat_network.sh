@@ -52,16 +52,17 @@ fi
 if [ -f /etc/network/interfaces ]; then
     cp /etc/network/interfaces /etc/network/interfaces.bak
 fi
-interfaces_file=""
-if [ -f /etc/network/interfaces.d/50-cloud-init ] && [ -f /etc/network/interfaces ]; then
-    if grep -q "source /etc/network/interfaces.d/*" /etc/network/interfaces; then
-        interfaces_file="/etc/network/interfaces.d/50-cloud-init"
-    fi
-fi
-if [ -z "$interfaces_file" ]; then
-    interfaces_file="/etc/network/interfaces"
-fi
+interfaces_file="/etc/network/interfaces"
 chattr -i "$interfaces_file"
+# if ! grep -q "auto lo" "$interfaces_file"; then
+#     echo "auto lo" >> "$interfaces_file"
+# fi
+# if ! grep -q "iface lo inet loopback" "$interfaces_file"; then
+#     echo "iface lo inet loopback" >> "$interfaces_file"
+# fi
+if ! grep -q "iface ${interface} inet manual" "$interfaces_file"; then
+    echo "iface ${interface} inet manual" >> "$interfaces_file"
+fi
 if grep -q "vmbr0" "$interfaces_file"; then
     echo "vmbr0 已存在在 ${interfaces_file}"
 else
