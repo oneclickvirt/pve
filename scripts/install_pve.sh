@@ -129,33 +129,33 @@ hostname=$(hostname)
 if [ "${hostname}" != "pve" ]; then
     chattr -i /etc/hosts
     hosts=$(grep -E "^[^#]*\s+${hostname}\s+${hostname}\$" /etc/hosts | grep -v "${ip}")
-   if [ -n "${hosts}" ]; then
-       # 注释掉查询到的行
-       sudo sed -i "s/^$(echo ${hosts} | sed 's/\//\\\//g')/# &/" /etc/hosts
-       # 添加新行
-       # echo "${ip} ${hostname} ${hostname}" | sudo tee -a /etc/hosts > /dev/null
-       # _green "已将 ${ip} ${hostname} ${hostname} 添加到 /etc/hosts 文件中"
-   else
-       _blue "已存在 ${ip} ${hostname} ${hostname} 的记录，无需添加"
-   fi
-   chattr -i /etc/hostname
-   hostnamectl set-hostname pve
-   chattr +i /etc/hostname
-   hostname=$(hostname)
-   if ! grep -q "::1 localhost" /etc/hosts; then
-       echo "::1 localhost" >> /etc/hosts
-       echo "Added ::1 localhost to /etc/hosts"
-   fi
-   # if grep -q "^127\.0\.0\.1 localhost$" /etc/hosts; then
-   #     sed -i '/^127\.0\.0\.1 localhost$/ s/^/#/' /etc/hosts
-   #     echo "Commented out 127.0.0.1 localhost in /etc/hosts"
-   # fi
-   if ! grep -q "^127\.0\.0\.1 localhost\.localdomain localhost$" /etc/hosts; then
-       # 127.0.1.1
-       echo "${ip} ${hostname}.localdomain ${hostname}" >> /etc/hosts
-       echo "Added ${ip} ${hostname}.localdomain ${hostname} to /etc/hosts"
-   fi
-   chattr +i /etc/hosts
+    if [ -n "${hosts}" ]; then
+        # 注释掉查询到的行
+        sudo sed -i "s/^$(echo ${hosts} | sed 's/\//\\\//g')/# &/" /etc/hosts
+        # 添加新行
+        # echo "${ip} ${hostname} ${hostname}" | sudo tee -a /etc/hosts > /dev/null
+        # _green "已将 ${ip} ${hostname} ${hostname} 添加到 /etc/hosts 文件中"
+    else
+        _blue "已存在 ${ip} ${hostname} ${hostname} 的记录，无需添加"
+    fi
+    chattr -i /etc/hostname
+    hostnamectl set-hostname pve
+    chattr +i /etc/hostname
+    hostname=$(hostname)
+    if ! grep -q "::1 localhost" /etc/hosts; then
+        echo "::1 localhost" >> /etc/hosts
+        echo "Added ::1 localhost to /etc/hosts"
+    fi
+    if grep -q "^127\.0\.1\.1" /etc/hosts; then
+        sed -i '/^127\.0\.1\.1/s/^/#/' /etc/hosts
+        echo "Commented out lines starting with 127.0.1.1 in /etc/hosts"
+    fi
+    if ! grep -q "^127\.0\.0\.1 localhost\.localdomain localhost$" /etc/hosts; then
+        # 127.0.1.1
+        echo "${ip} ${hostname}.localdomain ${hostname}" >> /etc/hosts
+        echo "Added ${ip} ${hostname}.localdomain ${hostname} to /etc/hosts"
+    fi
+    chattr +i /etc/hosts
 fi
 
 ## 更改网络优先级为IPV4优先
