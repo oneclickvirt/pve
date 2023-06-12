@@ -61,6 +61,7 @@ fi
 if [ -z "$interfaces_file" ]; then
     interfaces_file="/etc/network/interfaces"
 fi
+chattr -i "$interfaces_file"
 if grep -q "vmbr0" "$interfaces_file"; then
     echo "vmbr0 已存在在 ${interfaces_file}"
 else
@@ -107,6 +108,7 @@ iface vmbr1 inet static
     post-down iptables -t nat -D POSTROUTING -s '172.16.1.0/24' -o vmbr0 -j MASQUERADE
 EOF
 fi
+chattr +i "$interfaces_file"
 
 # 加载iptables并设置回源且允许NAT端口转发
 apt-get install -y iptables iptables-persistent
