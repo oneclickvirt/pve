@@ -125,9 +125,6 @@ curl -L https://ghproxy.com/https://raw.githubusercontent.com/spiritLHLS/pve/mai
 - 创建资源池mypool
 - 移除订阅弹窗
 - 尝试开启硬件直通
-- 检测AppArmor模块并试图安装
-- 执行完毕记得重启服务器，也就是执行```reboot```
-- 重启系统前推荐挂上[nezha探针](https://github.com/naiba/nezha)方便在后台不通过SSH使用命令行，避免SSH可能因为商家奇葩的预设导致重启后root密码丢失
 
 ```
 bash <(wget -qO- --no-check-certificate https://raw.githubusercontent.com/spiritLHLS/pve/main/scripts/build_backend.sh)
