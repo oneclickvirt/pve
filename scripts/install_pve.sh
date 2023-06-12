@@ -358,6 +358,6 @@ systemctl start check-dns.service
 url="https://${ip}:8006/"
 _green "安装完毕，请打开HTTPS网页 $url"
 _green "用户名、密码就是服务器所使用的用户名、密码(如root和root用户的密码)"
-_green "请重启机器以更新PVE的内核"
+_green "如果登录无误请不要急着重启系统，去执行预配置环境的命令后再重启系统"
 
 
