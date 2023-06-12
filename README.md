@@ -23,6 +23,8 @@
 
 - 修改部分提示，避免错误的操作流程
 - 增加对apparmor的依赖修复，避免安装apparmor在部分模板上卡死未成功安装
+- 适配Debian12系统
+- 重新整合组件安装部分的代码，优化代码结构
 
 [更新日志](CHANGELOG.md)
 
@@ -67,7 +69,7 @@
 
 当然不使用最新的debian系统也没问题，只不过得不到官方支持。只适配Debian系统(非Debian无法通过APT源安装，官方只给了Debian的镜像，其他系统只能使用ISO安装)
 
-- 系统要求：Debian 8~11，不能是 Debian 12
+- 系统要求：Debian 8+
 - 最低的硬件要求：2核2G内存x86_64架构服务器硬盘至少20G，内存开点swap免得机器炸了[开SWAP点我跳转](https://github.com/spiritLHLS/addswap)
 - 可开KVM的硬件要求：VM-X或AMD-V支持-(部分VPS和全部独服支持)
 - 如果硬件需求不满足，可使用LXD批量开LXC的[跳转](https://github.com/spiritLHLS/lxc)
