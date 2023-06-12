@@ -49,12 +49,23 @@ else
 fi
 
 # 录入网关
-cp /etc/network/interfaces /etc/network/interfaces.bak
-if grep -q "vmbr0" /etc/network/interfaces; then
-    echo "vmbr0 已存在在 /etc/network/interfaces"
+if [ -f /etc/network/interfaces ]; then
+    cp /etc/network/interfaces /etc/network/interfaces.bak
+fi
+interfaces_file=""
+if [ -f /etc/network/interfaces.d/50-cloud-init ] && [ -f /etc/network/interfaces ]; then
+    if grep -q "source /etc/network/interfaces.d/*" /etc/network/interfaces; then
+        interfaces_file="/etc/network/interfaces.d/50-cloud-init"
+    fi
+fi
+if [ -z "$interfaces_file" ]; then
+    interfaces_file="/etc/network/interfaces"
+fi
+if grep -q "vmbr0" "$interfaces_file"; then
+    echo "vmbr0 已存在在 ${interfaces_file}"
 else
 if [ -z "$SUBNET_PREFIX" ] || [ -z "$ipv6_address" ]; then
-cat << EOF | sudo tee -a /etc/network/interfaces
+cat << EOF | sudo tee -a "$interfaces_file"
 auto vmbr0
 iface vmbr0 inet static
     address $ipv4_address
@@ -64,7 +75,7 @@ iface vmbr0 inet static
     bridge_fd 0
 EOF
 else
-cat << EOF | sudo tee -a /etc/network/interfaces
+cat << EOF | sudo tee -a "$interfaces_file"
 auto vmbr0
 iface vmbr0 inet static
     address $ipv4_address
@@ -79,10 +90,10 @@ iface vmbr0 inet6 static
 EOF
 fi
 fi
-if grep -q "vmbr1" /etc/network/interfaces; then
-    echo "vmbr1 已存在在 /etc/network/interfaces"
+if grep -q "vmbr1" "$interfaces_file"; then
+    echo "vmbr1 已存在在 "$interfaces_file""
 else
-cat << EOF | sudo tee -a /etc/network/interfaces
+cat << EOF | sudo tee -a "$interfaces_file"
 auto vmbr1
 iface vmbr1 inet static
     address 172.16.1.1
