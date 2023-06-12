@@ -51,9 +51,8 @@ rm -rf vm*
 curl -L https://raw.githubusercontent.com/spiritLHLS/pve/main/back/uninstallpve.sh -o uninstallpve.sh && chmod +x uninstallpve.sh && bash uninstallpve.sh
 ```
 
-### 环境配置
+### PVE基础安装说明
 
-- 检测AppArmor模块并试图安装
-- 执行完毕记得重启服务器，也就是执行```reboot```
+- 配置完毕需要重启系统加载新内核
 - 重启系统前推荐挂上[nezha探针](https://github.com/naiba/nezha)方便在后台不通过SSH使用命令行，避免SSH可能因为商家奇葩的预设导致重启后root密码丢失
 
