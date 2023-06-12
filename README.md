@@ -19,10 +19,10 @@
 
 ### 更新
 
-2023.06.06
+2023.06.12
 
-- 修复检测过程中遇到系统盘以TB为单位的识别问题，适配系统盘以TB或GB单位计算
-- 修复安装过程中部分奇葩模板可能出现的依赖问题，使用--fix-missing命令修复依赖
+- 修改部分提示，避免错误的操作流程
+- 增加对apparmor的依赖修复，避免安装apparmor在部分模板上卡死未成功安装
 
 [更新日志](CHANGELOG.md)
 
@@ -105,8 +105,6 @@ bash <(wget -qO- --no-check-certificate https://ghproxy.com/https://raw.githubus
 - 打印查询Linux系统内核和PVE内核是否已安装
 - 检测```/etc/resolv.conf```是否为空，为空则设置检测```8.8.8.8```的开机自启添加DNS的systemd服务
 - 新增PVE的APT源链接后，下载PVE并打印输出登陆信息
-- 配置完毕需要重启系统加载新内核
-- 重启系统前推荐挂上[nezha探针](https://github.com/naiba/nezha)方便在后台不通过SSH使用命令行，避免SSH可能因为商家奇葩的预设导致重启后root密码丢失
 
 #### 一键安装PVE
 
@@ -125,6 +123,11 @@ curl -L https://ghproxy.com/https://raw.githubusercontent.com/spiritLHLS/pve/mai
 - 创建资源池mypool
 - 移除订阅弹窗
 - 尝试开启硬件直通
+- 检测AppArmor模块并试图安装
+- 重启系统前推荐挂上[nezha探针](https://github.com/naiba/nezha)方便在后台不通过SSH使用命令行，避免SSH可能因为商家奇葩的预设导致重启后root密码丢失
+- 执行完毕记得重启服务器，也就是执行```reboot```
+
+
 
 ```
 bash <(wget -qO- --no-check-certificate https://raw.githubusercontent.com/spiritLHLS/pve/main/scripts/build_backend.sh)
