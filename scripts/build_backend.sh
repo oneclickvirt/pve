@@ -67,20 +67,23 @@ else
 fi
 
 # 检测AppArmor模块
-# if ! dpkg -s apparmor > /dev/null 2>&1; then
-#     _green "正在安装 AppArmor..."
-#     apt-get update
-#     apt-get install -y apparmor
-# fi
-# if ! systemctl is-active --quiet apparmor.service; then
-#     _green "启动 AppArmor 服务..."
-#     systemctl enable apparmor.service
-#     systemctl start apparmor.service
-# fi
-# if ! lsmod | grep -q apparmor; then
-#     _green "正在加载 AppArmor 内核模块..."
-#     modprobe apparmor
-# fi
-# if ! lsmod | grep -q apparmor; then
-#     _yellow "AppArmor 仍未加载，需要执行 reboot 重新启动系统加载"
-# fi
+if ! dpkg -s apparmor > /dev/null 2>&1; then
+    _green "正在安装 AppArmor..."
+    apt-get update
+    apt-get install -y apparmor
+fi
+if [ $? -ne 0 ]; then
+    apt-get install -y apparmor --fix-missing
+fi
+if ! systemctl is-active --quiet apparmor.service; then
+    _green "启动 AppArmor 服务..."
+    systemctl enable apparmor.service
+    systemctl start apparmor.service
+fi
+if ! lsmod | grep -q apparmor; then
+    _green "正在加载 AppArmor 内核模块..."
+    modprobe apparmor
+fi
+if ! lsmod | grep -q apparmor; then
+    _yellow "AppArmor 仍未加载，需要执行 reboot 重新启动系统加载"
+fi
