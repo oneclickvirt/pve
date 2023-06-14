@@ -1,6 +1,6 @@
 #!/bin/bash
 #from https://github.com/spiritLHLS/pve
-# 2023.06.12
+# 2023.06.13
 
 # 打印信息
 _red() { echo -e "\033[31m\033[01m$@\033[0m"; }
@@ -54,12 +54,12 @@ if [ -f /etc/network/interfaces ]; then
 fi
 interfaces_file="/etc/network/interfaces"
 chattr -i "$interfaces_file"
-# if ! grep -q "auto lo" "$interfaces_file"; then
-#     echo "auto lo" >> "$interfaces_file"
-# fi
-# if ! grep -q "iface lo inet loopback" "$interfaces_file"; then
-#     echo "iface lo inet loopback" >> "$interfaces_file"
-# fi
+if ! grep -q "auto lo" "$interfaces_file"; then
+    echo "auto lo" >> "$interfaces_file"
+fi
+if ! grep -q "iface lo inet loopback" "$interfaces_file"; then
+    echo "iface lo inet loopback" >> "$interfaces_file"
+fi
 if ! grep -q "iface ${interface} inet manual" "$interfaces_file"; then
     echo "iface ${interface} inet manual" >> "$interfaces_file"
 fi
