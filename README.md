@@ -22,6 +22,7 @@
 2023.06.14
 
 - 修改ssh.sh文件以适配不同的系统启用SSH端口和服务
+- 修改create_ct.sh文件及相关文件，增加适配支持开设centos系的系统的CT容器
 
 [更新日志](CHANGELOG.md)
 
@@ -367,7 +368,8 @@ curl -L https://ghproxy.com/https://raw.githubusercontent.com/spiritLHLS/pve/mai
 
 #### 如何使用
 
-- 系统支持：debian10，debian11，ubuntu18，ubuntu20，ubuntu22
+- 系统支持：debian10，debian11，ubuntu18，ubuntu20，ubuntu22，centos8，almalinux9等
+- 系统参数一律是小写的系统名字拼接版本号，具体可执行```pveam available --section system```查看可用的系统名字和版本号(注意脚本使用的参数只有小写的英文系统名字拼接版本号)
 - 其他系统可能支持可能不支持，自行测试
 - 默认用户名是root
 
@@ -393,7 +395,7 @@ curl -L https://ghproxy.com/https://raw.githubusercontent.com/spiritLHLS/pve/mai
 cat ct102
 ```
 
-查看信息
+查看信息，或在web端的note查看
 
 #### 删除示例CT
 
