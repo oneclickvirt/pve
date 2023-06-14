@@ -67,7 +67,7 @@
 
 当然不使用最新的debian系统也没问题，只不过得不到官方支持。只适配Debian系统(非Debian无法通过APT源安装，官方只给了Debian的镜像，其他系统只能使用ISO安装)
 
-- 系统要求：Debian 8+
+- 系统要求：Debian 8+ (建议debian11而不是debian12，因为后者是beta版本，debian11安装的才是稳定版)
 - 最低的硬件要求：2核2G内存x86_64架构服务器硬盘至少20G，内存开点swap免得机器炸了[开SWAP点我跳转](https://github.com/spiritLHLS/addswap)
 - 可开KVM的硬件要求：VM-X或AMD-V支持-(部分VPS和全部独服支持)
 - 如果硬件需求不满足，可使用LXD批量开LXC的[跳转](https://github.com/spiritLHLS/lxc)
@@ -95,7 +95,7 @@ bash <(wget -qO- --no-check-certificate https://ghproxy.com/https://raw.githubus
 #### PVE基础安装说明
 
 - 安装的是当下apt源最新的PVE
-- 比如debian10则是pve6.4，debian11则是pve7.x
+- 比如debian10则是pve6.4，debian11则是pve7.x，debian12则是pve8.x(建议debian11而不是debian12，因为后者是beta版本，debian11安装的才是稳定版)
 - /etc/hosts文件修改(修正商家hostname设置错误以及新增PVE所需的内容)
 - 已设置```/etc/hosts```为只读模式，避免重启后文件被覆写，如需修改请使用```chattr -i /etc/hosts```取消只读锁定，修改完毕请执行```chattr +i /etc/hosts```只读锁定
 - 检测```/etc/cloud/cloud.cfg```如果发现```preserve_hostname```是```false```，则改为```true```，同上，也用chattr命令进行了文件锁定避免重启覆盖设置
