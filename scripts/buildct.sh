@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/spiritLHLS/pve
-# 2023.05.29
+# 2023.06.14
 
 # ./buildct.sh CTID 密码 CPU核数 内存 硬盘 SSH端口 80端口 443端口 外网端口起 外网端口止 系统 存储盘
 # ./buildct.sh 102 1234567 1 512 5 20001 20002 20003 30000 30025 debian11 local
@@ -91,10 +91,16 @@ pct set $CTID --hostname $CTID
 pct set $CTID --net0 name=eth0,ip=${user_ip}/24,bridge=vmbr1,gw=172.16.1.1 
 pct set $CTID --nameserver 8.8.8.8 --nameserver 8.8.4.4
 sleep 3
-pct exec $CTID -- apt-get update -y
-pct exec $CTID -- dpkg --configure -a
-pct exec $CTID -- apt-get update
-pct exec $CTID -- apt-get install dos2unix curl -y
+if echo "$system" | grep -qiE "centos|almalinux|rockylinux"; then
+    pct exec $CTID -- yum update -y
+    pct exec $CTID -- yum update
+    pct exec $CTID -- yum install -y dos2unix curl
+else
+    pct exec $CTID -- apt-get update -y
+    pct exec $CTID -- dpkg --configure -a
+    pct exec $CTID -- apt-get update
+    pct exec $CTID -- apt-get install dos2unix curl -y
+fi
 pct exec $CTID -- curl -L ${cdn_success_url}https://raw.githubusercontent.com/spiritLHLS/pve/main/scripts/ssh.sh -o ssh.sh
 pct exec $CTID -- chmod 777 ssh.sh
 pct exec $CTID -- dos2unix ssh.sh
