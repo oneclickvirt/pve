@@ -84,7 +84,6 @@ if [ -f "/etc/selinux/config" ]; then
     sed -i.bak '/^SELINUX=/cSELINUX=disabled' /etc/selinux/config
 fi
 setenforce 0;
-echo root:"$1" |sudo chpasswd root;
 sed -i "s/^#\?Port.*/Port $sshport/g" /etc/ssh/sshd_config;
 sed -i "s/^#\?PermitRootLogin.*/PermitRootLogin yes/g" /etc/ssh/sshd_config;
 sed -i "s/^#\?PasswordAuthentication.*/PasswordAuthentication yes/g" /etc/ssh/sshd_config;
