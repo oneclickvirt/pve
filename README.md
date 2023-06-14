@@ -400,8 +400,8 @@ cat ct102
 以下命令将删除示例CT和log文件，删除所有的nat的端口映射并重启网络
 
 ```
-pct stop ct102
-pct destroy ct102
+pct stop 102
+pct destroy 102
 rm -rf ct102
 iptables -t nat -F
 iptables -t filter -F
