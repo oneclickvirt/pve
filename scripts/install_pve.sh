@@ -311,6 +311,15 @@ if [[ -n "${CN}" ]]; then
 	sed -i 's|http://mirrors.ustc.edu.cn/proxmox|https://mirrors.tuna.tsinghua.edu.cn/proxmox|g' /usr/share/perl5/PVE/APLInfo.pm
 fi
 
+# 修正部分网络设置错误
+if [[ -f "/etc/network/interfaces.d/50-cloud-init" && -f "/etc/network/interfaces" ]]; then
+    if grep -q "auto lo" "/etc/network/interfaces.d/50-cloud-init" && grep -q "iface lo inet loopback" "/etc/network/interfaces.d/50-cloud-init" && grep -q "auto lo" "/etc/network/interfaces" && grep -q "iface lo inet loopback" "/etc/network/interfaces"; then
+        # 从 /etc/network/interfaces.d/50-cloud-init 中删除指定的行
+        sed -i '/auto lo/d' "/etc/network/interfaces.d/50-cloud-init"
+        sed -i '/iface lo inet loopback/d' "/etc/network/interfaces.d/50-cloud-init"
+    fi
+fi
+
 # 安装必备模块并替换apt源中的无效订阅
 cp /etc/apt/sources.list.d/pve-enterprise.list /etc/apt/sources.list.d/pve-enterprise.list.bak
 # echo "deb http://download.proxmox.com/debian/pve $(lsb_release -sc) pve-no-subscription" > /etc/apt/sources.list.d/pve-enterprise.list
