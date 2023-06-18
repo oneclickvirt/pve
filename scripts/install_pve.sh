@@ -48,7 +48,7 @@ rm "$temp_file_apt_fix"
 
 install_package() {
     package_name=$1
-    if dpkg -s $package_name > /dev/null 2>&1 ; then
+    if command -v $package_name > /dev/null 2>&1 ; then
         _green "$package_name 已经安装"
     else
 	apt-get install -y $package_name
