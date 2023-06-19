@@ -22,6 +22,10 @@
 
 [virt.spiritlhl.net](https://virt.spiritlhl.net/) 中 Proxmox VE 分区内容
 
+## Stargazers over time
+
+[![Stargazers over time](https://starchart.cc/spiritLHLS/pve.svg)](https://starchart.cc/spiritLHLS/pve)
+
 ## 友链
 
 VPS融合怪测评脚本
