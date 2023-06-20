@@ -2,7 +2,7 @@
 # from
 # https://github.com/spiritLHLS/pve
 # 2023.06.05
-
+# 自动选择要绑定的IPV4地址
 # ./buildvm_extraip.sh VMID 用户名 密码 CPU核数 内存 硬盘 系统 存储盘
 # ./buildvm_extraip.sh 152 test1 1234567 1 512 5 debian11 local
 
