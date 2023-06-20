@@ -22,6 +22,21 @@ user_ip=""
 user_ip_range=""
 gateway=""
 
+_red() { echo -e "\033[31m\033[01m$@\033[0m"; }
+_green() { echo -e "\033[32m\033[01m$@\033[0m"; }
+_yellow() { echo -e "\033[33m\033[01m$@\033[0m"; }
+_blue() { echo -e "\033[36m\033[01m$@\033[0m"; }
+reading(){ read -rp "$(_green "$1")" "$2"; }
+utf8_locale=$(locale -a 2>/dev/null | grep -i -m 1 -E "utf8|UTF-8")
+if [[ -z "$utf8_locale" ]]; then
+  _yellow "No UTF-8 locale found"
+else
+  export LC_ALL="$utf8_locale"
+  export LANG="$utf8_locale"
+  export LANGUAGE="$utf8_locale"
+  _green "Locale set to $utf8_locale"
+fi
+
 is_ipv4() {
     local ip=$1
     local regex="^([0-9]{1,3}\.){3}[0-9]{1,3}$"
@@ -47,21 +62,6 @@ else
       _yellow "IPV4地址不符合规则"
       exit 1
   fi
-fi
-
-_red() { echo -e "\033[31m\033[01m$@\033[0m"; }
-_green() { echo -e "\033[32m\033[01m$@\033[0m"; }
-_yellow() { echo -e "\033[33m\033[01m$@\033[0m"; }
-_blue() { echo -e "\033[36m\033[01m$@\033[0m"; }
-reading(){ read -rp "$(_green "$1")" "$2"; }
-utf8_locale=$(locale -a 2>/dev/null | grep -i -m 1 -E "utf8|UTF-8")
-if [[ -z "$utf8_locale" ]]; then
-  _yellow "No UTF-8 locale found"
-else
-  export LC_ALL="$utf8_locale"
-  export LANG="$utf8_locale"
-  export LANGUAGE="$utf8_locale"
-  _green "Locale set to $utf8_locale"
 fi
 
 check_cdn() {
