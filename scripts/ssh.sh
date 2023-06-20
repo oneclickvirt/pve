@@ -78,6 +78,11 @@ install_required_modules() {
     done
 }
 
+remove_duplicate_lines() {
+  # 去除重复行并跳过空行
+  awk '!NF || !x[$0]++' "$1" > "$1.tmp" && mv -f "$1.tmp" "$1"
+}
+
 checkupdate
 install_required_modules
 if [ -f "/etc/motd" ]; then
@@ -99,6 +104,8 @@ sed -i "s/^#\?PasswordAuthentication.*/PasswordAuthentication yes/g" /etc/ssh/ss
 sed -i 's/#ListenAddress 0.0.0.0/ListenAddress 0.0.0.0/' /etc/ssh/sshd_config
 sed -i 's/#ListenAddress ::/ListenAddress ::/' /etc/ssh/sshd_config
 sed -i 's/#AddressFamily any/AddressFamily any/' /etc/ssh/sshd_config
+sed -i '/^#UsePAM\|UsePAM/c #UsePAM no' /etc/ssh/sshd_config
+remove_duplicate_lines "/etc/ssh/sshd_config"
 service ssh restart
 service sshd restart
 systemctl restart sshd
