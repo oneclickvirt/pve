@@ -156,3 +156,15 @@ echo "覆盖原文件..."
 mv ${qcow_file}.tmp $qcow_file
 rm -rf *.bak
 echo "$qcow_file修改完成"
+
+
+# qcow_file="alpinelinux_v3_17.qcow2"
+# virt-customize -a $qcow_file --run-command "apk update"
+# virt-customize -a $qcow_file --run-command "apk add --no-cache openssh-server sshpass openssh-keygen"
+# virt-customize -a $qcow_file --run-command "ssh-keygen -A"
+# virt-customize -a $qcow_file --run-command "sed -i.bak '/^#PermitRootLogin\|PermitRootLogin/c PermitRootLogin yes' /etc/ssh/sshd_config"
+# virt-customize -a $qcow_file --run-command "sed -i.bak '/^#PasswordAuthentication\|PasswordAuthentication/c PasswordAuthentication yes' /etc/ssh/sshd_config"
+# virt-customize -a $qcow_file --run-command "sed -i.bak '/^#ListenAddress\|ListenAddress/c ListenAddress 0.0.0.0' /etc/ssh/sshd_config"
+# virt-customize -a $qcow_file --run-command "sed -i.bak '/^#AddressFamily\|AddressFamily/c AddressFamily any' /etc/ssh/sshd_config"
+# virt-customize -a $qcow_file --run-command "sed -i.bak -E 's/^#?(Port).*/\1 22/' /etc/ssh/sshd_config"
+# virt-customize -a $qcow_file --run-command "/usr/sbin/sshd"
