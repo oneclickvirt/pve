@@ -64,13 +64,13 @@ install_required_modules() {
     do
         if command -v apt-get > /dev/null 2>&1; then
 	    if dpkg -s $module > /dev/null 2>&1 ; then
-	        echo "$module 已经安装！"
+	        echo "$module has benn installed."
 	    else
 	        apt-get install -y $module
 	        if [ $? -ne 0 ]; then
 		    apt-get install -y $module --fix-missing
 	        fi
-	        echo "$module 已尝试过安装！"
+	        echo "$module has been tried and installed!"
 	    fi
 	else
 	    ${PACKAGE_INSTALL[int]} $module
