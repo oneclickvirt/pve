@@ -25,6 +25,7 @@ if [ "$(id -u)" != "0" ]; then
    exit 1
 fi
 apt-get update -y
+apt-get upgrade -y systemd
 if [ $? -ne 0 ]; then
    dpkg --configure -a
    apt-get update -y
@@ -391,5 +392,3 @@ url="https://${ip}:8006/"
 _green "安装完毕，请打开HTTPS网页 $url"
 _green "用户名、密码就是服务器所使用的用户名、密码(如root和root用户的密码)"
 _green "如果登录无误请不要急着重启系统，去执行预配置环境的命令后再重启系统"
-
-
