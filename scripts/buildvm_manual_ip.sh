@@ -4,7 +4,7 @@
 # 2023.06.20
 # 手动指定要绑定的IPV4地址
 # ./buildvm_manual_ip.sh VMID 用户名 密码 CPU核数 内存 硬盘 系统 存储盘 IPV4地址
-# ./buildvm_manual_ip.sh 152 test1 1234567 1 512 5 debian11 local xxx.xxx.xxx.xxx/24
+# ./buildvm_manual_ip.sh 152 test1 1234567 1 512 5 debian11 local a.b.c.d/24
 
 cd /root >/dev/null 2>&1
 # 创建独立IPV4地址的虚拟机
