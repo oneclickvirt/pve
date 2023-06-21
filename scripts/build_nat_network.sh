@@ -53,6 +53,14 @@ fi
 if [ -f /etc/network/interfaces ]; then
     cp /etc/network/interfaces /etc/network/interfaces.bak
 fi
+# 修正部分网络设置重复的错误
+if [[ -f "/etc/network/interfaces.d/50-cloud-init" && -f "/etc/network/interfaces" ]]; then
+    if grep -q "auto lo" "/etc/network/interfaces.d/50-cloud-init" && grep -q "iface lo inet loopback" "/etc/network/interfaces.d/50-cloud-init" && grep -q "auto lo" "/etc/network/interfaces" && grep -q "iface lo inet loopback" "/etc/network/interfaces"; then
+        # 从 /etc/network/interfaces.d/50-cloud-init 中删除重复的行
+        sed -i '/auto lo/d' "/etc/network/interfaces.d/50-cloud-init"
+        sed -i '/iface lo inet loopback/d' "/etc/network/interfaces.d/50-cloud-init"
+    fi
+fi
 interfaces_file="/etc/network/interfaces"
 chattr -i "$interfaces_file"
 if ! grep -q "auto lo" "$interfaces_file"; then
