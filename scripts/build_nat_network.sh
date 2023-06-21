@@ -1,6 +1,6 @@
 #!/bin/bash
 #from https://github.com/spiritLHLS/pve
-# 2023.06.13
+# 2023.06.21
 
 # 打印信息
 _red() { echo -e "\033[31m\033[01m$@\033[0m"; }
@@ -25,6 +25,7 @@ if ! command -v lshw > /dev/null 2>&1; then
 fi
 # 提取物理网卡名字
 interface=$(lshw -C network | awk '/logical name:/{print $3}' | head -1)
+interface_2=$(lshw -C network | awk '/logical name:/{print $3}' | sed -n '2p')
 if [ -z "$interface" ]; then
   interface="eth0"
 fi
@@ -65,9 +66,13 @@ if ! grep -q "iface lo inet loopback" "$interfaces_file"; then
     exit 1
 fi
 if ! grep -q "iface ${interface} inet manual" "$interfaces_file"; then
-#     echo "iface ${interface} inet manual" >> "$interfaces_file"
-    echo "Can not find 'iface ${interface} inet manual' in ${interfaces_file}"
-    exit 1
+    if grep -q "iface ${interface_2} inet manual" "$interfaces_file"; then
+        interface=${interface_2}
+    else
+        #     echo "iface ${interface} inet manual" >> "$interfaces_file"
+        echo "Can not find 'iface ${interface} inet manual' in ${interfaces_file}"
+        exit 1
+    fi
 fi
 if grep -q "vmbr0" "$interfaces_file"; then
     echo "vmbr0 已存在在 ${interfaces_file}"
