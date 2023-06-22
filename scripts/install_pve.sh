@@ -28,6 +28,7 @@ remove_duplicate_lines() {
   if [ -f "$1" ];then
       awk '!NF || !x[$0]++' "$1" > "$1.tmp" && mv -f "$1.tmp" "$1"
   fi
+  rm -rf "$1.tmp"
 }
 
 install_package() {
