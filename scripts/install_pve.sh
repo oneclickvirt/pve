@@ -51,7 +51,9 @@ rm "$temp_file_apt_fix"
 
 remove_duplicate_lines() {
   # 去除重复行并跳过空行
-  awk '!NF || !x[$0]++' "$1" > "$1.tmp" && mv -f "$1.tmp" "$1"
+  if [ -f "$1" ];then
+      awk '!NF || !x[$0]++' "$1" > "$1.tmp" && mv -f "$1.tmp" "$1"
+  fi
 }
 
 install_package() {
@@ -59,11 +61,11 @@ install_package() {
     if command -v $package_name > /dev/null 2>&1 ; then
         _green "$package_name 已经安装"
     else
-	apt-get install -y $package_name
-	if [ $? -ne 0 ]; then
-            apt-get install -y $package_name --fix-missing
-        fi
-	_green "$package_name 已尝试安装"
+        apt-get install -y $package_name
+        if [ $? -ne 0 ]; then
+                  apt-get install -y $package_name --fix-missing
+              fi
+        _green "$package_name 已尝试安装"
     fi
 }
 
@@ -344,6 +346,10 @@ if [[ -f "/etc/network/interfaces.d/50-cloud-init" && -f "/etc/network/interface
 	      chattr +i /etc/network/interfaces.d/50-cloud-init
     fi
 fi
+# 去除空行之外的重复行
+remove_duplicate_lines "/etc/network/interfaces"
+remove_duplicate_lines "/etc/network/interfaces.new"
+remove_duplicate_lines "/etc/network/interfaces.d/50-cloud-init"
 
 # 如果是国内服务器则替换CT源为国内镜像源
 if [[ -n "${CN}" ]]; then
