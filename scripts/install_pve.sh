@@ -285,6 +285,48 @@ if ! grep -q "^deb.*pve-no-subscription" /etc/apt/sources.list; then
     echo "$repo_url" >> /etc/apt/sources.list
 fi
 
+# 备份网络设置
+cp /etc/network/interfaces /etc/network/interfaces.bak
+cp /etc/network/interfaces.new /etc/network/interfaces.new.bak
+cp /etc/network/interfaces.d/50-cloud-init /etc/network/interfaces.d/50-cloud-init.bak
+rebuild_interfaces
+
+rebuild_interfaces(){
+# 修复部分网络加载未空
+if [ ! -e /run/network/interfaces.d/* ]; then
+    if [ -f "/etc/network/interfaces" ];then
+        chattr -i /etc/network/interfaces
+        sed -i '/source-directory \/run\/network\/interfaces.d/s/^/#/' /etc/network/interfaces
+        chattr +i /etc/network/interfaces
+    fi
+    if [ -f "/etc/network/interfaces.new" ];then
+        chattr -i /etc/network/interfaces.new
+        sed -i '/source-directory \/run\/network\/interfaces.d/s/^/#/' /etc/network/interfaces.new
+        chattr +i /etc/network/interfaces.new
+    fi
+fi
+# 修复部分网络加载没实时加载
+if [[ -f "/etc/network/interfaces.new" && -f "/etc/network/interfaces" ]]; then
+    chattr -i /etc/network/interfaces
+    cp -f /etc/network/interfaces.new /etc/network/interfaces
+    chattr +i /etc/network/interfaces
+fi
+# 修复部分网络加载中有重复内容
+if [[ -f "/etc/network/interfaces.d/50-cloud-init" && -f "/etc/network/interfaces" ]]; then
+    if grep -q "auto lo" "/etc/network/interfaces.d/50-cloud-init" && grep -q "iface lo inet loopback" "/etc/network/interfaces.d/50-cloud-init" && grep -q "auto lo" "/etc/network/interfaces" && grep -q "iface lo inet loopback" "/etc/network/interfaces"; then
+        # 从 /etc/network/interfaces.d/50-cloud-init 中删除指定的行
+        chattr -i /etc/network/interfaces.d/50-cloud-init
+        sed -i '/auto lo/d' "/etc/network/interfaces.d/50-cloud-init"
+        sed -i '/iface lo inet loopback/d' "/etc/network/interfaces.d/50-cloud-init"
+        chattr +i /etc/network/interfaces.d/50-cloud-init
+    fi
+fi
+# 去除空行之外的重复行
+remove_duplicate_lines "/etc/network/interfaces"
+remove_duplicate_lines "/etc/network/interfaces.new"
+remove_duplicate_lines "/etc/network/interfaces.d/50-cloud-init"
+}
+
 # 下载pve
 apt-get update -y && apt-get full-upgrade -y
 if [ $? -ne 0 ]; then
@@ -312,44 +354,7 @@ fi
 install_package proxmox-ve
 install_package postfix
 install_package open-iscsi
-
-# 备份网络设置
-cp /etc/network/interfaces /etc/network/interfaces.bak
-cp /etc/network/interfaces.new /etc/network/interfaces.new.bak
-cp /etc/network/interfaces.d/50-cloud-init /etc/network/interfaces.d/50-cloud-init.bak
-# 修复部分网络加载未空
-if [ ! -e /run/network/interfaces.d/* ]; then
-    if [ -f "/etc/network/interfaces" ];then
-        chattr -i /etc/network/interfaces
-        sed -i '/source-directory \/run\/network\/interfaces.d/s/^/#/' /etc/network/interfaces
-        chattr +i /etc/network/interfaces
-    fi
-    if [ -f "/etc/network/interfaces.new" ];then
-        chattr -i /etc/network/interfaces.new
-        sed -i '/source-directory \/run\/network\/interfaces.d/s/^/#/' /etc/network/interfaces.new
-        chattr +i /etc/network/interfaces.new
-    fi
-fi
-# 修复部分网络加载没实时加载
-if [[ -f "/etc/network/interfaces.new" && -f "/etc/network/interfaces" ]]; then
-    chattr -i /etc/network/interfaces
-    cp -f /etc/network/interfaces.new /etc/network/interfaces
-    chattr +i /etc/network/interfaces
-fi
-# 修复部分网络加载中有重复内容
-if [[ -f "/etc/network/interfaces.d/50-cloud-init" && -f "/etc/network/interfaces" ]]; then
-    if grep -q "auto lo" "/etc/network/interfaces.d/50-cloud-init" && grep -q "iface lo inet loopback" "/etc/network/interfaces.d/50-cloud-init" && grep -q "auto lo" "/etc/network/interfaces" && grep -q "iface lo inet loopback" "/etc/network/interfaces"; then
-        # 从 /etc/network/interfaces.d/50-cloud-init 中删除指定的行
-	      chattr -i /etc/network/interfaces.d/50-cloud-init
-        sed -i '/auto lo/d' "/etc/network/interfaces.d/50-cloud-init"
-        sed -i '/iface lo inet loopback/d' "/etc/network/interfaces.d/50-cloud-init"
-	      chattr +i /etc/network/interfaces.d/50-cloud-init
-    fi
-fi
-# 去除空行之外的重复行
-remove_duplicate_lines "/etc/network/interfaces"
-remove_duplicate_lines "/etc/network/interfaces.new"
-remove_duplicate_lines "/etc/network/interfaces.d/50-cloud-init"
+rebuild_interfaces
 
 # 如果是国内服务器则替换CT源为国内镜像源
 if [[ -n "${CN}" ]]; then
