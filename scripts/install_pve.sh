@@ -448,18 +448,34 @@ apt-get update
 install_package sudo
 install_package iproute2
 # ifupdown2 安装可能需要校验MAC地址，进行修复
-apt-get install -y ifupdown2
-if [ $? -ne 0 ]; then
-    if grep -q "hwaddress" /etc/network/interfaces; then
-      echo "hwaddress already defined in /etc/network/interfaces."
-    else
-      echo "Adding hwaddress to /etc/network/interfaces..."
-      echo "hwaddress $mac_address" >> /etc/network/interfaces
-    fi
-    echo "Reloading network configuration..."
-    ifdown -a && ifup -a
-    apt-get install -y ifupdown2
-fi
+# if [ $? -ne 0 ]; then
+#     if grep -q "hwaddress" /etc/network/interfaces; then
+#       echo "hwaddress already defined in /etc/network/interfaces."
+#     else
+#       echo "Adding hwaddress to /etc/network/interfaces..."
+#       echo "hwaddress $mac_address" >> /etc/network/interfaces
+#     fi
+#     echo "Reloading network configuration..."
+#     ifdown -a && ifup -a
+#     apt-get install -y ifupdown2
+# fi
+case $version in
+  stretch)
+    install_package ifupdown
+    ;;
+  buster)
+    install_package ifupdown
+    ;;
+  bullseye)
+    install_package ifupdown2
+    ;;
+  bookworm)
+    install_package ifupdown2
+    ;;
+  *)
+    exit 1
+    ;;
+esac
 install_package net-tools
 install_package novnc
 install_package cloud-init
