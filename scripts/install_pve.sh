@@ -103,6 +103,16 @@ else
     interface=${interface_1}
 fi
 mac_address=$(ip -o link show dev ${interface} | awk '{print $17}')
+# 检查是否存在特定行
+if grep -Fxq "# /etc/cloud/cloud.cfg.d/99-disable-network-config.cfg with the following:" /etc/network/interfaces.d/50-cloud-init && grep -Fxq "# network: {config: disabled}" /etc/network/interfaces.d/50-cloud-init; then
+    echo "Creating /etc/cloud/cloud.cfg.d/99-disable-network-config.cfg."
+    if [ ! -f "/etc/cloud/cloud.cfg.d/99-disable-network-config.cfg" ]; then
+        echo "network: {config: disabled}" > /etc/cloud/cloud.cfg.d/99-disable-network-config.cfg
+        _green "Please restart the system for the changes to take effect."
+        _green "请执行 reboot 重启系统后再次自行本脚本"
+        exit 1
+    fi
+fi
 
 check_cdn() {
   local o_url=$1
@@ -422,7 +432,7 @@ fi
 rm "$temp_file_apt_fix"
 output=$(apt-get update 2>&1)
 if echo $output | grep -q "NO_PUBKEY"; then
-    _yellow "try sudo apt-key adv --keyserver keyserver.ubuntu.com --recv-keys missing key"
+    _yellow "try sudo apt-key adv --keyserver keyserver.ubuntu.com --recvrebuild_interface-keys missing key"
     exit 1
 fi
 # 修复可能存在的auto类型
