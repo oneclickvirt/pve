@@ -1,5 +1,6 @@
 #!/bin/bash
-#from https://github.com/spiritLHLS/pve
+# from 
+# https://github.com/spiritLHLS/pve
 
 # 用颜色输出信息
 _red() { echo -e "\033[31m\033[01m$@\033[0m"; }

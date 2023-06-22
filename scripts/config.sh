@@ -1,5 +1,6 @@
 #!/bin/bash
-# from https://github.com/spiritLHLS/pve
+# from 
+# https://github.com/spiritLHLS/pve
 
 divert_install_script() {
   local package_name=$1

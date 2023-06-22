@@ -1,5 +1,6 @@
 #!/bin/bash
-#from https://github.com/spiritLHLS/pve
+# from 
+# https://github.com/spiritLHLS/pve
 
 DNS_SERVER="8.8.8.8"
 RESOLV_CONF="/etc/resolv.conf"

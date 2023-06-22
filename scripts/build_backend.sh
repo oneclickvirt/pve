@@ -1,5 +1,7 @@
 #!/bin/bash
-#from https://github.com/spiritLHLS/pve
+# from 
+# https://github.com/spiritLHLS/pve
+# 2023.06.22
 
 # 打印信息
 _red() { echo -e "\033[31m\033[01m$@\033[0m"; }
@@ -85,5 +87,5 @@ if ! lsmod | grep -q apparmor; then
     modprobe apparmor
 fi
 if ! lsmod | grep -q apparmor; then
-    _yellow "AppArmor 仍未加载，需要执行 reboot 重新启动系统加载"
+    _yellow "AppArmor 仍未加载，请等待几分钟，然后执行 reboot 重新启动系统加载"
 fi

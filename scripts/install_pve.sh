@@ -1,5 +1,7 @@
 #!/bin/bash
-#from https://github.com/spiritLHLS/pve
+# from 
+# https://github.com/spiritLHLS/pve
+# 2023.06.22
 
 # 打印信息
 _red() { echo -e "\033[31m\033[01m$@\033[0m"; }
@@ -47,6 +49,11 @@ if grep -q 'NO_PUBKEY' "$temp_file_apt_fix"; then
 fi
 rm "$temp_file_apt_fix"
 
+remove_duplicate_lines() {
+  # 去除重复行并跳过空行
+  awk '!NF || !x[$0]++' "$1" > "$1.tmp" && mv -f "$1.tmp" "$1"
+}
+
 install_package() {
     package_name=$1
     if command -v $package_name > /dev/null 2>&1 ; then
@@ -59,12 +66,6 @@ install_package() {
 	_green "$package_name 已尝试安装"
     fi
 }
-
-install_package wget
-install_package curl
-install_package sudo
-install_package bc
-install_package iptables
 
 check_cdn() {
   local o_url=$1
@@ -88,6 +89,11 @@ check_cdn_file() {
 }
 
 cdn_urls=("https://cdn.spiritlhl.workers.dev/" "https://cdn3.spiritlhl.net/" "https://cdn1.spiritlhl.net/" "https://ghproxy.com/" "https://cdn2.spiritlhl.net/")
+install_package wget
+install_package curl
+install_package sudo
+install_package bc
+install_package iptables
 check_cdn_file
 
 # cloud-init文件修改
@@ -274,25 +280,14 @@ case $version in
 esac
 
 if ! grep -q "^deb.*pve-no-subscription" /etc/apt/sources.list; then
-   echo "$repo_url" >> /etc/apt/sources.list
-fi
-
-# 修正部分网络设置错误
-if [[ -f "/etc/network/interfaces.d/50-cloud-init" && -f "/etc/network/interfaces" ]]; then
-    if grep -q "auto lo" "/etc/network/interfaces.d/50-cloud-init" && grep -q "iface lo inet loopback" "/etc/network/interfaces.d/50-cloud-init" && grep -q "auto lo" "/etc/network/interfaces" && grep -q "iface lo inet loopback" "/etc/network/interfaces"; then
-        # 从 /etc/network/interfaces.d/50-cloud-init 中删除指定的行
-	chattr -i /etc/network/interfaces.d/50-cloud-init
-        sed -i '/auto lo/d' "/etc/network/interfaces.d/50-cloud-init"
-        sed -i '/iface lo inet loopback/d' "/etc/network/interfaces.d/50-cloud-init"
-	chattr +i /etc/network/interfaces.d/50-cloud-init
-    fi
+    echo "$repo_url" >> /etc/apt/sources.list
 fi
 
 # 下载pve
 apt-get update -y && apt-get full-upgrade -y
 if [ $? -ne 0 ]; then
-   apt-get install debian-keyring debian-archive-keyring -y
-   apt-get update -y && apt-get full-upgrade -y
+    apt-get install debian-keyring debian-archive-keyring -y
+    apt-get update -y && apt-get full-upgrade -y
 fi
 apt_update_output=$(apt-get update 2>&1)
 echo "$apt_update_output" > "$temp_file_apt_fix"
@@ -309,18 +304,52 @@ fi
 rm "$temp_file_apt_fix"
 output=$(apt-get update 2>&1)
 if echo $output | grep -q "NO_PUBKEY"; then
-   _yellow "try sudo apt-key adv --keyserver keyserver.ubuntu.com --recv-keys missing key"
-   exit 1
+    _yellow "try sudo apt-key adv --keyserver keyserver.ubuntu.com --recv-keys missing key"
+    exit 1
 fi
 install_package proxmox-ve
 install_package postfix
 install_package open-iscsi
 
+# 备份网络设置
+cp /etc/network/interfaces /etc/network/interfaces.bak
+cp /etc/network/interfaces.new /etc/network/interfaces.new.bak
+cp /etc/network/interfaces.d/50-cloud-init /etc/network/interfaces.d/50-cloud-init.bak
+# 修复部分网络加载未空
+if [ ! -e /run/network/interfaces.d/* ]; then
+    if [ -f "/etc/network/interfaces" ];then
+        chattr -i /etc/network/interfaces
+        sed -i '/source-directory \/run\/network\/interfaces.d/s/^/#/' /etc/network/interfaces
+        chattr +i /etc/network/interfaces
+    fi
+    if [ -f "/etc/network/interfaces.new" ];then
+        chattr -i /etc/network/interfaces.new
+        sed -i '/source-directory \/run\/network\/interfaces.d/s/^/#/' /etc/network/interfaces.new
+        chattr +i /etc/network/interfaces.new
+    fi
+fi
+# 修复部分网络加载没实时加载
+if [[ -f "/etc/network/interfaces.new" && -f "/etc/network/interfaces" ]]; then
+    chattr -i /etc/network/interfaces
+    cp -f /etc/network/interfaces.new /etc/network/interfaces
+    chattr +i /etc/network/interfaces
+fi
+# 修复部分网络加载中有重复内容
+if [[ -f "/etc/network/interfaces.d/50-cloud-init" && -f "/etc/network/interfaces" ]]; then
+    if grep -q "auto lo" "/etc/network/interfaces.d/50-cloud-init" && grep -q "iface lo inet loopback" "/etc/network/interfaces.d/50-cloud-init" && grep -q "auto lo" "/etc/network/interfaces" && grep -q "iface lo inet loopback" "/etc/network/interfaces"; then
+        # 从 /etc/network/interfaces.d/50-cloud-init 中删除指定的行
+	      chattr -i /etc/network/interfaces.d/50-cloud-init
+        sed -i '/auto lo/d' "/etc/network/interfaces.d/50-cloud-init"
+        sed -i '/iface lo inet loopback/d' "/etc/network/interfaces.d/50-cloud-init"
+	      chattr +i /etc/network/interfaces.d/50-cloud-init
+    fi
+fi
+
 # 如果是国内服务器则替换CT源为国内镜像源
 if [[ -n "${CN}" ]]; then
-   cp -rf /usr/share/perl5/PVE/APLInfo.pm /usr/share/perl5/PVE/APLInfo.pm.bak
-   sed -i 's|http://download.proxmox.com|https://mirrors.tuna.tsinghua.edu.cn/proxmox|g' /usr/share/perl5/PVE/APLInfo.pm
-	sed -i 's|http://mirrors.ustc.edu.cn/proxmox|https://mirrors.tuna.tsinghua.edu.cn/proxmox|g' /usr/share/perl5/PVE/APLInfo.pm
+    cp -rf /usr/share/perl5/PVE/APLInfo.pm /usr/share/perl5/PVE/APLInfo.pm.bak
+    sed -i 's|http://download.proxmox.com|https://mirrors.tuna.tsinghua.edu.cn/proxmox|g' /usr/share/perl5/PVE/APLInfo.pm
+	  sed -i 's|http://mirrors.ustc.edu.cn/proxmox|https://mirrors.tuna.tsinghua.edu.cn/proxmox|g' /usr/share/perl5/PVE/APLInfo.pm
 fi
 
 # 安装必备模块并替换apt源中的无效订阅
@@ -352,7 +381,6 @@ if grep -q "source /etc/network/interfaces.d/*" /etc/network/interfaces; then
   if [ -f /etc/network/interfaces.d/50-cloud-init ]; then
     # 检查50-cloud-init文件中是否有iface eth0 inet dhcp行 - 看来还是得转动态为静态判断东西
     if grep -q "iface eth0 inet dhcp" /etc/network/interfaces.d/50-cloud-init; then
-      cp /etc/network/interfaces.d/50-cloud-init /etc/network/interfaces.d/50-cloud-init.bak
       # 获取ipv4、subnet、gateway信息
       gateway=$(ip route | awk '/default/ {print $3}')
       eth0info=$(ip -o -4 addr show dev eth0 | awk '{print $4}')

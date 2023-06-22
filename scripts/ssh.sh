@@ -1,5 +1,6 @@
 #!/bin/bash
-# by https://github.com/spiritLHLS/pve
+# from 
+# https://github.com/spiritLHLS/pve
 
 if [ -f "/etc/resolv.conf" ]
 then
