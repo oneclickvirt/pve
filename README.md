@@ -18,7 +18,7 @@
 - 部分机器的IPV6物理接口使用auto类型，无法安装PVE，修改为static类型并重写配置
 - 由于上面这条修复，已支持在Linode平台安装PVE了
 - 修复低版本PVE还安装ifupdown2的问题，7.x以下版本使用ifupdown也足够了
-- 由于上面这条修复，Hetzner的Debian10系统可以安装PVE了
+- 由于上面这条修复，Hetzner的Debian10系统可以安装PVE了，但只可安装主体，不能自动设置网关
 
 [更新日志](CHANGELOG.md)
 
