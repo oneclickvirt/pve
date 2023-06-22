@@ -21,6 +21,32 @@ else
 fi
 temp_file_apt_fix="/tmp/apt_fix.txt"
 
+########## 定义部分需要使用的函数和组件预安装
+
+remove_duplicate_lines() {
+  # 去除重复行并跳过空行
+  if [ -f "$1" ];then
+      awk '!NF || !x[$0]++' "$1" > "$1.tmp" && mv -f "$1.tmp" "$1"
+  fi
+}
+
+install_package() {
+    package_name=$1
+    if command -v $package_name > /dev/null 2>&1 ; then
+        _green "$package_name 已经安装"
+    else
+        apt-get install -y $package_name
+        if [ $? -ne 0 ]; then
+            apt-get install -y $package_name --fix-missing
+        fi
+        if [ $? -ne 0 ]; then
+            _green "$package_name 已尝试安装但失败，退出程序"
+            exit 1
+        fi
+        _green "$package_name 已尝试安装"
+    fi
+}
+
 # 前置环境安装
 if [ "$(id -u)" != "0" ]; then
    _red "This script must be run as root" 1>&2
@@ -48,26 +74,34 @@ if grep -q 'NO_PUBKEY' "$temp_file_apt_fix"; then
     fi
 fi
 rm "$temp_file_apt_fix"
-
-remove_duplicate_lines() {
-  # 去除重复行并跳过空行
-  if [ -f "$1" ];then
-      awk '!NF || !x[$0]++' "$1" > "$1.tmp" && mv -f "$1.tmp" "$1"
-  fi
-}
-
-install_package() {
-    package_name=$1
-    if command -v $package_name > /dev/null 2>&1 ; then
-        _green "$package_name 已经安装"
+install_package wget
+install_package curl
+install_package sudo
+install_package bc
+install_package iptables
+install_package lshw
+# 检测IPV4
+ip=$(ip -4 addr show | grep global | awk '{print $2}' | cut -d '/' -f1 | head -n 1)
+# 检测物理接口和MAC地址
+interface_1=$(lshw -C network | awk '/logical name:/{print $3}' | head -1)
+interface_2=$(lshw -C network | awk '/logical name:/{print $3}' | sed -n '2p')
+if [ -z "$interface_1" ]; then
+  interface="eth0"
+fi
+if ! grep -q "$interface_1" "/etc/network/interfaces"; then
+    if [ -f "/etc/network/interfaces.d/50-cloud-init" ];then
+        if ! grep -q "$interface_1" "/etc/network/interfaces.d/50-cloud-init" && grep -q "$interface_2" "/etc/network/interfaces.d/50-cloud-init"; then
+            interface=${interface_2}
+        else
+            interface=${interface_1}
+        fi
     else
-        apt-get install -y $package_name
-        if [ $? -ne 0 ]; then
-                  apt-get install -y $package_name --fix-missing
-              fi
-        _green "$package_name 已尝试安装"
+        interface=${interface_1}
     fi
-}
+else
+    interface=${interface_1}
+fi
+mac_address=$(ip -o link show dev ${interface} | awk '{print $17}')
 
 check_cdn() {
   local o_url=$1
@@ -90,15 +124,6 @@ check_cdn_file() {
     fi
 }
 
-cdn_urls=("https://cdn.spiritlhl.workers.dev/" "https://cdn3.spiritlhl.net/" "https://cdn1.spiritlhl.net/" "https://ghproxy.com/" "https://cdn2.spiritlhl.net/")
-install_package wget
-install_package curl
-install_package sudo
-install_package bc
-install_package iptables
-check_cdn_file
-
-# cloud-init文件修改
 rebuild_cloud_init(){
 if [ -f "/etc/cloud/cloud.cfg" ]; then
   chattr -i /etc/cloud/cloud.cfg
@@ -128,10 +153,93 @@ if [ -f "/etc/cloud/cloud.cfg" ]; then
   chattr +i /etc/cloud/cloud.cfg
 fi
 }
-rebuild_cloud_init
 
-# 检测IPV4
-ip=$(ip -4 addr show | grep global | awk '{print $2}' | cut -d '/' -f1 | head -n 1)
+rebuild_interfaces(){
+# 修复部分网络加载未空
+if [ ! -e /run/network/interfaces.d/* ]; then
+    if [ -f "/etc/network/interfaces" ];then
+        chattr -i /etc/network/interfaces
+        sed -i '/source-directory \/run\/network\/interfaces.d/s/^/#/' /etc/network/interfaces
+        chattr +i /etc/network/interfaces
+    fi
+    if [ -f "/etc/network/interfaces.new" ];then
+        chattr -i /etc/network/interfaces.new
+        sed -i '/source-directory \/run\/network\/interfaces.d/s/^/#/' /etc/network/interfaces.new
+        chattr +i /etc/network/interfaces.new
+    fi
+fi
+# 修复部分网络加载没实时加载
+if [[ -f "/etc/network/interfaces.new" && -f "/etc/network/interfaces" ]]; then
+    chattr -i /etc/network/interfaces
+    cp -f /etc/network/interfaces.new /etc/network/interfaces
+    chattr +i /etc/network/interfaces
+fi
+# 修复部分网络加载中有重复内容
+if [[ -f "/etc/network/interfaces.d/50-cloud-init" && -f "/etc/network/interfaces" ]]; then
+    if grep -q "auto lo" "/etc/network/interfaces.d/50-cloud-init" && grep -q "iface lo inet loopback" "/etc/network/interfaces.d/50-cloud-init" && grep -q "auto lo" "/etc/network/interfaces" && grep -q "iface lo inet loopback" "/etc/network/interfaces"; then
+        # 从 /etc/network/interfaces.d/50-cloud-init 中删除指定的行
+        chattr -i /etc/network/interfaces.d/50-cloud-init
+        sed -i '/auto lo/d' "/etc/network/interfaces.d/50-cloud-init"
+        sed -i '/iface lo inet loopback/d' "/etc/network/interfaces.d/50-cloud-init"
+        chattr +i /etc/network/interfaces.d/50-cloud-init
+    fi
+fi
+# 去除空行之外的重复行
+remove_duplicate_lines "/etc/network/interfaces"
+remove_duplicate_lines "/etc/network/interfaces.new"
+remove_duplicate_lines "/etc/network/interfaces.d/50-cloud-init"
+}
+
+fix_interfaces_ipv6_auto_type(){
+chattr -i $1
+while IFS= read -r line
+do
+    # 检测以 "iface" 开头且包含 "inet6 auto" 的行
+    if [[ $line == "iface ${interface} inet6 auto" ]]; then
+        # 将 "auto" 替换为 "static"
+        modified_line="${line/auto/static}"
+        echo "$modified_line"
+        # 添加静态IPv6配置信息
+        ipv6_prefixlen=$(ifconfig ${interface} | grep -oP 'prefixlen \K\d+' | head -n 1)
+        # 获取IPv6地址
+        # ipv6_address=$(ifconfig ${interface} | grep -oE 'inet6 ([0-9a-fA-F:]+)' | awk '{print $2}' | head -n 1)
+        ipv6_address=$(ip -6 addr show dev ${interface} | awk '/inet6 .* scope global dynamic/{print $2}')
+        # 提取地址部分
+        ipv6_address=${ipv6_address%%/*}
+        ipv6_gateway=$(ip -6 route show | awk '/default via/{print $3}')
+        echo "    address ${ipv6_address}/${ipv6_prefixlen}"
+        echo "    gateway ${ipv6_gateway}"
+    else
+        echo "$line"
+    fi
+done < $1 > /tmp/interfaces.modified
+mv -f /tmp/interfaces.modified $1
+rm -rf /tmp/interfaces.modified
+}
+
+fix_interfaces(){
+fix_interfaces_ipv6_auto_type /etc/network/interfaces
+fix_interfaces_ipv6_auto_type /etc/network/interfaces.d/50-cloud-init
+chattr -i /etc/network/interfaces
+if ! grep -q "iface ${interface} inet manual" "/etc/network/interfaces"; then
+    if [ -f "/etc/network/interfaces.d/50-cloud-init" ];then
+        if ! grep -q "iface ${interface} inet manual" /etc/network/interfaces.d/50-cloud-init; then
+            echo "Can not find 'iface ${interface} inet manual' in /etc/network/interfaces or /etc/network/interfaces.d/50-cloud-init"
+            echo "iface ${interface} inet manual" >> "/etc/network/interfaces"
+        fi
+    else
+        echo "Can not find 'iface ${interface} inet manual' in /etc/network/interfaces"
+        echo "iface ${interface} inet manual" >> "/etc/network/interfaces"
+    fi
+fi
+}
+
+########## 正式开始安装
+
+cdn_urls=("https://cdn.spiritlhl.workers.dev/" "https://cdn3.spiritlhl.net/" "https://cdn1.spiritlhl.net/" "https://ghproxy.com/" "https://cdn2.spiritlhl.net/")
+check_cdn_file
+# cloud-init文件修改
+rebuild_cloud_init
 
 # /etc/hosts文件修改
 hostname=$(hostname)
@@ -291,43 +399,8 @@ cp /etc/network/interfaces.new /etc/network/interfaces.new.bak
 cp /etc/network/interfaces.d/50-cloud-init /etc/network/interfaces.d/50-cloud-init.bak
 rebuild_interfaces
 
-rebuild_interfaces(){
-# 修复部分网络加载未空
-if [ ! -e /run/network/interfaces.d/* ]; then
-    if [ -f "/etc/network/interfaces" ];then
-        chattr -i /etc/network/interfaces
-        sed -i '/source-directory \/run\/network\/interfaces.d/s/^/#/' /etc/network/interfaces
-        chattr +i /etc/network/interfaces
-    fi
-    if [ -f "/etc/network/interfaces.new" ];then
-        chattr -i /etc/network/interfaces.new
-        sed -i '/source-directory \/run\/network\/interfaces.d/s/^/#/' /etc/network/interfaces.new
-        chattr +i /etc/network/interfaces.new
-    fi
-fi
-# 修复部分网络加载没实时加载
-if [[ -f "/etc/network/interfaces.new" && -f "/etc/network/interfaces" ]]; then
-    chattr -i /etc/network/interfaces
-    cp -f /etc/network/interfaces.new /etc/network/interfaces
-    chattr +i /etc/network/interfaces
-fi
-# 修复部分网络加载中有重复内容
-if [[ -f "/etc/network/interfaces.d/50-cloud-init" && -f "/etc/network/interfaces" ]]; then
-    if grep -q "auto lo" "/etc/network/interfaces.d/50-cloud-init" && grep -q "iface lo inet loopback" "/etc/network/interfaces.d/50-cloud-init" && grep -q "auto lo" "/etc/network/interfaces" && grep -q "iface lo inet loopback" "/etc/network/interfaces"; then
-        # 从 /etc/network/interfaces.d/50-cloud-init 中删除指定的行
-        chattr -i /etc/network/interfaces.d/50-cloud-init
-        sed -i '/auto lo/d' "/etc/network/interfaces.d/50-cloud-init"
-        sed -i '/iface lo inet loopback/d' "/etc/network/interfaces.d/50-cloud-init"
-        chattr +i /etc/network/interfaces.d/50-cloud-init
-    fi
-fi
-# 去除空行之外的重复行
-remove_duplicate_lines "/etc/network/interfaces"
-remove_duplicate_lines "/etc/network/interfaces.new"
-remove_duplicate_lines "/etc/network/interfaces.d/50-cloud-init"
-}
-
 # 下载pve
+# 确保apt没有问题
 apt-get update -y && apt-get full-upgrade -y
 if [ $? -ne 0 ]; then
     apt-get install debian-keyring debian-archive-keyring -y
@@ -351,6 +424,9 @@ if echo $output | grep -q "NO_PUBKEY"; then
     _yellow "try sudo apt-key adv --keyserver keyserver.ubuntu.com --recv-keys missing key"
     exit 1
 fi
+# 修复可能存在的auto类型
+fix_interfaces
+# 正式安装
 install_package proxmox-ve
 install_package postfix
 install_package open-iscsi
@@ -369,9 +445,20 @@ cp /etc/apt/sources.list.d/pve-enterprise.list /etc/apt/sources.list.d/pve-enter
 rm -rf /etc/apt/sources.list.d/pve-enterprise.list
 apt-get update
 install_package sudo
-install_package lshw
 install_package iproute2
-install_package ifupdown2
+# ifupdown2 安装可能需要校验MAC地址，进行修复
+apt-get install -y ifupdown2
+if [ $? -ne 0 ]; then
+    if grep -q "hwaddress" /etc/network/interfaces; then
+      echo "hwaddress already defined in /etc/network/interfaces."
+    else
+      echo "Adding hwaddress to /etc/network/interfaces..."
+      echo "hwaddress $mac_address" >> /etc/network/interfaces
+    fi
+    echo "Reloading network configuration..."
+    ifdown -a && ifup -a
+    apt-get install -y ifupdown2
+fi
 install_package net-tools
 install_package novnc
 install_package cloud-init
@@ -394,21 +481,17 @@ if grep -q "source /etc/network/interfaces.d/*" /etc/network/interfaces; then
     if grep -q "iface eth0 inet dhcp" /etc/network/interfaces.d/50-cloud-init; then
       # 获取ipv4、subnet、gateway信息
       gateway=$(ip route | awk '/default/ {print $3}')
-      eth0info=$(ip -o -4 addr show dev eth0 | awk '{print $4}')
-      ipv4=$(echo $eth0info | cut -d'/' -f1)
-      subnet=$(echo $eth0info | cut -d'/' -f2)
+      interface_info=$(ip -o -4 addr show dev $interface | awk '{print $4}')
+      ipv4=$(echo $interface_info | cut -d'/' -f1)
+      subnet=$(echo $interface_info | cut -d'/' -f2)
       subnet=$(ipcalc -n "$ipv4/$subnet" | grep -oP 'Netmask:\s+\K.*' | awk '{print $1}')
       chattr -i /etc/network/interfaces.d/50-cloud-init
-      sed -i "/iface eth0 inet dhcp/c\
-        iface eth0 inet static\n\
+      sed -i "/iface $interface inet dhcp/c\
+        iface $interface inet static\n\
         address $ipv4\n\
         netmask $subnet\n\
         gateway $gateway\n\
         dns-nameservers 8.8.8.8 8.8.4.4" /etc/network/interfaces.d/50-cloud-init
-    fi
-    if ! grep -q "iface ${interface} inet manual" "$interfaces_file" && ! grep -q "iface ${interface} inet manual" /etc/network/interfaces.d/50-cloud-init; then
-	echo "Can not find 'iface ${interface} inet manual' in ${interfaces_file} or /etc/network/interfaces.d/50-cloud-init"
-	echo "iface ${interface} inet manual" >> "$interfaces_file"
     fi
     chattr +i /etc/network/interfaces.d/50-cloud-init
   fi
