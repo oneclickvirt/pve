@@ -1,6 +1,6 @@
 #!/bin/bash
 #from https://github.com/spiritLHLS/pve
-# 2023.06.21
+# 2023.06.22
 
 # 打印信息
 _red() { echo -e "\033[31m\033[01m$@\033[0m"; }
@@ -57,8 +57,10 @@ fi
 if [[ -f "/etc/network/interfaces.d/50-cloud-init" && -f "/etc/network/interfaces" ]]; then
     if grep -q "auto lo" "/etc/network/interfaces.d/50-cloud-init" && grep -q "iface lo inet loopback" "/etc/network/interfaces.d/50-cloud-init" && grep -q "auto lo" "/etc/network/interfaces" && grep -q "iface lo inet loopback" "/etc/network/interfaces"; then
         # 从 /etc/network/interfaces.d/50-cloud-init 中删除重复的行
+        chattr -i /etc/network/interfaces.d/50-cloud-init
         sed -i '/auto lo/d' "/etc/network/interfaces.d/50-cloud-init"
         sed -i '/iface lo inet loopback/d' "/etc/network/interfaces.d/50-cloud-init"
+        chattr +i /etc/network/interfaces.d/50-cloud-init
     fi
 fi
 interfaces_file="/etc/network/interfaces"
