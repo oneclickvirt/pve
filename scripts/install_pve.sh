@@ -413,7 +413,7 @@ if [ ! -s "/etc/resolv.conf" ]
 then
     cp /etc/resolv.conf /etc/resolv.conf.bak
     chattr -i /etc/resolv.conf
-    echo "nameserver 8.8.8.8" | sudo tee /etc/resolv.conf > /dev/null
+    echo "nameserver 8.8.8.8" >> /etc/resolv.conf
     chattr +i /etc/resolv.conf
 fi
 wget ${cdn_success_url}https://raw.githubusercontent.com/spiritLHLS/pve/main/scripts/check-dns.sh -O /usr/local/bin/check-dns.sh
