@@ -174,6 +174,10 @@ ${sysctl_path} -p
 # 重启配置
 service networking restart
 systemctl restart networking.service
+# 已加载网络，删除对应缓存文件
+if [ -f "/etc/network/interfaces.new" ];then
+    rm -rf /etc/network/interfaces.new
+fi
 _green "Although the gateway has been set automatically, I am not sure if it has been applied successfully, please check in Datacenter-->pve-->System-->Network in PVE"
 _green "If vmbr0 and vmbr1 are displayed properly and the Apply Configuration button is grayed out, there is no need to reboot"
 _green "If the above scenario is different, click on the Apply Configuration button, wait a few minutes and reboot the system to ensure that the gateway has been successfully applied"
