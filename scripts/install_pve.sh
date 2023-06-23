@@ -25,9 +25,9 @@ temp_file_apt_fix="/tmp/apt_fix.txt"
 
 remove_duplicate_lines() {
   chattr -i "$1"
-  # 去除重复行并跳过空行
-  if [ -f "$1" ];then
-      awk '!NF || !x[$0]++' "$1" > "$1.tmp" && mv -f "$1.tmp" "$1"
+  # 去除重复行并跳过空行和注释行
+  if [ -f "$1" ]; then
+    awk '!/^ *#/ && NF && !x[$0]++' "$1" > "$1.tmp" && mv -f "$1.tmp" "$1"
   fi
   rm -rf "$1.tmp"
   chattr +i "$1"
@@ -86,14 +86,18 @@ fi
 rebuild_interfaces(){
 # 修复部分网络运行部分未空
 if [ ! -e /run/network/interfaces.d/* ]; then
-    if [ -f "/etc/network/interfaces" ];then
+    if [ -f "/etc/network/interfaces" ]; then
         chattr -i /etc/network/interfaces
-        sed -i '/source-directory \/run\/network\/interfaces.d/s/^/#/' /etc/network/interfaces
+        if ! grep -q "^#.*source-directory \/run\/network\/interfaces\.d" /etc/network/interfaces; then
+            sed -i '/source-directory \/run\/network\/interfaces.d/s/^/#/' /etc/network/interfaces
+        fi
         chattr +i /etc/network/interfaces
     fi
-    if [ -f "/etc/network/interfaces.new" ];then
+    if [ -f "/etc/network/interfaces.new" ]; then
         chattr -i /etc/network/interfaces.new
-        sed -i '/source-directory \/run\/network\/interfaces.d/s/^/#/' /etc/network/interfaces.new
+        if ! grep -q "^#.*source-directory \/run\/network\/interfaces\.d" /etc/network/interfaces.new; then
+            sed -i '/source-directory \/run\/network\/interfaces.d/s/^/#/' /etc/network/interfaces.new
+        fi
         chattr +i /etc/network/interfaces.new
     fi
 fi
@@ -116,14 +120,22 @@ fi
 # 去除引用
 if [ -f "/etc/network/interfaces" ]; then
     chattr -i /etc/network/interfaces
-    sed -i '/^source \/etc\/network\/interfaces\.d\// { /^#/! s/^/#/ }' "/etc/network/interfaces"
-    sed -i 's/^source-directory \/etc\/network\/interfaces\.d/#source-directory \/etc\/network\/interfaces.d/' "/etc/network/interfaces"
+    if ! grep -q '^#source \/etc\/network\/interfaces\.d\/' "/etc/network/interfaces"; then
+        sed -i '/^source \/etc\/network\/interfaces\.d\// { /^#/! s/^/#/ }' "/etc/network/interfaces"
+    fi
+    if ! grep -q '^#source-directory \/etc\/network\/interfaces\.d' "/etc/network/interfaces"; then
+        sed -i 's/^source-directory \/etc\/network\/interfaces\.d/#source-directory \/etc\/network\/interfaces.d/' "/etc/network/interfaces"
+    fi
     chattr +i /etc/network/interfaces
 fi
 if [ -f "/etc/network/interfaces.new" ]; then
     chattr -i /etc/network/interfaces.new
-    sed -i '/^source \/etc\/network\/interfaces\.d\// { /^#/! s/^/#/ }' "/etc/network/interfaces.new"
-    sed -i 's/^source-directory \/etc\/network\/interfaces\.d/#source-directory \/etc\/network\/interfaces.d/' "/etc/network/interfaces.new"
+    if ! grep -q '^#source \/etc\/network\/interfaces\.d\/' "/etc/network/interfaces.new"; then
+        sed -i '/^source \/etc\/network\/interfaces\.d\// { /^#/! s/^/#/ }' "/etc/network/interfaces.new"
+    fi
+    if ! grep -q '^#source-directory \/etc\/network\/interfaces\.d' "/etc/network/interfaces.new"; then
+        sed -i 's/^source-directory \/etc\/network\/interfaces\.d/#source-directory \/etc\/network\/interfaces.d/' "/etc/network/interfaces.new"
+    fi
     chattr +i /etc/network/interfaces.new
 fi
 # 反加载
