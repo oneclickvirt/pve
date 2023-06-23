@@ -1,7 +1,7 @@
 #!/bin/bash
 # from 
 # https://github.com/spiritLHLS/pve
-# 2023.06.22
+# 2023.06.23
 
 
 _red() { echo -e "\033[31m\033[01m$@\033[0m"; }
@@ -101,10 +101,14 @@ fi
 if [[ -f "/etc/network/interfaces.new" && -f "/etc/network/interfaces" ]]; then
     chattr -i /etc/network/interfaces
     cp -f /etc/network/interfaces.new /etc/network/interfaces
-    sed -i '/source \/etc\/network\/interfaces\.d\/*/{s/^/#/}' "/etc/network/interfaces"
-    sed -i '/source \/etc\/network\/interfaces\.d\/*/{s/^/#/}' "/etc/network/interfaces.new"
     chattr +i /etc/network/interfaces
 fi
+chattr -i /etc/network/interfaces
+sed -i '/source \/etc\/network\/interfaces\.d\/*/{s/^/#/}' "/etc/network/interfaces"
+chattr +i /etc/network/interfaces
+chattr -i /etc/network/interfaces.new
+sed -i '/source \/etc\/network\/interfaces\.d\/*/{s/^/#/}' "/etc/network/interfaces.new"
+chattr +i /etc/network/interfaces.new
 # 合并文件
 if [[ -f "/etc/network/interfaces.d/50-cloud-init" && -f "/etc/network/interfaces" ]]; then
     if [[ ! -f "/etc/network/interfaces" ]]; then
