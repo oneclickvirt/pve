@@ -24,13 +24,13 @@ temp_file_apt_fix="/tmp/apt_fix.txt"
 ########## 定义部分需要使用的函数和组件预安装
 
 remove_duplicate_lines() {
-  chattr -i "$1"
-  # 去除重复行并跳过空行和注释行
-  if [ -f "$1" ]; then
-    awk '!/^ *#/ && NF && !x[$0]++' "$1" > "$1.tmp" && mv -f "$1.tmp" "$1"
-  fi
-  rm -rf "$1.tmp"
-  chattr +i "$1"
+    chattr -i "$1"
+    # 去除重复行并跳过空行和注释行
+    if [ -f "$1" ]; then
+      awk '!/^( *#|$)/ { if (!x[$0]++) print }' "$1" > "$1.tmp" && mv -f "$1.tmp" "$1"
+    fi
+    rm -rf "$1.tmp"
+    chattr +i "$1"
 }
 
 install_package() {
