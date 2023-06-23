@@ -103,12 +103,6 @@ if [[ -f "/etc/network/interfaces.new" && -f "/etc/network/interfaces" ]]; then
     cp -f /etc/network/interfaces.new /etc/network/interfaces
     chattr +i /etc/network/interfaces
 fi
-chattr -i /etc/network/interfaces
-sed -i '/source \/etc\/network\/interfaces\.d\/*/{s/^/#/}' "/etc/network/interfaces"
-chattr +i /etc/network/interfaces
-chattr -i /etc/network/interfaces.new
-sed -i '/source \/etc\/network\/interfaces\.d\/*/{s/^/#/}' "/etc/network/interfaces.new"
-chattr +i /etc/network/interfaces.new
 # 合并文件
 if [[ -f "/etc/network/interfaces.d/50-cloud-init" && -f "/etc/network/interfaces" ]]; then
     if [[ ! -f "/etc/network/interfaces" ]]; then
@@ -117,6 +111,23 @@ if [[ -f "/etc/network/interfaces.d/50-cloud-init" && -f "/etc/network/interface
     chattr -i /etc/network/interfaces
     awk '!/^#/ && NF' /etc/network/interfaces.d/50-cloud-init >> /etc/network/interfaces
     rm /etc/network/interfaces.d/50-cloud-init
+    chattr +i /etc/network/interfaces
+fi
+# 去除引用
+if [[ -f "/etc/network/interfaces" ]]; then
+    chattr -i /etc/network/interfaces
+    sed -i '/source \/etc\/network\/interfaces\.d\/*/{s/^/#/}' "/etc/network/interfaces"
+    chattr +i /etc/network/interfaces
+fi
+if [[ -f "/etc/network/interfaces.new" ]]; then
+    chattr -i /etc/network/interfaces.new
+    sed -i '/source \/etc\/network\/interfaces\.d\/*/{s/^/#/}' "/etc/network/interfaces.new"
+    chattr +i /etc/network/interfaces.new
+fi
+# 反加载
+if [[ -f "/etc/network/interfaces.new" && -f "/etc/network/interfaces" ]]; then
+    chattr -i /etc/network/interfaces
+    cp -f /etc/network/interfaces /etc/network/interfaces.new
     chattr +i /etc/network/interfaces
 fi
 # 允许手动配置
