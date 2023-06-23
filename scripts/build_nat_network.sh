@@ -176,6 +176,7 @@ service networking restart
 systemctl restart networking.service
 # 已加载网络，删除对应缓存文件
 if [ -f "/etc/network/interfaces.new" ];then
+    chattr -i /etc/network/interfaces.new
     rm -rf /etc/network/interfaces.new
 fi
 _green "Although the gateway has been set automatically, I am not sure if it has been applied successfully, please check in Datacenter-->pve-->System-->Network in PVE"
