@@ -150,7 +150,9 @@ fi
 # fi
 # 去除空行之外的重复行
 remove_duplicate_lines "/etc/network/interfaces"
-remove_duplicate_lines "/etc/network/interfaces.new"
+if [ -f "/etc/network/interfaces.new" ]; then
+    remove_duplicate_lines "/etc/network/interfaces.new"
+fi
 }
 
 fix_interfaces_ipv6_auto_type(){
