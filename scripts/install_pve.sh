@@ -27,9 +27,8 @@ remove_duplicate_lines() {
     chattr -i "$1"
     # 去除重复行并跳过空行和注释行
     if [ -f "$1" ]; then
-      awk '!/^ *#/ && NF { if (!x[$0]++) print }' "$1" > "$1.tmp" && mv -f "$1.tmp" "$1"
+      awk '!NF || !seen[$0]++' "$1" > "$1.tmp" && mv -f "$1.tmp" "$1"
     fi
-    rm -rf "$1.tmp"
     chattr +i "$1"
 }
 
