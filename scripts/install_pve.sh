@@ -3,7 +3,7 @@
 # https://github.com/spiritLHLS/pve
 # 2023.06.22
 
-# 打印信息
+
 _red() { echo -e "\033[31m\033[01m$@\033[0m"; }
 _green() { echo -e "\033[32m\033[01m$@\033[0m"; }
 _yellow() { echo -e "\033[33m\033[01m$@\033[0m"; }
@@ -24,17 +24,20 @@ temp_file_apt_fix="/tmp/apt_fix.txt"
 ########## 定义部分需要使用的函数和组件预安装
 
 remove_duplicate_lines() {
+  chattr -i "$1"
   # 去除重复行并跳过空行
   if [ -f "$1" ];then
       awk '!NF || !x[$0]++' "$1" > "$1.tmp" && mv -f "$1.tmp" "$1"
   fi
   rm -rf "$1.tmp"
+  chattr +i "$1"
 }
 
 install_package() {
     package_name=$1
     if command -v $package_name > /dev/null 2>&1 ; then
         _green "$package_name 已经安装"
+        _green "$package_name already installed"
     else
         apt-get install -y $package_name
         if [ $? -ne 0 ]; then
@@ -42,96 +45,11 @@ install_package() {
         fi
         if [ $? -ne 0 ]; then
             _green "$package_name 已尝试安装但失败，退出程序"
+            _green "$package_name tried to install but failed, exited the program"
             exit 1
         fi
         _green "$package_name 已尝试安装"
-    fi
-}
-
-# 前置环境安装
-if [ "$(id -u)" != "0" ]; then
-   _red "This script must be run as root" 1>&2
-   exit 1
-fi
-apt-get update -y
-apt-get upgrade -y systemd
-if [ $? -ne 0 ]; then
-   dpkg --configure -a
-   apt-get update -y
-fi
-if [ $? -ne 0 ]; then
-   apt-get install gnupg -y
-fi
-apt_update_output=$(apt-get update 2>&1)
-echo "$apt_update_output" > "$temp_file_apt_fix"
-if grep -q 'NO_PUBKEY' "$temp_file_apt_fix"; then
-    public_keys=$(grep -oE 'NO_PUBKEY [0-9A-F]+' "$temp_file_apt_fix" | awk '{ print $2 }')
-    joined_keys=$(echo "$public_keys" | paste -sd " ")
-    _yellow "No Public Keys: ${joined_keys}"
-    apt-key adv --keyserver keyserver.ubuntu.com --recv-keys ${joined_keys}
-    apt-get update
-    if [ $? -eq 0 ]; then
-        _green "Fixed"
-    fi
-fi
-rm "$temp_file_apt_fix"
-install_package wget
-install_package curl
-install_package sudo
-install_package bc
-install_package iptables
-install_package lshw
-# 检测IPV4
-ip=$(ip -4 addr show | grep global | awk '{print $2}' | cut -d '/' -f1 | head -n 1)
-# 检测物理接口和MAC地址
-interface_1=$(lshw -C network | awk '/logical name:/{print $3}' | head -1)
-interface_2=$(lshw -C network | awk '/logical name:/{print $3}' | sed -n '2p')
-if [ -z "$interface_1" ]; then
-  interface="eth0"
-fi
-if ! grep -q "$interface_1" "/etc/network/interfaces"; then
-    if [ -f "/etc/network/interfaces.d/50-cloud-init" ];then
-        if ! grep -q "$interface_1" "/etc/network/interfaces.d/50-cloud-init" && grep -q "$interface_2" "/etc/network/interfaces.d/50-cloud-init"; then
-            interface=${interface_2}
-        else
-            interface=${interface_1}
-        fi
-    else
-        interface=${interface_1}
-    fi
-else
-    interface=${interface_1}
-fi
-mac_address=$(ip -o link show dev ${interface} | awk '{print $17}')
-# 检查是否存在特定行
-if grep -Fxq "# /etc/cloud/cloud.cfg.d/99-disable-network-config.cfg with the following:" /etc/network/interfaces.d/50-cloud-init && grep -Fxq "# network: {config: disabled}" /etc/network/interfaces.d/50-cloud-init; then
-    echo "Creating /etc/cloud/cloud.cfg.d/99-disable-network-config.cfg."
-    if [ ! -f "/etc/cloud/cloud.cfg.d/99-disable-network-config.cfg" ]; then
-        echo "network: {config: disabled}" > /etc/cloud/cloud.cfg.d/99-disable-network-config.cfg
-        _green "Please restart the system for the changes to take effect."
-        _green "请执行 reboot 重启系统后再次自行本脚本"
-        exit 1
-    fi
-fi
-
-check_cdn() {
-  local o_url=$1
-  for cdn_url in "${cdn_urls[@]}"; do
-    if curl -sL -k "$cdn_url$o_url" --max-time 6 | grep -q "success" > /dev/null 2>&1; then
-      export cdn_success_url="$cdn_url"
-      return
-    fi
-    sleep 0.5
-  done
-  export cdn_success_url=""
-}
-
-check_cdn_file() {
-    check_cdn "https://raw.githubusercontent.com/spiritLHLS/ecs/main/back/test"
-    if [ -n "$cdn_success_url" ]; then
-        _yellow "CDN available, using CDN"
-    else
-        _yellow "No CDN available, no use CDN"
+        _green "$package_name tried to install"
     fi
 }
 
@@ -183,22 +101,30 @@ fi
 if [[ -f "/etc/network/interfaces.new" && -f "/etc/network/interfaces" ]]; then
     chattr -i /etc/network/interfaces
     cp -f /etc/network/interfaces.new /etc/network/interfaces
+    sed -i '/source \/etc\/network\/interfaces\.d\/*/{s/^/#/}' "/etc/network/interfaces"
+    sed -i '/source \/etc\/network\/interfaces\.d\/*/{s/^/#/}' "/etc/network/interfaces.new"
     chattr +i /etc/network/interfaces
 fi
-# 修复部分网络加载中有重复内容
+# 合并文件
 if [[ -f "/etc/network/interfaces.d/50-cloud-init" && -f "/etc/network/interfaces" ]]; then
-    if grep -q "auto lo" "/etc/network/interfaces.d/50-cloud-init" && grep -q "iface lo inet loopback" "/etc/network/interfaces.d/50-cloud-init" && grep -q "auto lo" "/etc/network/interfaces" && grep -q "iface lo inet loopback" "/etc/network/interfaces"; then
-        # 从 /etc/network/interfaces.d/50-cloud-init 中删除指定的行
-        chattr -i /etc/network/interfaces.d/50-cloud-init
-        sed -i '/auto lo/d' "/etc/network/interfaces.d/50-cloud-init"
-        sed -i '/iface lo inet loopback/d' "/etc/network/interfaces.d/50-cloud-init"
-        chattr +i /etc/network/interfaces.d/50-cloud-init
+    if [[ ! -f "/etc/network/interfaces" ]]; then
+        touch /etc/network/interfaces
     fi
+    chattr -i /etc/network/interfaces
+    awk '!/^#/ && NF' /etc/network/interfaces.d/50-cloud-init >> /etc/network/interfaces
+    rm /etc/network/interfaces.d/50-cloud-init
+    chattr +i /etc/network/interfaces
 fi
+# 允许手动配置
+# if ! grep -q "iface ${interface} inet manual" "/etc/network/interfaces"; then
+#     chattr -i /etc/network/interfaces
+#     echo "Can not find 'iface ${interface} inet manual' in /etc/network/interfaces"
+#     echo "iface ${interface} inet manual" >> "/etc/network/interfaces"
+#     chattr +i /etc/network/interfaces
+# fi
 # 去除空行之外的重复行
 remove_duplicate_lines "/etc/network/interfaces"
 remove_duplicate_lines "/etc/network/interfaces.new"
-remove_duplicate_lines "/etc/network/interfaces.d/50-cloud-init"
 }
 
 fix_interfaces_ipv6_auto_type(){
@@ -228,22 +154,104 @@ mv -f /tmp/interfaces.modified $1
 rm -rf /tmp/interfaces.modified
 }
 
-fix_interfaces(){
-fix_interfaces_ipv6_auto_type /etc/network/interfaces
-fix_interfaces_ipv6_auto_type /etc/network/interfaces.d/50-cloud-init
-chattr -i /etc/network/interfaces
-if ! grep -q "iface ${interface} inet manual" "/etc/network/interfaces"; then
-    if [ -f "/etc/network/interfaces.d/50-cloud-init" ];then
-        if ! grep -q "iface ${interface} inet manual" /etc/network/interfaces.d/50-cloud-init; then
-            echo "Can not find 'iface ${interface} inet manual' in /etc/network/interfaces or /etc/network/interfaces.d/50-cloud-init"
-            echo "iface ${interface} inet manual" >> "/etc/network/interfaces"
-        fi
+check_cdn() {
+  local o_url=$1
+  for cdn_url in "${cdn_urls[@]}"; do
+    if curl -sL -k "$cdn_url$o_url" --max-time 6 | grep -q "success" > /dev/null 2>&1; then
+      export cdn_success_url="$cdn_url"
+      return
+    fi
+    sleep 0.5
+  done
+  export cdn_success_url=""
+}
+
+check_cdn_file() {
+    check_cdn "https://raw.githubusercontent.com/spiritLHLS/ecs/main/back/test"
+    if [ -n "$cdn_success_url" ]; then
+        _yellow "CDN available, using CDN"
     else
-        echo "Can not find 'iface ${interface} inet manual' in /etc/network/interfaces"
-        echo "iface ${interface} inet manual" >> "/etc/network/interfaces"
+        _yellow "No CDN available, no use CDN"
+    fi
+}
+
+# 前置环境安装
+if [ "$(id -u)" != "0" ]; then
+   _red "This script must be run as root" 1>&2
+   exit 1
+fi
+# 确保apt没有问题
+apt-get update -y
+apt-get full-upgrade -y
+if [ $? -ne 0 ]; then
+    apt-get install debian-keyring debian-archive-keyring -y
+    apt-get update -y && apt-get full-upgrade -y
+fi
+apt_update_output=$(apt-get update 2>&1)
+echo "$apt_update_output" > "$temp_file_apt_fix"
+if grep -q 'NO_PUBKEY' "$temp_file_apt_fix"; then
+    public_keys=$(grep -oE 'NO_PUBKEY [0-9A-F]+' "$temp_file_apt_fix" | awk '{ print $2 }')
+    joined_keys=$(echo "$public_keys" | paste -sd " ")
+    _yellow "No Public Keys: ${joined_keys}"
+    apt-key adv --keyserver keyserver.ubuntu.com --recv-keys ${joined_keys}
+    apt-get update
+    if [ $? -eq 0 ]; then
+        _green "Fixed"
     fi
 fi
-}
+rm "$temp_file_apt_fix"
+install_package wget
+install_package curl
+install_package sudo
+install_package bc
+install_package iptables
+install_package lshw
+# 检测IPV4
+ip=$(ip -4 addr show | grep global | awk '{print $2}' | cut -d '/' -f1 | head -n 1)
+# 检测物理接口和MAC地址
+interface_1=$(lshw -C network | awk '/logical name:/{print $3}' | head -1)
+interface_2=$(lshw -C network | awk '/logical name:/{print $3}' | sed -n '2p')
+if [ -z "$interface_1" ]; then
+  interface="eth0"
+fi
+if ! grep -q "$interface_1" "/etc/network/interfaces"; then
+    if [ -f "/etc/network/interfaces.d/50-cloud-init" ];then
+        if ! grep -q "$interface_1" "/etc/network/interfaces.d/50-cloud-init" && grep -q "$interface_2" "/etc/network/interfaces.d/50-cloud-init"; then
+            interface=${interface_2}
+        else
+            interface=${interface_1}
+        fi
+    else
+        if grep -q "$interface_2" "/etc/network/interfaces"; then
+            interface=${interface_2}
+        else
+            interface=${interface_1}
+        fi
+    fi
+else
+    interface=${interface_1}
+fi
+mac_address=$(ip -o link show dev ${interface} | awk '{print $17}')
+# 检查是否存在特定行
+if [ -f "/etc/network/interfaces.d/50-cloud-init" ]; then
+    if grep -Fxq "# /etc/cloud/cloud.cfg.d/99-disable-network-config.cfg with the following:" /etc/network/interfaces.d/50-cloud-init && grep -Fxq "# network: {config: disabled}" /etc/network/interfaces.d/50-cloud-init; then
+        echo "Creating /etc/cloud/cloud.cfg.d/99-disable-network-config.cfg."
+        if [ ! -f "/etc/cloud/cloud.cfg.d/99-disable-network-config.cfg" ]; then
+            echo "network: {config: disabled}" > /etc/cloud/cloud.cfg.d/99-disable-network-config.cfg
+        fi
+    fi
+fi
+# 网络配置修改
+rebuild_interfaces
+rebuild_cloud_init
+fix_interfaces_ipv6_auto_type /etc/network/interfaces
+# 检测是否已重启过
+if [ ! -f "/root/reboot_pve.txt" ]; then
+    echo "1" > "/root/reboot_pve.txt"
+    _green "Please restart the system for the changes to take effect."
+    _green "请执行 reboot 重启系统后再次自行本脚本"
+    exit 1
+fi
 
 ########## 正式开始安装
 
@@ -265,6 +273,7 @@ if [ "${hostname}" != "pve" ]; then
         # _green "已将 ${ip} ${hostname} ${hostname} 添加到 /etc/hosts 文件中"
     else
         _blue "已存在 ${ip} ${hostname} ${hostname} 的记录，无需添加"
+        _blue "A record for ${ip} ${hostname} ${hostname} already exists, no need to add it"
     fi
     chattr -i /etc/hostname
     hostnamectl set-hostname pve
@@ -407,7 +416,6 @@ fi
 # 备份网络设置
 cp /etc/network/interfaces /etc/network/interfaces.bak
 cp /etc/network/interfaces.new /etc/network/interfaces.new.bak
-cp /etc/network/interfaces.d/50-cloud-init /etc/network/interfaces.d/50-cloud-init.bak
 rebuild_interfaces
 
 # 下载pve
@@ -436,7 +444,7 @@ if echo $output | grep -q "NO_PUBKEY"; then
     exit 1
 fi
 # 修复可能存在的auto类型
-fix_interfaces
+fix_interfaces_ipv6_auto_type /etc/network/interfaces
 # 正式安装
 install_package proxmox-ve
 install_package postfix
@@ -457,24 +465,12 @@ rm -rf /etc/apt/sources.list.d/pve-enterprise.list
 apt-get update
 install_package sudo
 install_package iproute2
-# ifupdown2 安装可能需要校验MAC地址，进行修复
-# if [ $? -ne 0 ]; then
-#     if grep -q "hwaddress" /etc/network/interfaces; then
-#       echo "hwaddress already defined in /etc/network/interfaces."
-#     else
-#       echo "Adding hwaddress to /etc/network/interfaces..."
-#       echo "hwaddress $mac_address" >> /etc/network/interfaces
-#     fi
-#     echo "Reloading network configuration..."
-#     ifdown -a && ifup -a
-#     apt-get install -y ifupdown2
-# fi
 case $version in
   stretch)
     install_package ifupdown
     ;;
   buster)
-    install_package ifupdown
+    install_package ifupdown2
     ;;
   bullseye)
     install_package ifupdown2
@@ -500,28 +496,24 @@ latest_kernel=${installed_kernels[-1]}
 _green "PVE latest kernel: $latest_kernel"
 # update-grub
 install_package ipcalc
-# 检查/etc/network/interfaces是否有source /etc/network/interfaces.d/*行
-if grep -q "source /etc/network/interfaces.d/*" /etc/network/interfaces; then
-  # 检查/etc/network/interfaces.d/文件夹下是否有50-cloud-init文件
-  if [ -f /etc/network/interfaces.d/50-cloud-init ]; then
-    # 检查50-cloud-init文件中是否有iface eth0 inet dhcp行 - 看来还是得转动态为静态判断东西
-    if grep -q "iface eth0 inet dhcp" /etc/network/interfaces.d/50-cloud-init; then
-      # 获取ipv4、subnet、gateway信息
-      gateway=$(ip route | awk '/default/ {print $3}')
-      interface_info=$(ip -o -4 addr show dev $interface | awk '{print $4}')
-      ipv4=$(echo $interface_info | cut -d'/' -f1)
-      subnet=$(echo $interface_info | cut -d'/' -f2)
-      subnet=$(ipcalc -n "$ipv4/$subnet" | grep -oP 'Netmask:\s+\K.*' | awk '{print $1}')
-      chattr -i /etc/network/interfaces.d/50-cloud-init
-      sed -i "/iface $interface inet dhcp/c\
-        iface $interface inet static\n\
-        address $ipv4\n\
-        netmask $subnet\n\
-        gateway $gateway\n\
-        dns-nameservers 8.8.8.8 8.8.4.4" /etc/network/interfaces.d/50-cloud-init
+if [ -f "/etc/network/interfaces" ]; then
+    # 检查/etc/network/interfaces文件中是否有iface eth0 inet dhcp行 - 看来还是得转动态为静态判断东西
+    if grep -q "iface eth0 inet dhcp" /etc/network/interfaces; then
+        # 获取ipv4、subnet、gateway信息
+        gateway=$(ip route | awk '/default/ {print $3}')
+        interface_info=$(ip -o -4 addr show dev $interface | awk '{print $4}')
+        ipv4=$(echo $interface_info | cut -d'/' -f1)
+        subnet=$(echo $interface_info | cut -d'/' -f2)
+        subnet=$(ipcalc -n "$ipv4/$subnet" | grep -oP 'Netmask:\s+\K.*' | awk '{print $1}')
+        chattr -i /etc/network/interfaces
+        sed -i "/iface $interface inet dhcp/c\
+          iface $interface inet static\n\
+          address $ipv4\n\
+          netmask $subnet\n\
+          gateway $gateway\n\
+          dns-nameservers 8.8.8.8 8.8.4.4" /etc/network/interfaces
     fi
-    chattr +i /etc/network/interfaces.d/50-cloud-init
-  fi
+    chattr +i /etc/network/interfaces
 fi
 systemctl restart networking
 if [ ! -s "/etc/resolv.conf" ]
@@ -540,6 +532,10 @@ systemctl enable check-dns.service
 systemctl start check-dns.service
 # 打印安装后的信息
 url="https://${ip}:8006/"
+_green "Installation complete, please open HTTPS web page $url"
+_green "The username and password are the username and password used by the server (e.g. root and root user's password)"
+_green "If the login is correct please do not rush to reboot the system, go to execute the commands of the pre-configured environment and then reboot the system"
 _green "安装完毕，请打开HTTPS网页 $url"
 _green "用户名、密码就是服务器所使用的用户名、密码(如root和root用户的密码)"
 _green "如果登录无误请不要急着重启系统，去执行预配置环境的命令后再重启系统"
+rm -rf /root/reboot_pve.txt

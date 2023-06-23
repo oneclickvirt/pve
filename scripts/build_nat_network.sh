@@ -76,15 +76,15 @@ if ! grep -q "iface lo inet loopback" "$interfaces_file"; then
     echo "Can not find 'iface lo inet loopback' in ${interfaces_file}"
     exit 1
 fi
-if ! grep -q "iface ${interface} inet manual" "$interfaces_file"; then
-    if grep -q "iface ${interface_2} inet manual" "$interfaces_file"; then
-        interface=${interface_2}
-    else
-        #     echo "iface ${interface} inet manual" >> "$interfaces_file"
-        echo "Can not find 'iface ${interface} inet manual' in ${interfaces_file}"
-        exit 1
-    fi
-fi
+# if ! grep -q "iface ${interface} inet manual" "$interfaces_file"; then
+#     if grep -q "iface ${interface_2} inet manual" "$interfaces_file"; then
+#         interface=${interface_2}
+#     else
+#         #     echo "iface ${interface} inet manual" >> "$interfaces_file"
+#         echo "Can not find 'iface ${interface} inet manual' in ${interfaces_file}"
+#         exit 1
+#     fi
+# fi
 if grep -q "vmbr0" "$interfaces_file"; then
     echo "vmbr0 已存在在 ${interfaces_file}"
 else
