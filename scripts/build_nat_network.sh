@@ -25,10 +25,27 @@ if ! command -v lshw > /dev/null 2>&1; then
       apt-get install -y lshw
 fi
 # 提取物理网卡名字
-interface=$(lshw -C network | awk '/logical name:/{print $3}' | head -1)
+interface_1=$(lshw -C network | awk '/logical name:/{print $3}' | head -1)
 interface_2=$(lshw -C network | awk '/logical name:/{print $3}' | sed -n '2p')
-if [ -z "$interface" ]; then
+if [ -z "$interface_1" ]; then
   interface="eth0"
+fi
+if ! grep -q "$interface_1" "/etc/network/interfaces"; then
+    if [ -f "/etc/network/interfaces.d/50-cloud-init" ];then
+        if ! grep -q "$interface_1" "/etc/network/interfaces.d/50-cloud-init" && grep -q "$interface_2" "/etc/network/interfaces.d/50-cloud-init"; then
+            interface=${interface_2}
+        else
+            interface=${interface_1}
+        fi
+    else
+        if grep -q "$interface_2" "/etc/network/interfaces"; then
+            interface=${interface_2}
+        else
+            interface=${interface_1}
+        fi
+    fi
+else
+    interface=${interface_1}
 fi
 # 提取IPV4地址
 ipv4_address=$(ip addr show | awk '/inet .*global/ && !/inet6/ {print $2}')
