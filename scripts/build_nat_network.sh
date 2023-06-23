@@ -1,7 +1,7 @@
 #!/bin/bash
 # from 
 # https://github.com/spiritLHLS/pve
-# 2023.06.22
+# 2023.06.23
 
 # 打印信息
 _red() { echo -e "\033[31m\033[01m$@\033[0m"; }
@@ -41,13 +41,17 @@ ipv6_address=$(ip addr show | awk '/inet6.*scope global/ { print $2 }' | head -n
 # 检查是否存在 IPV6 
 if [ -z "$SUBNET_PREFIX" ]; then
     _red "无 IPV6 子网，不进行自动映射"
+    _red "No IPV6 subnet, no automatic mapping"
 else
     _blue "母鸡的IPV6子网前缀为 $SUBNET_PREFIX"
+    _blue "The hen's IPV6 subnet prefix is $SUBNET_PREFIX"
 fi
 if [ -z "$ipv6_address" ]; then
     _red "母机无 IPV6 地址，不进行自动映射"
+    _red "No IPV6 address on the parent machine, no automatic mapping"
 else
     _blue "母鸡的IPV6地址为 $ipv6_address"
+    _blue "The IPV6 address of the host is $ipv6_address"
 fi
 
 # 录入网关
@@ -64,6 +68,7 @@ if [[ -f "/etc/network/interfaces.d/50-cloud-init" && -f "/etc/network/interface
         chattr +i /etc/network/interfaces.d/50-cloud-init
     fi
 fi
+rm -rf /etc/network/interfaces.new
 interfaces_file="/etc/network/interfaces"
 chattr -i "$interfaces_file"
 if ! grep -q "auto lo" "$interfaces_file"; then
@@ -87,6 +92,7 @@ fi
 # fi
 if grep -q "vmbr0" "$interfaces_file"; then
     echo "vmbr0 已存在在 ${interfaces_file}"
+    echo "vmbr0 already exists in ${interfaces_file}"
 else
 if [ -z "$SUBNET_PREFIX" ] || [ -z "$ipv6_address" ]; then
 cat << EOF | sudo tee -a "$interfaces_file"
@@ -115,7 +121,8 @@ EOF
 fi
 fi
 if grep -q "vmbr1" "$interfaces_file"; then
-    echo "vmbr1 已存在在 "$interfaces_file""
+    echo "vmbr1 已存在在 ${interfaces_file}"
+    echo "vmbr1 already exists in ${interfaces_file}"
 else
 cat << EOF | sudo tee -a "$interfaces_file"
 auto vmbr1
@@ -150,3 +157,9 @@ ${sysctl_path} -p
 # 重启配置
 service networking restart
 systemctl restart networking.service
+_green "Although the gateway has been set automatically, I am not sure if it has been applied successfully, please check in Datacenter-->pve-->System-->Network in PVE"
+_green "If vmbr0 and vmbr1 are displayed properly and the Apply Configuration button is grayed out, there is no need to reboot"
+_green "If the above scenario is different, please wait a few minutes and reboot the system to make sure the gateway has been successfully applied"
+_green "虽然已自动设置网关，但不确定是否已成功应用，请查看PVE中的 Datacenter-->pve-->System-->Network 中查看"
+_green "如果 vmbr0 和 vmbr1 已正常显示且 Apply Configuration 这个按钮是灰色的，则不用重启"
+_green "上述情形如果有不同的，请等待几分钟后重启系统，确保网关已成功应用"
