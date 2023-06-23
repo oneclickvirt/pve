@@ -84,7 +84,7 @@ fi
 }
 
 rebuild_interfaces(){
-# 修复部分网络加载未空
+# 修复部分网络运行部分未空
 if [ ! -e /run/network/interfaces.d/* ]; then
     if [ -f "/etc/network/interfaces" ];then
         chattr -i /etc/network/interfaces
@@ -104,15 +104,6 @@ if [[ -f "/etc/network/interfaces.new" && -f "/etc/network/interfaces" ]]; then
     chattr +i /etc/network/interfaces
 fi
 # 合并文件
-# if [[ -f "/etc/network/interfaces.d/50-cloud-init" && -f "/etc/network/interfaces" ]]; then
-#     if [[ ! -f "/etc/network/interfaces" ]]; then
-#         touch /etc/network/interfaces
-#     fi
-#     chattr -i /etc/network/interfaces
-#     awk '!/^#/ && NF' /etc/network/interfaces.d/50-cloud-init >> /etc/network/interfaces
-#     rm /etc/network/interfaces.d/50-cloud-init
-#     chattr +i /etc/network/interfaces
-# fi
 if [[ -f "/etc/network/interfaces.d/50-cloud-init" && -f "/etc/network/interfaces" ]]; then
     if [ ! -f "/etc/network/interfaces" ]; then
         touch /etc/network/interfaces
