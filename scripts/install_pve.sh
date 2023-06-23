@@ -114,7 +114,7 @@ fi
 #     chattr +i /etc/network/interfaces
 # fi
 if [[ -f "/etc/network/interfaces.d/50-cloud-init" && -f "/etc/network/interfaces" ]]; then
-    if [[ ! -f "/etc/network/interfaces" ]]; then
+    if [ ! -f "/etc/network/interfaces" ]; then
         touch /etc/network/interfaces
     fi
     chattr -i /etc/network/interfaces
@@ -123,14 +123,16 @@ if [[ -f "/etc/network/interfaces.d/50-cloud-init" && -f "/etc/network/interface
     chattr +i /etc/network/interfaces
 fi
 # 去除引用
-if [[ -f "/etc/network/interfaces" ]]; then
+if [ -f "/etc/network/interfaces" ]; then
     chattr -i /etc/network/interfaces
     sed -i '/^source \/etc\/network\/interfaces\.d\// { /^#/! s/^/#/ }' "/etc/network/interfaces"
+    sed -i 's/^source-directory \/etc\/network\/interfaces\.d/#source-directory \/etc\/network\/interfaces.d/' "/etc/network/interfaces"
     chattr +i /etc/network/interfaces
 fi
-if [[ -f "/etc/network/interfaces.new" ]]; then
+if [ -f "/etc/network/interfaces.new" ]; then
     chattr -i /etc/network/interfaces.new
     sed -i '/^source \/etc\/network\/interfaces\.d\// { /^#/! s/^/#/ }' "/etc/network/interfaces.new"
+    sed -i 's/^source-directory \/etc\/network\/interfaces\.d/#source-directory \/etc\/network\/interfaces.d/' "/etc/network/interfaces.new"
     chattr +i /etc/network/interfaces.new
 fi
 # 反加载
@@ -174,7 +176,9 @@ do
         echo "$line"
     fi
 done < $1 > /tmp/interfaces.modified
+chattr -i $1
 mv -f /tmp/interfaces.modified $1
+chattr +i $1
 rm -rf /tmp/interfaces.modified
 }
 
@@ -468,6 +472,7 @@ if echo $output | grep -q "NO_PUBKEY"; then
     exit 1
 fi
 # 修复可能存在的auto类型
+rebuild_interfaces
 fix_interfaces_ipv6_auto_type /etc/network/interfaces
 # 正式安装
 install_package proxmox-ve
