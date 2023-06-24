@@ -1,7 +1,7 @@
 #!/bin/bash
 # from 
 # https://github.com/spiritLHLS/pve
-# 2023.06.23
+# 2023.06.24
 
 # 打印信息
 _red() { echo -e "\033[31m\033[01m$@\033[0m"; }
@@ -52,7 +52,7 @@ ipv4_address=$(ip addr show | awk '/inet .*global/ && !/inet6/ {print $2}')
 # 提取IPV4网关
 gateway=$(ip route | awk '/default/ {print $3}')
 # 获取IPV6子网前缀
-SUBNET_PREFIX=$(ip -6 addr show | grep -E 'inet6.*global' | awk '{print $2}' | awk -F'/' '{print $1}' | head -n 1 | rev | cut -d ':' -f 2- | rev):
+SUBNET_PREFIX=$(ip -6 addr show | grep -E 'inet6.*global' | awk '{print $2}' | awk -F'/' '{print $1}' | head -n 1 | rev | cut -d ':' -f 2- | rev):0
 # 提取IPV6地址
 ipv6_address=$(ip addr show | awk '/inet6.*scope global/ { print $2 }' | head -n 1)
 # 检查是否存在 IPV6 
