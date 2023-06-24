@@ -3,6 +3,7 @@
 # https://github.com/spiritLHLS/pve
 # 2023.06.24
 
+
 # 打印信息
 _red() { echo -e "\033[31m\033[01m$@\033[0m"; }
 _green() { echo -e "\033[32m\033[01m$@\033[0m"; }
@@ -56,7 +57,7 @@ SUBNET_PREFIX=$(ip -6 addr show | grep -E 'inet6.*global' | awk '{print $2}' | a
 # 提取IPV6地址
 ipv6_address=$(ip addr show | awk '/inet6.*scope global/ { print $2 }' | head -n 1)
 # 检查是否存在 IPV6 
-if [ -z "$SUBNET_PREFIX" ]; then
+if [ -z "$SUBNET_PREFIX" ] || [ "$SUBNET_PREFIX" = ":0" ]; then
     _red "无 IPV6 子网，不进行自动映射"
     _red "No IPV6 subnet, no automatic mapping"
 else
@@ -105,7 +106,7 @@ if grep -q "vmbr0" "$interfaces_file"; then
     echo "vmbr0 已存在在 ${interfaces_file}"
     echo "vmbr0 already exists in ${interfaces_file}"
 else
-if [ -z "$SUBNET_PREFIX" ] || [ -z "$ipv6_address" ]; then
+if [ -z "$SUBNET_PREFIX" ] || [ "$SUBNET_PREFIX" = ":0" ] || [ -z "$ipv6_address" ]; then
 cat << EOF | sudo tee -a "$interfaces_file"
 auto vmbr0
 iface vmbr0 inet static
