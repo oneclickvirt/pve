@@ -52,7 +52,7 @@ ipv4_address=$(ip addr show | awk '/inet .*global/ && !/inet6/ {print $2}')
 # 提取IPV4网关
 gateway=$(ip route | awk '/default/ {print $3}')
 # 获取IPV6子网前缀
-SUBNET_PREFIX=$(ip -6 addr show | grep -E 'inet6.*global' | awk '{print $2}' | awk -F'/' '{print $1}' | head -n 1 | cut -d ':' -f1-5):
+SUBNET_PREFIX=$(ip -6 addr show | grep -E 'inet6.*global' | awk '{print $2}' | awk -F'/' '{print $1}' | head -n 1 | rev | cut -d ':' -f 2- | rev):
 # 提取IPV6地址
 ipv6_address=$(ip addr show | awk '/inet6.*scope global/ { print $2 }' | head -n 1)
 # 检查是否存在 IPV6 
@@ -85,7 +85,10 @@ if [[ -f "/etc/network/interfaces.d/50-cloud-init" && -f "/etc/network/interface
         chattr +i /etc/network/interfaces.d/50-cloud-init
     fi
 fi
-rm -rf /etc/network/interfaces.new
+if [ -f "/etc/network/interfaces.new" ];then
+    chattr -i /etc/network/interfaces.new
+    rm -rf /etc/network/interfaces.new
+fi
 interfaces_file="/etc/network/interfaces"
 chattr -i "$interfaces_file"
 if ! grep -q "auto lo" "$interfaces_file"; then
@@ -98,15 +101,6 @@ if ! grep -q "iface lo inet loopback" "$interfaces_file"; then
     echo "Can not find 'iface lo inet loopback' in ${interfaces_file}"
     exit 1
 fi
-# if ! grep -q "iface ${interface} inet manual" "$interfaces_file"; then
-#     if grep -q "iface ${interface_2} inet manual" "$interfaces_file"; then
-#         interface=${interface_2}
-#     else
-#         #     echo "iface ${interface} inet manual" >> "$interfaces_file"
-#         echo "Can not find 'iface ${interface} inet manual' in ${interfaces_file}"
-#         exit 1
-#     fi
-# fi
 if grep -q "vmbr0" "$interfaces_file"; then
     echo "vmbr0 已存在在 ${interfaces_file}"
     echo "vmbr0 already exists in ${interfaces_file}"
