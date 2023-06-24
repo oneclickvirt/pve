@@ -17,6 +17,7 @@
 - 更新Debian12安装的PVE版本为stable
 - 修复部分机器ifconfig命令不存在的问题
 - 适配部分机器ipv6网络是SLAAC动态分配的情况
+- 适配pve8.0的非订阅用户弹窗进行删除
 
 [更新日志](CHANGELOG.md)
 
