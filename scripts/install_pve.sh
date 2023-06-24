@@ -163,19 +163,26 @@ while IFS= read -r line
 do
     # 检测以 "iface" 开头且包含 "inet6 auto" 的行
     if [[ $line == "iface ${interface} inet6 auto" ]]; then
-        # 将 "auto" 替换为 "static"
-        modified_line="${line/auto/static}"
-        echo "$modified_line"
-        # 添加静态IPv6配置信息
-        ipv6_prefixlen=$(ifconfig ${interface} | grep -oP 'prefixlen \K\d+' | head -n 1)
-        # 获取IPv6地址
-        # ipv6_address=$(ifconfig ${interface} | grep -oE 'inet6 ([0-9a-fA-F:]+)' | awk '{print $2}' | head -n 1)
-        ipv6_address=$(ip -6 addr show dev ${interface} | awk '/inet6 .* scope global dynamic/{print $2}')
-        # 提取地址部分
-        ipv6_address=${ipv6_address%%/*}
-        ipv6_gateway=$(ip -6 route show | awk '/default via/{print $3}')
-        echo "    address ${ipv6_address}/${ipv6_prefixlen}"
-        echo "    gateway ${ipv6_gateway}"
+        output=$(ip addr)
+        matches=$(echo "$output" | grep "inet6.*global dynamic")
+        if [ -n "$matches" ]; then
+            # SLAAC动态分配，做无IPV6的处理
+            sed -i "/iface $interface inet6 auto/d" $1
+        else
+            # 将 "auto" 替换为 "static"
+            modified_line="${line/auto/static}"
+            echo "$modified_line"
+            # 添加静态IPv6配置信息
+            ipv6_prefixlen=$(ifconfig ${interface} | grep -oP 'prefixlen \K\d+' | head -n 1)
+            # 获取IPv6地址
+            # ipv6_address=$(ifconfig ${interface} | grep -oE 'inet6 ([0-9a-fA-F:]+)' | awk '{print $2}' | head -n 1)
+            ipv6_address=$(ip -6 addr show dev ${interface} | awk '/inet6 .* scope global dynamic/{print $2}')
+            # 提取地址部分
+            ipv6_address=${ipv6_address%%/*}
+            ipv6_gateway=$(ip -6 route show | awk '/default via/{print $3}')
+            echo "    address ${ipv6_address}/${ipv6_prefixlen}"
+            echo "    gateway ${ipv6_gateway}"
+        fi
     else
         echo "$line"
     fi
