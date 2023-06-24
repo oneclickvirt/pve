@@ -16,6 +16,7 @@
 - 修复部分机器是IPV6子网前缀识别失效的问题
 - 更新Debian12安装的PVE版本为stable
 - 修复部分机器ifconfig命令不存在的问题
+- 适配部分机器ipv6网络是SLAAC动态分配的情况
 
 [更新日志](CHANGELOG.md)
 
