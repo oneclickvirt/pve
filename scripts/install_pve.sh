@@ -238,6 +238,7 @@ install_package sudo
 install_package bc
 install_package iptables
 install_package lshw
+install_package net-tools
 # 检测IPV4
 ip=$(ip -4 addr show | grep global | awk '{print $2}' | cut -d '/' -f1 | head -n 1)
 # 检测物理接口和MAC地址
@@ -516,7 +517,6 @@ case $version in
     exit 1
     ;;
 esac
-install_package net-tools
 install_package novnc
 install_package cloud-init
 rebuild_cloud_init
