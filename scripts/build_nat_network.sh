@@ -62,7 +62,7 @@ if [ -z "$SUBNET_PREFIX" ] || [ "$SUBNET_PREFIX" = ":0" ]; then
     _red "No IPV6 subnet, no automatic mapping"
 else
     _blue "母鸡的IPV6子网前缀为 $SUBNET_PREFIX"
-    _blue "The hen's IPV6 subnet prefix is $SUBNET_PREFIX"
+    _blue "The IPV6 subnet prefix of the host is $SUBNET_PREFIX"
 fi
 if [ -z "$ipv6_address" ]; then
     _red "母机无 IPV6 地址，不进行自动映射"
