@@ -368,18 +368,18 @@ fi
 apt-get install lsb-release -y
 version=$(lsb_release -cs)
 case $version in
-  stretch|buster|bullseye)
+  stretch|buster|bullseye|bookworm)
     repo_url="deb http://download.proxmox.com/debian/pve ${version} pve-no-subscription"
     if [[ -n "${CN}" ]]; then
       repo_url="deb https://mirrors.tuna.tsinghua.edu.cn/proxmox/debian/pve ${version} pve-no-subscription"
     fi
     ;;
-  bookworm)
-    repo_url="deb http://download.proxmox.com/debian/pve ${version} pvetest"
-    if [[ -n "${CN}" ]]; then
-      repo_url="deb https://mirrors.tuna.tsinghua.edu.cn/proxmox/debian/pve ${version} pvetest"
-    fi
-    ;;
+  # bookworm)
+  #   repo_url="deb http://download.proxmox.com/debian/pve ${version} pvetest"
+  #   if [[ -n "${CN}" ]]; then
+  #     repo_url="deb https://mirrors.tuna.tsinghua.edu.cn/proxmox/debian/pve ${version} pvetest"
+  #   fi
+  #   ;;
   *)
     _red "Error: Unsupported Debian version"
     reading "是否要继续安装(非Debian系会爆上面这个警告)？(回车则默认不继续安装) [y/n] " confirm
