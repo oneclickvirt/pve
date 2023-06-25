@@ -276,8 +276,8 @@ mac_address=$(ip -o link show dev ${interface} | awk '{print $17}')
 # 检查是否存在特定行
 if [ -f "/etc/network/interfaces.d/50-cloud-init" ]; then
     if grep -Fxq "# /etc/cloud/cloud.cfg.d/99-disable-network-config.cfg with the following:" /etc/network/interfaces.d/50-cloud-init && grep -Fxq "# network: {config: disabled}" /etc/network/interfaces.d/50-cloud-init; then
-        echo "Creating /etc/cloud/cloud.cfg.d/99-disable-network-config.cfg."
         if [ ! -f "/etc/cloud/cloud.cfg.d/99-disable-network-config.cfg" ]; then
+            echo "Creating /etc/cloud/cloud.cfg.d/99-disable-network-config.cfg."
             echo "network: {config: disabled}" > /etc/cloud/cloud.cfg.d/99-disable-network-config.cfg
         fi
     fi
@@ -308,7 +308,7 @@ fi
 # 检测是否已重启过
 if [ ! -f "/root/reboot_pve.txt" ]; then
     echo "1" > "/root/reboot_pve.txt"
-    _green "Please restart the system for the changes to take effect."
+    _green "Please execute reboot to reboot the system and then execute this script again"
     _green "请执行 reboot 重启系统后再次执行本脚本"
     exit 1
 fi
