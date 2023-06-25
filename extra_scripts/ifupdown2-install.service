@@ -1,0 +1,12 @@
+[Unit]
+Description=Install ifupdown2 on next reboot
+After=network.target
+
+[Service]
+Type=oneshot
+ExecStart=/root/install_ifupdown2.sh
+ExecStartPost=/sbin/reboot
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
