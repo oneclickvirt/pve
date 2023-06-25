@@ -296,12 +296,12 @@ if [[ $output == *"Hetzner_vServer"* ]]; then
         chmod 777 install_ifupdown2.sh
         chmod 777 /etc/systemd/system/ifupdown2-install.service
         if [ -f "install_ifupdown2.sh" ]; then
-            _green "This script will automatically reboot the system after 5 seconds, please wait a few minutes to log into SSH and execute this script again"
-            _green "本脚本将在5秒后自动重启系统，请待几分钟后登录SSH再次执行本脚本"
-            sleep 5
-            echo "1" > "/root/reboot_pve.txt"
+            # _green "This script will automatically reboot the system after 5 seconds, please wait a few minutes to log into SSH and execute this script again"
+            # _green "本脚本将在5秒后自动重启系统，请待几分钟后退出SSH再次执行本脚本"
             systemctl enable ifupdown2-install.service
-            systemctl start ifupdown2-install.service
+            # sleep 5
+            # echo "1" > "/root/reboot_pve.txt"
+            # systemctl start ifupdown2-install.service
         fi
     fi
 fi
@@ -309,7 +309,7 @@ fi
 if [ ! -f "/root/reboot_pve.txt" ]; then
     echo "1" > "/root/reboot_pve.txt"
     _green "Please restart the system for the changes to take effect."
-    _green "请执行 reboot 重启系统后再次自行本脚本"
+    _green "请执行 reboot 重启系统后再次执行本脚本"
     exit 1
 fi
 
