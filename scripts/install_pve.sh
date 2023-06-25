@@ -168,6 +168,14 @@ do
         if [ -n "$matches" ]; then
             # SLAAC动态分配，做无IPV6的处理
             sed -i "/iface $interface inet6 auto/d" $1
+            # cdn_urls=("https://cdn.spiritlhl.workers.dev/" "https://cdn3.spiritlhl.net/" "https://cdn1.spiritlhl.net/" "https://ghproxy.com/" "https://cdn2.spiritlhl.net/")
+            # check_cdn_file
+            # wget ${cdn_success_url}https://raw.githubusercontent.com/spiritLHLS/pve/main/extra_scripts/configure_network.sh -O /usr/local/bin/configure_network.sh
+            # wget ${cdn_success_url}https://raw.githubusercontent.com/spiritLHLS/pve/main/extra_scripts/configure_network.service -O /etc/systemd/system/configure_network.service
+            # chmod 777 /usr/local/bin/configure_network.sh
+            # chmod 777 /etc/systemd/system/configure_network.service
+            # systemctl daemon-reload
+            # systemctl enable configure_network.service
         else
             # 将 "auto" 替换为 "static"
             modified_line="${line/auto/static}"
@@ -225,6 +233,7 @@ if [ ! -f "/root/ifupdown2_installed.txt" ]; then
     if [ -f "install_ifupdown2.sh" ]; then
         # _green "This script will automatically reboot the system after 5 seconds, please wait a few minutes to log into SSH and execute this script again"
         # _green "本脚本将在5秒后自动重启系统，请待几分钟后退出SSH再次执行本脚本"
+        systemctl daemon-reload
         systemctl enable ifupdown2-install.service
         # sleep 5
         # echo "1" > "/root/reboot_pve.txt"
@@ -442,7 +451,7 @@ case $version in
   #   ;;
   *)
     _red "Error: Unsupported Debian version"
-    reading "是否要继续安装(非Debian系会爆上面这个警告)？(回车则默认不继续安装) [y/n] " confirm
+    reading "是否要继续安装(识别到不是Debian9~Debian12的范围)？(回车则默认不继续安装) (y/[n]) " confirm
     echo ""
     if [ "$confirm" != "y" ]; then
       exit 1
@@ -493,7 +502,7 @@ case $version in
     ;;
   *)
     _red "Error: Unsupported Debian version"
-    reading "是否要继续安装(非Debian系会爆上面这个警告)？(回车则默认不继续安装) [y/n] " confirm
+    reading "是否要继续安装(识别到不是Debian9~Debian12的范围)？(回车则默认不继续安装) (y/[n]) " confirm
     echo ""
     if [ "$confirm" != "y" ]; then
       exit 1

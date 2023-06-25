@@ -1,0 +1,9 @@
+[Unit]
+Description=Configure Network
+After=network.target
+
+[Service]
+ExecStart=/bin/bash /usr/local/bin/configure_network.sh
+
+[Install]
+WantedBy=default.target
