@@ -286,6 +286,25 @@ fi
 rebuild_interfaces
 rebuild_cloud_init
 fix_interfaces_ipv6_auto_type /etc/network/interfaces
+output=$(dmidecode -t system)
+if [[ $output == *"Hetzner_vServer"* ]]; then
+    if [ ! -f "/root/ifupdown2_installed.txt" ]; then
+        cdn_urls=("https://cdn.spiritlhl.workers.dev/" "https://cdn3.spiritlhl.net/" "https://cdn1.spiritlhl.net/" "https://ghproxy.com/" "https://cdn2.spiritlhl.net/")
+        check_cdn_file
+        wget ${cdn_success_url}https://raw.githubusercontent.com/spiritLHLS/pve/main/extra_scripts/install_ifupdown2.sh -O /root/install_ifupdown2.sh
+        wget ${cdn_success_url}https://raw.githubusercontent.com/spiritLHLS/pve/main/extra_scripts/ifupdown2-install.service -O /etc/systemd/system/ifupdown2-install.service
+        chmod 777 install_ifupdown2.sh
+        chmod 777 /etc/systemd/system/ifupdown2-install.service
+        if [ ! -f "install_ifupdown2.sh" ]; then
+            _green "This script will automatically reboot the system after 5 seconds, please wait a few minutes to log into SSH and execute this script again"
+            _green "本脚本将在5秒后自动重启系统，请待几分钟后登录SSH再次执行本脚本"
+            sleep 5
+            echo "1" > "/root/reboot_pve.txt"
+            systemctl enable ifupdown2-install.service
+            systemctl start ifupdown2-install.service
+        fi
+    fi
+fi
 # 检测是否已重启过
 if [ ! -f "/root/reboot_pve.txt" ]; then
     echo "1" > "/root/reboot_pve.txt"
@@ -296,8 +315,6 @@ fi
 
 ########## 正式开始安装
 
-cdn_urls=("https://cdn.spiritlhl.workers.dev/" "https://cdn3.spiritlhl.net/" "https://cdn1.spiritlhl.net/" "https://ghproxy.com/" "https://cdn2.spiritlhl.net/")
-check_cdn_file
 # cloud-init文件修改
 rebuild_cloud_init
 
@@ -583,3 +600,4 @@ _green "安装完毕，请打开HTTPS网页 $url"
 _green "用户名、密码就是服务器所使用的用户名、密码(如root和root用户的密码)"
 _green "如果登录无误请不要急着重启系统，去执行预配置环境的命令后再重启系统"
 rm -rf /root/reboot_pve.txt
+rm -rf /root/ifupdown2_installed.txt
