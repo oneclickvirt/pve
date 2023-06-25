@@ -295,7 +295,7 @@ if [[ $output == *"Hetzner_vServer"* ]]; then
         wget ${cdn_success_url}https://raw.githubusercontent.com/spiritLHLS/pve/main/extra_scripts/ifupdown2-install.service -O /etc/systemd/system/ifupdown2-install.service
         chmod 777 install_ifupdown2.sh
         chmod 777 /etc/systemd/system/ifupdown2-install.service
-        if [ ! -f "install_ifupdown2.sh" ]; then
+        if [ -f "install_ifupdown2.sh" ]; then
             _green "This script will automatically reboot the system after 5 seconds, please wait a few minutes to log into SSH and execute this script again"
             _green "本脚本将在5秒后自动重启系统，请待几分钟后登录SSH再次执行本脚本"
             sleep 5
@@ -304,7 +304,6 @@ if [[ $output == *"Hetzner_vServer"* ]]; then
             systemctl start ifupdown2-install.service
         fi
     fi
-fi
 # 检测是否已重启过
 if [ ! -f "/root/reboot_pve.txt" ]; then
     echo "1" > "/root/reboot_pve.txt"
