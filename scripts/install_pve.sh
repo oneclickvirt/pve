@@ -304,6 +304,7 @@ if [[ $output == *"Hetzner_vServer"* ]]; then
             systemctl start ifupdown2-install.service
         fi
     fi
+fi
 # 检测是否已重启过
 if [ ! -f "/root/reboot_pve.txt" ]; then
     echo "1" > "/root/reboot_pve.txt"
