@@ -239,6 +239,7 @@ if grep -q 'NO_PUBKEY' "$temp_file_apt_fix"; then
     fi
 fi
 rm "$temp_file_apt_fix"
+# 部分安装包提前安装
 install_package wget
 install_package curl
 install_package sudo
@@ -247,8 +248,11 @@ install_package iptables
 install_package lshw
 install_package net-tools
 install_package service
-# 检测IPV4
-ip=$(ip -4 addr show | grep global | awk '{print $2}' | cut -d '/' -f1 | head -n 1)
+install_package ipcalc
+install_package dmidecode
+
+# 部分信息检测
+main_ipv4=$(ip -4 addr show | grep global | awk '{print $2}' | cut -d '/' -f1 | head -n 1)
 # 检测物理接口和MAC地址
 interface_1=$(lshw -C network | awk '/logical name:/{print $3}' | head -1)
 interface_2=$(lshw -C network | awk '/logical name:/{print $3}' | sed -n '2p')
@@ -272,7 +276,7 @@ if ! grep -q "$interface_1" "/etc/network/interfaces"; then
 else
     interface=${interface_1}
 fi
-mac_address=$(ip -o link show dev ${interface} | awk '{print $17}')
+# mac_address=$(ip -o link show dev ${interface} | awk '{print $17}')
 # 检查是否存在特定行
 if [ -f "/etc/network/interfaces.d/50-cloud-init" ]; then
     if grep -Fxq "# /etc/cloud/cloud.cfg.d/99-disable-network-config.cfg with the following:" /etc/network/interfaces.d/50-cloud-init && grep -Fxq "# network: {config: disabled}" /etc/network/interfaces.d/50-cloud-init; then
@@ -281,6 +285,24 @@ if [ -f "/etc/network/interfaces.d/50-cloud-init" ]; then
             echo "network: {config: disabled}" > /etc/cloud/cloud.cfg.d/99-disable-network-config.cfg
         fi
     fi
+fi
+if [ ! -f "/etc/network/interfaces" ]; then
+    touch "/etc/network/interfaces"
+    # 获取ipv4、subnet、gateway信息
+    gateway=$(ip route | awk '/default/ {print $3}')
+    interface_info=$(ip -o -4 addr show dev $interface | awk '{print $4}')
+    ipv4=$(echo $interface_info | cut -d'/' -f1)
+    subnet=$(echo $interface_info | cut -d'/' -f2)
+    subnet=$(ipcalc -n "$ipv4/$subnet" | grep -oP 'Netmask:\s+\K.*' | awk '{print $1}')
+    chattr -i /etc/network/interfaces
+    echo "auto lo" >> /etc/network/interfaces
+    echo "iface lo inet loopback" >> /etc/network/interfaces
+    echo "iface $interface inet static" >> /etc/network/interfaces
+    echo "    address $ipv4" >> /etc/network/interfaces
+    echo "    netmask $subnet" >> /etc/network/interfaces
+    echo "    gateway $gateway" >> /etc/network/interfaces
+    echo "    dns-nameservers 8.8.8.8 8.8.4.4" >> /etc/network/interfaces
+    chattr +i /etc/network/interfaces
 fi
 # 网络配置修改
 rebuild_interfaces
@@ -323,16 +345,16 @@ rebuild_cloud_init
 hostname=$(hostname)
 if [ "${hostname}" != "pve" ]; then
     chattr -i /etc/hosts
-    hosts=$(grep -E "^[^#]*\s+${hostname}\s+${hostname}\$" /etc/hosts | grep -v "${ip}")
+    hosts=$(grep -E "^[^#]*\s+${hostname}\s+${hostname}\$" /etc/hosts | grep -v "${main_ipv4}")
     if [ -n "${hosts}" ]; then
         # 注释掉查询到的行
         sudo sed -i "s/^$(echo ${hosts} | sed 's/\//\\\//g')/# &/" /etc/hosts
         # 添加新行
-        # echo "${ip} ${hostname} ${hostname}" | sudo tee -a /etc/hosts > /dev/null
-        # _green "已将 ${ip} ${hostname} ${hostname} 添加到 /etc/hosts 文件中"
+        # echo "${main_ipv4} ${hostname} ${hostname}" | sudo tee -a /etc/hosts > /dev/null
+        # _green "已将 ${main_ipv4} ${hostname} ${hostname} 添加到 /etc/hosts 文件中"
     else
-        _blue "已存在 ${ip} ${hostname} ${hostname} 的记录，无需添加"
-        _blue "A record for ${ip} ${hostname} ${hostname} already exists, no need to add it"
+        _blue "已存在 ${main_ipv4} ${hostname} ${hostname} 的记录，无需添加"
+        _blue "A record for ${main_ipv4} ${hostname} ${hostname} already exists, no need to add it"
     fi
     chattr -i /etc/hostname
     hostnamectl set-hostname pve
@@ -348,8 +370,8 @@ if [ "${hostname}" != "pve" ]; then
     fi
     if ! grep -q "^127\.0\.0\.1 localhost\.localdomain localhost$" /etc/hosts; then
         # 127.0.1.1
-        echo "${ip} ${hostname}.localdomain ${hostname}" >> /etc/hosts
-        echo "Added ${ip} ${hostname}.localdomain ${hostname} to /etc/hosts"
+        echo "${main_ipv4} ${hostname}.localdomain ${hostname}" >> /etc/hosts
+        echo "Added ${main_ipv4} ${hostname}.localdomain ${hostname} to /etc/hosts"
     fi
     chattr +i /etc/hosts
 fi
@@ -581,19 +603,17 @@ systemctl restart networking
 if [ ! -s "/etc/resolv.conf" ]
 then
     cp /etc/resolv.conf /etc/resolv.conf.bak
-    chattr -i /etc/resolv.conf
-    echo "nameserver 8.8.8.8" >> /etc/resolv.conf
-    chattr +i /etc/resolv.conf
+    echo -e "nameserver 1.1.1.1\nnameserver 8.8.8.8\nnameserver 8.8.4.4\nnameserver 2606:4700:4700::1111\nnameserver 2001:4860:4860::8888\nnameserver 2001:4860:4860::8844" >> /etc/resolv.conf
 fi
-wget ${cdn_success_url}https://raw.githubusercontent.com/spiritLHLS/pve/main/scripts/check-dns.sh -O /usr/local/bin/check-dns.sh
-wget ${cdn_success_url}https://raw.githubusercontent.com/spiritLHLS/pve/main/scripts/check-dns.service -O /etc/systemd/system/check-dns.service
+wget ${cdn_success_url}https://raw.githubusercontent.com/spiritLHLS/pve/main/extra_scripts/check-dns.sh -O /usr/local/bin/check-dns.sh
+wget ${cdn_success_url}https://raw.githubusercontent.com/spiritLHLS/pve/main/extra_scripts/check-dns.service -O /etc/systemd/system/check-dns.service
 chmod +x /usr/local/bin/check-dns.sh
 chmod +x /etc/systemd/system/check-dns.service
 systemctl daemon-reload
 systemctl enable check-dns.service
 systemctl start check-dns.service
 # 打印安装后的信息
-url="https://${ip}:8006/"
+url="https://${main_ipv4}:8006/"
 _green "Installation complete, please open HTTPS web page $url"
 _green "The username and password are the username and password used by the server (e.g. root and root user's password)"
 _green "If the login is correct please do not rush to reboot the system, go to execute the commands of the pre-configured environment and then reboot the system"

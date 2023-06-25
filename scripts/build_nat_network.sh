@@ -174,6 +174,7 @@ if [ -f "/etc/network/interfaces.new" ];then
     chattr -i /etc/network/interfaces.new
     rm -rf /etc/network/interfaces.new
 fi
+systemctl start check-dns.service
 # _green "Although the gateway has been set automatically, I am not sure if it has been applied successfully, please check in Datacenter-->pve-->System-->Network in PVE"
 # _green "If vmbr0 and vmbr1 are displayed properly and the Apply Configuration button is grayed out, there is no need to reboot"
 # _green "If the above scenario is different, click on the Apply Configuration button, wait a few minutes and reboot the system to ensure that the gateway has been successfully applied"
