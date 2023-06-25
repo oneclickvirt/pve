@@ -2,6 +2,8 @@
 
 感谢 Proxmox VE 的免费订阅支持
 
+如果有未适配的商家或机器欢迎联系[@spiritlhl_bot](https://t.me/spiritlhl_bot)，有空会尝试支持一下
+
 待开发内容：
 
 - 创建带IPV6独立地址的VM虚拟机或CT容器
