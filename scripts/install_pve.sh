@@ -1,7 +1,7 @@
 #!/bin/bash
 # from 
 # https://github.com/spiritLHLS/pve
-# 2023.06.24
+# 2023.06.25
 
 
 _red() { echo -e "\033[31m\033[01m$@\033[0m"; }
@@ -246,6 +246,7 @@ install_package bc
 install_package iptables
 install_package lshw
 install_package net-tools
+install_package service
 # 检测IPV4
 ip=$(ip -4 addr show | grep global | awk '{print $2}' | cut -d '/' -f1 | head -n 1)
 # 检测物理接口和MAC地址
