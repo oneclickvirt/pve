@@ -309,7 +309,8 @@ fi
 if [ ! -f "/root/reboot_pve.txt" ]; then
     echo "1" > "/root/reboot_pve.txt"
     _green "Please execute reboot to reboot the system and then execute this script again"
-    _green "请执行 reboot 重启系统后再次执行本脚本"
+    _green "Please wait at least 20 seconds after logging in with SSH again before executing this script."
+    _green "请执行 reboot 重启系统后再次执行本脚本，再次使用SSH登录后请等待至少20秒再执行本脚本"
     exit 1
 fi
 

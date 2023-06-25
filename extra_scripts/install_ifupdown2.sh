@@ -4,7 +4,6 @@
 # 2023.06.25
 
 # 安装ifupdown2
-apt-get update
 apt-get install -y ifupdown2
 echo "1" > "/root/ifupdown2_installed.txt"
 
