@@ -488,6 +488,8 @@ fi
 # 修复可能存在的auto类型
 rebuild_interfaces
 fix_interfaces_ipv6_auto_type /etc/network/interfaces
+# 部分机器中途service丢失了，尝试修复
+install_package service
 # 正式安装
 install_package proxmox-ve
 install_package postfix
