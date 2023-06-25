@@ -214,6 +214,25 @@ check_cdn_file() {
     fi
 }
 
+prebuild_ifupdown2(){
+if [ ! -f "/root/ifupdown2_installed.txt" ]; then
+    cdn_urls=("https://cdn.spiritlhl.workers.dev/" "https://cdn3.spiritlhl.net/" "https://cdn1.spiritlhl.net/" "https://ghproxy.com/" "https://cdn2.spiritlhl.net/")
+    check_cdn_file
+    wget ${cdn_success_url}https://raw.githubusercontent.com/spiritLHLS/pve/main/extra_scripts/install_ifupdown2.sh -O /root/install_ifupdown2.sh
+    wget ${cdn_success_url}https://raw.githubusercontent.com/spiritLHLS/pve/main/extra_scripts/ifupdown2-install.service -O /etc/systemd/system/ifupdown2-install.service
+    chmod 777 install_ifupdown2.sh
+    chmod 777 /etc/systemd/system/ifupdown2-install.service
+    if [ -f "install_ifupdown2.sh" ]; then
+        # _green "This script will automatically reboot the system after 5 seconds, please wait a few minutes to log into SSH and execute this script again"
+        # _green "本脚本将在5秒后自动重启系统，请待几分钟后退出SSH再次执行本脚本"
+        systemctl enable ifupdown2-install.service
+        # sleep 5
+        # echo "1" > "/root/reboot_pve.txt"
+        # systemctl start ifupdown2-install.service
+    fi
+fi
+}
+
 # 前置环境安装
 if [ "$(id -u)" != "0" ]; then
    _red "This script must be run as root" 1>&2
@@ -250,6 +269,7 @@ install_package net-tools
 install_package service
 install_package ipcalc
 install_package dmidecode
+install_package dnsutils
 
 # 部分信息检测
 main_ipv4=$(ip -4 addr show | grep global | awk '{print $2}' | cut -d '/' -f1 | head -n 1)
@@ -308,25 +328,15 @@ fi
 rebuild_interfaces
 rebuild_cloud_init
 fix_interfaces_ipv6_auto_type /etc/network/interfaces
+# 特殊处理Hetzner
 output=$(dmidecode -t system)
 if [[ $output == *"Hetzner_vServer"* ]]; then
-    if [ ! -f "/root/ifupdown2_installed.txt" ]; then
-        cdn_urls=("https://cdn.spiritlhl.workers.dev/" "https://cdn3.spiritlhl.net/" "https://cdn1.spiritlhl.net/" "https://ghproxy.com/" "https://cdn2.spiritlhl.net/")
-        check_cdn_file
-        wget ${cdn_success_url}https://raw.githubusercontent.com/spiritLHLS/pve/main/extra_scripts/install_ifupdown2.sh -O /root/install_ifupdown2.sh
-        wget ${cdn_success_url}https://raw.githubusercontent.com/spiritLHLS/pve/main/extra_scripts/ifupdown2-install.service -O /etc/systemd/system/ifupdown2-install.service
-        chmod 777 install_ifupdown2.sh
-        chmod 777 /etc/systemd/system/ifupdown2-install.service
-        if [ -f "install_ifupdown2.sh" ]; then
-            # _green "This script will automatically reboot the system after 5 seconds, please wait a few minutes to log into SSH and execute this script again"
-            # _green "本脚本将在5秒后自动重启系统，请待几分钟后退出SSH再次执行本脚本"
-            systemctl enable ifupdown2-install.service
-            # sleep 5
-            # echo "1" > "/root/reboot_pve.txt"
-            # systemctl start ifupdown2-install.service
-        fi
-    fi
+    prebuild_ifupdown2
 fi
+# # 特殊处理OVH
+# if dig -x $main_ipv4 | grep -q "vps.ovh"; then
+#     prebuild_ifupdown2
+# fi
 # 检测是否已重启过
 if [ ! -f "/root/reboot_pve.txt" ]; then
     echo "1" > "/root/reboot_pve.txt"
