@@ -116,6 +116,18 @@ iface vmbr0 inet static
     bridge_stp off
     bridge_fd 0
 EOF
+elif [ -f "/root/iface_auto.txt" ]; then
+cat << EOF | sudo tee -a "$interfaces_file"
+auto vmbr0
+iface vmbr0 inet static
+    address $ipv4_address
+    gateway $gateway
+    bridge_ports $interface
+    bridge_stp off
+    bridge_fd 0
+
+iface eth0 inet6 auto
+EOF
 else
 cat << EOF | sudo tee -a "$interfaces_file"
 auto vmbr0
@@ -162,7 +174,7 @@ if grep -q "^net.ipv4.ip_forward=1" /etc/sysctl.conf; then
     sed -i 's/^#net.ipv4.ip_forward=1/net.ipv4.ip_forward=1/' /etc/sysctl.conf
   fi
 else
-  echo "net.ipv4.ip_forward=1" >> /etc/sysctl.conf
+    echo "net.ipv4.ip_forward=1" >> /etc/sysctl.conf
 fi
 ${sysctl_path} -p
 

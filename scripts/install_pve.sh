@@ -1,7 +1,7 @@
 #!/bin/bash
 # from 
 # https://github.com/spiritLHLS/pve
-# 2023.06.25
+# 2023.06.26
 
 cd /root >/dev/null 2>&1
 _red() { echo -e "\033[31m\033[01m$@\033[0m"; }
@@ -168,14 +168,7 @@ do
         if [ -n "$matches" ]; then
             # SLAAC动态分配，做无IPV6的处理
             sed -i "/iface $interface inet6 auto/d" $1
-            # cdn_urls=("https://cdn.spiritlhl.workers.dev/" "https://cdn3.spiritlhl.net/" "https://cdn1.spiritlhl.net/" "https://ghproxy.com/" "https://cdn2.spiritlhl.net/")
-            # check_cdn_file
-            # wget ${cdn_success_url}https://raw.githubusercontent.com/spiritLHLS/pve/main/extra_scripts/configure_network.sh -O /usr/local/bin/configure_network.sh
-            # wget ${cdn_success_url}https://raw.githubusercontent.com/spiritLHLS/pve/main/extra_scripts/configure_network.service -O /etc/systemd/system/configure_network.service
-            # chmod 777 /usr/local/bin/configure_network.sh
-            # chmod 777 /etc/systemd/system/configure_network.service
-            # systemctl daemon-reload
-            # systemctl enable configure_network.service
+            echo "$interface" > "/root/iface_auto.txt"
         else
             # 将 "auto" 替换为 "static"
             modified_line="${line/auto/static}"
