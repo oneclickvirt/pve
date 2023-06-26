@@ -113,6 +113,7 @@ if [[ -f "/etc/network/interfaces.d/50-cloud-init" && -f "/etc/network/interface
     fi
     chattr -i /etc/network/interfaces
     cat /etc/network/interfaces.d/50-cloud-init >> /etc/network/interfaces
+    chattr -i /etc/network/interfaces.d/50-cloud-init
     rm /etc/network/interfaces.d/50-cloud-init
     chattr +i /etc/network/interfaces
 fi
