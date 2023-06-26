@@ -127,6 +127,7 @@ iface vmbr0 inet static
     bridge_fd 0
 
 iface vmbr0 inet6 auto
+    bridge_ports $interface
 EOF
 else
 cat << EOF | sudo tee -a "$interfaces_file"
@@ -160,9 +161,8 @@ iface vmbr1 inet static
     post-up echo 1 > /proc/sys/net/ipv4/conf/vmbr1/proxy_arp
     post-up iptables -t nat -A POSTROUTING -s '172.16.1.0/24' -o vmbr0 -j MASQUERADE
     post-down iptables -t nat -D POSTROUTING -s '172.16.1.0/24' -o vmbr0 -j MASQUERADE
-
-pre-up echo 2 > /proc/sys/net/ipv6/conf/all/accept_ra
 EOF
+# pre-up echo 2 > /proc/sys/net/ipv6/conf/all/accept_ra
 else
 cat << EOF | sudo tee -a "$interfaces_file"
 auto vmbr1
