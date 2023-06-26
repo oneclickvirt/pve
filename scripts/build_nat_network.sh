@@ -198,6 +198,7 @@ ${sysctl_path} -p
 # 重启配置
 service networking restart
 systemctl restart networking.service
+ifreload -ad
 # 已加载网络，删除对应缓存文件
 if [ -f "/etc/network/interfaces.new" ];then
     chattr -i /etc/network/interfaces.new

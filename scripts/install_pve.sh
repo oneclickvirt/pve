@@ -166,7 +166,7 @@ do
         output=$(ip addr)
         matches=$(echo "$output" | grep "inet6.*global dynamic")
         if [ -n "$matches" ]; then
-            # SLAAC动态分配，做无IPV6的处理
+            # SLAAC动态分配，暂不做IPV6的处理
             sed -i "/iface $interface inet6 auto/d" $1
             echo "$interface" > "/root/iface_auto.txt"
         else
