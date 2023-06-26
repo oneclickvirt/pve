@@ -126,7 +126,7 @@ iface vmbr0 inet static
     bridge_stp off
     bridge_fd 0
 
-iface eth0 inet6 auto
+iface vmbr0 inet6 auto
 EOF
 else
 cat << EOF | sudo tee -a "$interfaces_file"
