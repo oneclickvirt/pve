@@ -147,6 +147,22 @@ fi
 if grep -q "vmbr1" "$interfaces_file"; then
     echo "vmbr1 已存在在 ${interfaces_file}"
     echo "vmbr1 already exists in ${interfaces_file}"
+elif [ -f "/root/iface_auto.txt" ]; then
+cat << EOF | sudo tee -a "$interfaces_file"
+auto vmbr1
+iface vmbr1 inet static
+    address 172.16.1.1
+    netmask 255.255.255.0
+    bridge_ports none
+    bridge_stp off
+    bridge_fd 0
+    post-up echo 1 > /proc/sys/net/ipv4/ip_forward
+    post-up echo 1 > /proc/sys/net/ipv4/conf/vmbr1/proxy_arp
+    post-up iptables -t nat -A POSTROUTING -s '172.16.1.0/24' -o vmbr0 -j MASQUERADE
+    post-down iptables -t nat -D POSTROUTING -s '172.16.1.0/24' -o vmbr0 -j MASQUERADE
+
+pre-up echo 2 > /proc/sys/net/ipv6/conf/all/accept_ra
+EOF
 else
 cat << EOF | sudo tee -a "$interfaces_file"
 auto vmbr1
@@ -163,6 +179,7 @@ iface vmbr1 inet static
 EOF
 fi
 chattr +i "$interfaces_file"
+rm -rf /root/iface_auto.txt
 
 # 加载iptables并设置回源且允许NAT端口转发
 apt-get install -y iptables iptables-persistent
