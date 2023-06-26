@@ -161,8 +161,9 @@ iface vmbr1 inet static
     post-up echo 1 > /proc/sys/net/ipv4/conf/vmbr1/proxy_arp
     post-up iptables -t nat -A POSTROUTING -s '172.16.1.0/24' -o vmbr0 -j MASQUERADE
     post-down iptables -t nat -D POSTROUTING -s '172.16.1.0/24' -o vmbr0 -j MASQUERADE
+
+pre-up echo 2 > /proc/sys/net/ipv6/conf/vmbr0/accept_ra
 EOF
-# pre-up echo 2 > /proc/sys/net/ipv6/conf/all/accept_ra
 else
 cat << EOF | sudo tee -a "$interfaces_file"
 auto vmbr1
@@ -198,8 +199,8 @@ ${sysctl_path} -p
 # 重启配置
 service networking restart
 systemctl restart networking.service
-# sleep 3
-# ifreload -ad
+sleep 3
+ifreload -ad
 # 已加载网络，删除对应缓存文件
 if [ -f "/etc/network/interfaces.new" ];then
     chattr -i /etc/network/interfaces.new
