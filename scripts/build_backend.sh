@@ -1,7 +1,7 @@
 #!/bin/bash
 # from 
 # https://github.com/spiritLHLS/pve
-# 2023.06.26
+# 2023.06.27
 
 # 打印信息
 _red() { echo -e "\033[31m\033[01m$@\033[0m"; }
@@ -17,6 +17,12 @@ else
   export LANG="$utf8_locale"
   export LANGUAGE="$utf8_locale"
   echo "Locale set to $utf8_locale"
+fi
+
+if [ -f "/root/build_backend_pve.txt" ]; then
+    _green "你已执行过本脚本，如果已重启过系统，请执行后续的自动配置网关的脚本命令，如果未重启过系统，请重启系统"
+    _grenn "不要重复运行本脚本"
+    exit 1
 fi
 
 # 创建资源池
@@ -102,3 +108,4 @@ if ! lsmod | grep -q apparmor; then
     _yellow "AppArmor is still not loaded, please execute reboot to reboot the system to load"
     _yellow "AppArmor 仍未加载，请执行 reboot 重新启动系统加载"
 fi
+echo "1" > "/root/build_backend_pve.txt"

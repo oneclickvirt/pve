@@ -1,7 +1,7 @@
 #!/bin/bash
 # from 
 # https://github.com/spiritLHLS/pve
-# 2023.06.26
+# 2023.06.27
 
 
 # 打印信息
@@ -20,6 +20,8 @@ else
   export LANGUAGE="$utf8_locale"
   echo "Locale set to $utf8_locale"
 fi
+
+rm -rf /root/build_backend_pve.txt
 
 # 查询信息
 if ! command -v lshw > /dev/null 2>&1; then
