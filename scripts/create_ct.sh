@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/spiritLHLS/pve
-# 2023.05.30
+# 2023.06.29
 
 # cd /root
 
@@ -47,6 +47,7 @@ check_cdn_file
 pre_check(){
     home_dir=$(eval echo "~$(whoami)")
     if [ "$home_dir" != "/root" ]; then
+        _red "The script will exit if the current path is not /root."
         _red "当前路径不是/root，脚本将退出。"
         exit 1
     fi
@@ -70,81 +71,93 @@ pre_check(){
 check_info(){
     log_file="ctlog"
     if [ ! -f "ctlog" ]; then
-      _yellow "当前目录下不存在ctlog文件"
-      ct_num=302
-      web2_port=20003
-      port_end=30025
+        _yellow "ctrlog file does not exist in the current directory"
+        _yellow "当前目录下不存在ctlog文件"
+        ct_num=302
+        web2_port=20003
+        port_end=30025
     else
-      while read line; do
-          last_line="$line"
-      done < "$log_file"
-      last_line_array=($last_line)
-      ct_num="${last_line_array[0]}"
-      password="${last_line_array[1]}"
-      ssh_port="${last_line_array[5]}"
-      web1_port="${last_line_array[6]}"
-      web2_port="${last_line_array[7]}"
-      port_start="${last_line_array[8]}"
-      port_end="${last_line_array[9]}"
-      system="${last_line_array[10]}"
-      storage="${last_line_array[11]}"
-      _green "当前最后一个NAT服务器对应的信息："
-      echo "NAT服务器: $ct_num"
-    #   echo "用户名: $user"
-    #   echo "密码: $password"
-      echo "外网SSH端口: $ssh_port"
-      echo "外网80端口: $web1_port"
-      echo "外网443端口: $web2_port"
-      echo "外网其他端口范围: $port_start-$port_end"
-      echo "系统：$system"
-      echo "存储盘：$storage"
+        while read line; do
+            last_line="$line"
+        done < "$log_file"
+        last_line_array=($last_line)
+        ct_num="${last_line_array[0]}"
+        password="${last_line_array[1]}"
+        ssh_port="${last_line_array[5]}"
+        web1_port="${last_line_array[6]}"
+        web2_port="${last_line_array[7]}"
+        port_start="${last_line_array[8]}"
+        port_end="${last_line_array[9]}"
+        system="${last_line_array[10]}"
+        storage="${last_line_array[11]}"
+        _green "Information corresponding to the current last NAT container:"
+        _green "当前最后一个NAT容器对应的信息："
+        echo "NAT容器(NAT container): $ct_num"
+        #   echo "用户名: $user"
+        #   echo "密码: $password"
+        echo "外网SSH端口(Extranet SSH port): $ssh_port"
+        echo "外网80端口(Extranet port 80): $web1_port"
+        echo "外网443端口(Extranet port 443): $web2_port"
+        echo "外网其他端口范围(Other port ranges): $port_start-$port_end"
+        echo "系统(System)：$system"
+        echo "存储盘(Storage Disk)：$storage"
     fi
 }
 
 build_new_cts(){
     while true; do
+        _green "How many more NAT servers need to be generated? (Enter how many new NAT servers to add):"
         reading "还需要生成几个NAT服务器？(输入新增几个NAT服务器)：" new_nums
         if [[ "$new_nums" =~ ^[1-9][0-9]*$ ]]; then
             break
         else
+            _yellow "Invalid input, please enter a positive integer."
             _yellow "输入无效，请输入一个正整数。"
         fi
     done
     while true; do
-        reading "每个虚拟机分配几个CPU？(若每个虚拟机分配1核，则输入1)：" cpu_nums
+        _green "How many CPUs are assigned to each container? (Enter 1 if 1 core is assigned to each container):"
+        reading "每个容器分配几个CPU？(若每个容器分配1核，则输入1)：" cpu_nums
         if [[ "$cpu_nums" =~ ^[1-9][0-9]*$ ]]; then
             break
         else
+            _yellow "Invalid input, please enter a positive integer."
             _yellow "输入无效，请输入一个正整数。"
         fi
     done
     while true; do
-        reading "每个虚拟机分配多少内存？(若每个虚拟机分配512MB内存，则输入512)：" memory_nums
+        _green "How much memory is allocated per container? (If 512 MB of memory is allocated per container, enter 512):"
+        reading "每个容器分配多少内存？(若每个容器分配512MB内存，则输入512)：" memory_nums
         if [[ "$memory_nums" =~ ^[1-9][0-9]*$ ]]; then
             break
         else
+            _yellow "Invalid input, please enter a positive integer."
             _yellow "输入无效，请输入一个正整数。"
         fi
     done
     while true; do
-        reading "虚拟机们开设在哪个存储盘上？(若虚拟机要开设在系统盘上，则留空或输入local)：" storage
+        _green "On which storage drive are the containers opened? (Leave blank or enter 'local' if the container is to be opened on the system disk):"
+        reading "容器们开设在哪个存储盘上？(若容器要开设在系统盘上，则留空或输入local)：" storage
         if [ -z "$storage" ]; then
           storage="local"
         fi
         break
     done
     while true; do
-        reading "每个虚拟机分配多少硬盘？(若每个虚拟机分配5G硬盘，则输入5)：" disk_nums
+        _green "How many hard disks are allocated per container? (If 5G hard drives are allocated per container, enter 5):"
+        reading "每个容器分配多少硬盘？(若每个容器分配5G硬盘，则输入5)：" disk_nums
         if [[ "$disk_nums" =~ ^[1-9][0-9]*$ ]]; then
             break
         else
+            _yellow "Invalid input, please enter a positive integer."
             _yellow "输入无效，请输入一个正整数。"
         fi
     done
     while true; do
-        reading "每个虚拟机都使用什么系统？(若都使用debian11，则留空或输入debian11)：" system
+        _green "What system does each container use? (Leave blank or enter debian11 if all use debian11):"
+        reading "每个容器都使用什么系统？(若都使用debian11，则留空或输入debian11)：" system
         if [ -z "$system" ]; then
-          system="debian11"
+            system="debian11"
         fi
         # 这块待增加系统列表查询
         break

@@ -1,7 +1,7 @@
 #!/bin/bash
 # from 
 # https://github.com/spiritLHLS/pve
-# 2023.06.26
+# 2023.06.29
 
 # cd /root >/dev/null 2>&1
 _red() { echo -e "\033[31m\033[01m$@\033[0m"; }
@@ -35,20 +35,20 @@ remove_duplicate_lines() {
 install_package() {
     package_name=$1
     if command -v $package_name > /dev/null 2>&1 ; then
-        _green "$package_name 已经安装"
         _green "$package_name already installed"
+        _green "$package_name 已经安装"
     else
         apt-get install -y $package_name
         if [ $? -ne 0 ]; then
             apt-get install -y $package_name --fix-missing
         fi
         if [ $? -ne 0 ]; then
-            _green "$package_name 已尝试安装但失败，退出程序"
             _green "$package_name tried to install but failed, exited the program"
+            _green "$package_name 已尝试安装但失败，退出程序"
             exit 1
         fi
-        _green "$package_name 已尝试安装"
         _green "$package_name tried to install"
+        _green "$package_name 已尝试安装"
     fi
 }
 
@@ -366,8 +366,8 @@ if [ "${hostname}" != "pve" ]; then
         # echo "${main_ipv4} ${hostname} ${hostname}" | sudo tee -a /etc/hosts > /dev/null
         # _green "已将 ${main_ipv4} ${hostname} ${hostname} 添加到 /etc/hosts 文件中"
     else
-        _blue "已存在 ${main_ipv4} ${hostname} ${hostname} 的记录，无需添加"
         _blue "A record for ${main_ipv4} ${hostname} ${hostname} already exists, no need to add it"
+        _blue "已存在 ${main_ipv4} ${hostname} ${hostname} 的记录，无需添加"
     fi
     chattr -i /etc/hostname
     hostnamectl set-hostname pve
@@ -445,6 +445,7 @@ case $version in
   #   ;;
   *)
     _red "Error: Unsupported Debian version"
+    _yellow "Do you want to continue the installation? (Enter to not continue the installation by default) (y/[n])"
     reading "是否要继续安装(识别到不是Debian9~Debian12的范围)？(回车则默认不继续安装) (y/[n]) " confirm
     echo ""
     if [ "$confirm" != "y" ]; then
@@ -496,6 +497,7 @@ case $version in
     ;;
   *)
     _red "Error: Unsupported Debian version"
+    _yellow "Do you want to continue the installation? (Enter to not continue the installation by default) (y/[n])"
     reading "是否要继续安装(识别到不是Debian9~Debian12的范围)？(回车则默认不继续安装) (y/[n]) " confirm
     echo ""
     if [ "$confirm" != "y" ]; then

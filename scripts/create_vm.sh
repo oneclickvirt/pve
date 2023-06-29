@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/spiritLHLS/pve
-# 2023.05.30
+# 2023.06.29
 
 # cd /root
 
@@ -47,6 +47,7 @@ check_cdn_file
 pre_check(){
     home_dir=$(eval echo "~$(whoami)")
     if [ "$home_dir" != "/root" ]; then
+        _red "The script will exit if the current path is not /root."
         _red "当前路径不是/root，脚本将退出。"
         exit 1
     fi
@@ -70,6 +71,7 @@ pre_check(){
 check_info(){
     log_file="vmlog"
     if [ ! -f "vmlog" ]; then
+      _yellow "vmlog file does not exist in the current directory"
       _yellow "当前目录下不存在vmlog文件"
       vm_num=202
       web2_port=40003
@@ -89,45 +91,53 @@ check_info(){
       port_end="${last_line_array[10]}"
       system="${last_line_array[11]}"
       storage="${last_line_array[12]}"
+      _green "Current information corresponding to the last NAT server:"
       _green "当前最后一个NAT服务器对应的信息："
-      echo "NAT服务器: $vm_num"
+      echo "NAT服务器(NAT Server): $vm_num"
     #   echo "用户名: $user"
     #   echo "密码: $password"
-      echo "外网SSH端口: $ssh_port"
-      echo "外网80端口: $web1_port"
-      echo "外网443端口: $web2_port"
-      echo "外网其他端口范围: $port_start-$port_end"
-      echo "系统：$system"
-      echo "存储盘：$storage"
+      echo "外网SSH端口(Extranet SSH port): $ssh_port"
+      echo "外网80端口(Extranet port 80): $web1_port"
+      echo "外网443端口(Extranet port 443): $web2_port"
+      echo "外网其他端口范围(Other port ranges): $port_start-$port_end"
+      echo "系统(System)：$system"
+      echo "存储盘(Storage Disk)：$storage"
     fi
 }
 
 build_new_vms(){
     while true; do
+        _green "How many more NAT servers need to be generated? (Enter how many new NAT servers to add):"
         reading "还需要生成几个NAT服务器？(输入新增几个NAT服务器)：" new_nums
         if [[ "$new_nums" =~ ^[1-9][0-9]*$ ]]; then
             break
         else
+            _yellow "Invalid input, please enter a positive integer."
             _yellow "输入无效，请输入一个正整数。"
         fi
     done
     while true; do
+        _green "How many CPUs are assigned to each virtual machine? (Enter 1 if 1 core is assigned to each virtual machine):"
         reading "每个虚拟机分配几个CPU？(若每个虚拟机分配1核，则输入1)：" cpu_nums
         if [[ "$cpu_nums" =~ ^[1-9][0-9]*$ ]]; then
             break
         else
+            _yellow "Invalid input, please enter a positive integer."
             _yellow "输入无效，请输入一个正整数。"
         fi
     done
     while true; do
+        _green "How much memory is allocated per virtual machine? (If 512 MB of memory is allocated per virtual machine, enter 512):"
         reading "每个虚拟机分配多少内存？(若每个虚拟机分配512MB内存，则输入512)：" memory_nums
         if [[ "$memory_nums" =~ ^[1-9][0-9]*$ ]]; then
             break
         else
+            _yellow "Invalid input, please enter a positive integer."
             _yellow "输入无效，请输入一个正整数。"
         fi
     done
     while true; do
+        _green "On which storage drive are the virtual machines opened? (Leave blank or enter 'local' if the virtual machine is to be opened on the system disk):"
         reading "虚拟机们开设在哪个存储盘上？(若虚拟机要开设在系统盘上，则留空或输入local)：" storage
         if [ -z "$storage" ]; then
           storage="local"
@@ -135,15 +145,18 @@ build_new_vms(){
         break
     done
     while true; do
+        _green "How many hard disks are allocated per virtual machine? (If 5G hard drives are allocated per virtual machine, enter 5):"
         reading "每个虚拟机分配多少硬盘？(若每个虚拟机分配5G硬盘，则输入5)：" disk_nums
         if [[ "$disk_nums" =~ ^[1-9][0-9]*$ ]]; then
             break
         else
+            _yellow "Invalid input, please enter a positive integer."
             _yellow "输入无效，请输入一个正整数。"
         fi
     done
     while true; do
         sys_status="false"
+        _green "What system does each virtual machine use? (Leave blank or enter debian11 if all use debian11):"
         reading "每个虚拟机都使用什么系统？(若都使用debian11，则留空或输入debian11)：" system
         if [ -z "$system" ]; then
           system="debian11"
@@ -156,9 +169,10 @@ build_new_vms(){
           fi
         done
         if [ "$sys_status" = "true" ]; then
-          break
+            break
         else
-          _yellow "不支持该系统，请查看 https://github.com/spiritLHLS/Images 支持的系统名字"
+            _yellow "This system is not supported, please check https://github.com/spiritLHLS/Images for the names of supported systems"
+            _yellow "不支持该系统，请查看 https://github.com/spiritLHLS/Images 支持的系统名字"
         fi
     done
     for ((i=1; i<=$new_nums; i++)); do

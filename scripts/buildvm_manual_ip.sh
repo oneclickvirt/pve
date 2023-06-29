@@ -1,8 +1,10 @@
 #!/bin/bash
 # from
 # https://github.com/spiritLHLS/pve
-# 2023.06.20
+# 2023.06.29
 # 手动指定要绑定的IPV4地址
+
+
 # ./buildvm_manual_ip.sh VMID 用户名 密码 CPU核数 内存 硬盘 系统 存储盘 IPV4地址
 # ./buildvm_manual_ip.sh 152 test1 1234567 1 512 5 debian11 local a.b.c.d/24
 
@@ -29,12 +31,12 @@ _blue() { echo -e "\033[36m\033[01m$@\033[0m"; }
 reading(){ read -rp "$(_green "$1")" "$2"; }
 utf8_locale=$(locale -a 2>/dev/null | grep -i -m 1 -E "utf8|UTF-8")
 if [[ -z "$utf8_locale" ]]; then
-  _yellow "No UTF-8 locale found"
+    _yellow "No UTF-8 locale found"
 else
-  export LC_ALL="$utf8_locale"
-  export LANG="$utf8_locale"
-  export LANGUAGE="$utf8_locale"
-  _green "Locale set to $utf8_locale"
+    export LC_ALL="$utf8_locale"
+    export LANG="$utf8_locale"
+    export LANGUAGE="$utf8_locale"
+    _green "Locale set to $utf8_locale"
 fi
 
 is_ipv4() {
@@ -48,20 +50,20 @@ is_ipv4() {
 }
 
 if [[ -z "$extra_ip" ]]; then
-  _yellow "No IPV4 address is manually assigned"
-  _yellow "IPV4地址未手动指定"
-  exit 1
+    _yellow "No IPV4 address is manually assigned"
+    _yellow "IPV4地址未手动指定"
+    exit 1
 else
-  user_ip=$(echo "$extra_ip" | cut -d'/' -f1)
-  user_ip_range=$(echo "$extra_ip" | cut -d'/' -f2)
-  if is_ipv4 "$user_ip"; then
-      _green "This IPV4 address will be used: ${user_ip}"
-      _green "将使用此IPV4地址: ${user_ip}"
-  else
-      _yellow "IPV4 addresses do not conform to the rules"
-      _yellow "IPV4地址不符合规则"
-      exit 1
-  fi
+    user_ip=$(echo "$extra_ip" | cut -d'/' -f1)
+    user_ip_range=$(echo "$extra_ip" | cut -d'/' -f2)
+    if is_ipv4 "$user_ip"; then
+        _green "This IPV4 address will be used: ${user_ip}"
+        _green "将使用此IPV4地址: ${user_ip}"
+    else
+        _yellow "IPV4 addresses do not conform to the rules"
+        _yellow "IPV4地址不符合规则"
+        exit 1
+    fi
 fi
 
 check_cdn() {
@@ -92,67 +94,72 @@ fi
 # "centos7" "alpinelinux_v3_15" "alpinelinux_v3_17" "rockylinux8" "QuTScloud_5.0.1" 
 systems=("debian10" "debian11" "debian9" "ubuntu18" "ubuntu20" "ubuntu22" "archlinux" "centos9-stream" "centos8-stream" "almalinux8" "almalinux9" "fedora33" "fedora34" "opensuse-leap-15")
 for sys in ${systems[@]}; do
-  if [[ "$system" == "$sys" ]]; then
-    file_path="/root/qcow/${system}.qcow2"
-    break
-  fi
+    if [[ "$system" == "$sys" ]]; then
+        file_path="/root/qcow/${system}.qcow2"
+        break
+    fi
 done
 if [[ -z "$file_path" ]]; then
-  # centos9-stream centos8-stream centos7 almalinux8 almalinux9
-  echo "无法安装对应系统，请查看 https://github.com/spiritLHLS/Images/ 支持的系统镜像 "
-  exit 1
+    _red "Unable to install corresponding system, please check https://github.com/spiritLHLS/Images/ for supported system images "
+    _red "无法安装对应系统，请查看 https://github.com/spiritLHLS/Images/ 支持的系统镜像 "
+    exit 1
 fi
 if [ ! -f "$file_path" ]; then
-  # v1.0 基础安装包预安装
-  # v1.1 增加agent安装包预安装，方便在宿主机上看到虚拟机的进程
-  check_cdn_file
-  url="${cdn_success_url}https://github.com/spiritLHLS/Images/releases/download/v1.1/${system}.qcow2"
-  curl -L -o "$file_path" "$url"
+    # v1.0 基础安装包预安装
+    # v1.1 增加agent安装包预安装，方便在宿主机上看到虚拟机的进程
+    check_cdn_file
+    url="${cdn_success_url}https://github.com/spiritLHLS/Images/releases/download/v1.1/${system}.qcow2"
+    curl -L -o "$file_path" "$url"
 fi
 
 first_digit=${vm_num:0:1}
 second_digit=${vm_num:1:1}
 third_digit=${vm_num:2:1}
 if [ $first_digit -le 2 ]; then
-  if [ $second_digit -eq 0 ]; then
-    num=$third_digit
-  else
-    num=$second_digit$third_digit
-  fi
+    if [ $second_digit -eq 0 ]; then
+        num=$third_digit
+    else
+        num=$second_digit$third_digit
+    fi
 else
-  num=$((first_digit - 2))$second_digit$third_digit
+    num=$((first_digit - 2))$second_digit$third_digit
 fi
 
 # 查询信息
 if ! command -v lshw > /dev/null 2>&1; then
-      apt-get install -y lshw
+    apt-get install -y lshw
 fi
 if ! command -v ping > /dev/null 2>&1; then
-      apt-get install -y iputils-ping
-      apt-get install -y ping
+    apt-get install -y iputils-ping
+    apt-get install -y ping
 fi
 interface=$(lshw -C network | awk '/logical name:/{print $3}' | head -1)
 user_main_ip_range=$(grep -A 1 "iface ${interface}" /etc/network/interfaces | grep "address" | awk '{print $2}' | head -n 1)
 if [ -z "$user_main_ip_range" ]; then
-  echo "宿主机可用IP区间查询失败"
-  exit 1
+    _red "Host available IP interval query failed"
+    _red "宿主机可用IP区间查询失败"
+    exit 1
 fi
 # 宿主机的网关
 gateway=$(grep -E "iface $interface" -A 3 "/etc/network/interfaces" | grep "gateway" | awk '{print $2}' | head -n 1)
 if [ -z "$gateway" ]; then
-  echo "宿主机网关查询失败"
-  exit 1
+    _red "Host gateway query failed"
+    _red "宿主机网关查询失败"
+    exit 1
 fi
 # echo "ip=${user_ip}/${user_ip_range},gw=${gateway}"
 # 检查变量是否为空并执行相应操作
 if [ -z "$user_ip" ]; then
-  echo "可使用的IP匹配失败"
-  exit 1
+    _red "Available IP match failed"
+    _red "可使用的IP匹配失败"
+    exit 1
 fi
 if [ -z "$user_ip_range" ]; then
-  echo "可使用的子网大小匹配失败"
-  exit 1
+    _red "Available subnet size match failed"
+    _red "可使用的子网大小匹配失败"
+    exit 1
 fi
+_green "The current IP to which the VM will be bound is: ${user_ip}"
 _green "当前虚拟机将绑定的IP为：${user_ip}"
 
 qm create $vm_num --agent 1 --scsihw virtio-scsi-single --serial0 socket --cores $core --sockets 1 --cpu host --net0 virtio,bridge=vmbr0,firewall=0
@@ -173,7 +180,7 @@ qm start $vm_num
 
 echo "$vm_num $user $password $core $memory $disk $system $storage $user_ip" >> "vm${vm_num}"
 # 虚拟机的相关信息将会存储到对应的虚拟机的NOTE中，可在WEB端查看
-data=$(echo " VMID 用户名 密码 CPU核数 内存 硬盘 系统 存储盘 外网IP地址")
+data=$(echo " VMID 用户名-username 密码-password CPU核数-CPU 内存-memory 硬盘-disk 系统-system 存储盘-storage 外网IP地址-ipv4")
 values=$(cat "vm${vm_num}")
 IFS=' ' read -ra data_array <<< "$data"
 IFS=' ' read -ra values_array <<< "$values"

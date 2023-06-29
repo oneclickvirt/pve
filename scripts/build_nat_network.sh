@@ -1,7 +1,7 @@
 #!/bin/bash
 # from 
 # https://github.com/spiritLHLS/pve
-# 2023.06.27
+# 2023.06.29
 
 
 # 打印信息
@@ -60,18 +60,18 @@ SUBNET_PREFIX=$(ip -6 addr show | grep -E 'inet6.*global' | awk '{print $2}' | a
 ipv6_address=$(ip addr show | awk '/inet6.*scope global/ { print $2 }' | head -n 1)
 # 检查是否存在 IPV6 
 if [ -z "$SUBNET_PREFIX" ] || [ "$SUBNET_PREFIX" = ":0" ]; then
-    _red "无 IPV6 子网，不进行自动映射"
     _red "No IPV6 subnet, no automatic mapping"
+    _red "无 IPV6 子网，不进行自动映射"
 else
-    _blue "母鸡的IPV6子网前缀为 $SUBNET_PREFIX"
     _blue "The IPV6 subnet prefix of the host is $SUBNET_PREFIX"
+    _blue "母鸡的IPV6子网前缀为 $SUBNET_PREFIX"
 fi
 if [ -z "$ipv6_address" ]; then
-    _red "母机无 IPV6 地址，不进行自动映射"
     _red "No IPV6 address on the parent machine, no automatic mapping"
+    _red "母机无 IPV6 地址，不进行自动映射"
 else
-    _blue "母鸡的IPV6地址为 $ipv6_address"
     _blue "The IPV6 address of the host is $ipv6_address"
+    _blue "母鸡的IPV6地址为 $ipv6_address"
 fi
 
 # 录入网关
@@ -96,17 +96,17 @@ interfaces_file="/etc/network/interfaces"
 chattr -i "$interfaces_file"
 if ! grep -q "auto lo" "$interfaces_file"; then
 #     echo "auto lo" >> "$interfaces_file"
-    echo "Can not find 'auto lo' in ${interfaces_file}"
+    _blue "Can not find 'auto lo' in ${interfaces_file}"
     exit 1
 fi
 if ! grep -q "iface lo inet loopback" "$interfaces_file"; then
 #     echo "iface lo inet loopback" >> "$interfaces_file"
-    echo "Can not find 'iface lo inet loopback' in ${interfaces_file}"
+    _blue "Can not find 'iface lo inet loopback' in ${interfaces_file}"
     exit 1
 fi
 if grep -q "vmbr0" "$interfaces_file"; then
-    echo "vmbr0 已存在在 ${interfaces_file}"
-    echo "vmbr0 already exists in ${interfaces_file}"
+    _blue "vmbr0 already exists in ${interfaces_file}"
+    _blue "vmbr0 已存在在 ${interfaces_file}"
 else
 if [ -z "$SUBNET_PREFIX" ] || [ "$SUBNET_PREFIX" = ":0" ] || [ -z "$ipv6_address" ]; then
 cat << EOF | sudo tee -a "$interfaces_file"
@@ -148,8 +148,8 @@ EOF
 fi
 fi
 if grep -q "vmbr1" "$interfaces_file"; then
-    echo "vmbr1 已存在在 ${interfaces_file}"
-    echo "vmbr1 already exists in ${interfaces_file}"
+    _blue "vmbr1 already exists in ${interfaces_file}"
+    _blue "vmbr1 已存在在 ${interfaces_file}"
 elif [ -f "/root/iface_auto.txt" ]; then
 cat << EOF | sudo tee -a "$interfaces_file"
 auto vmbr1
