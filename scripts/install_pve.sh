@@ -1,7 +1,7 @@
 #!/bin/bash
 # from 
 # https://github.com/spiritLHLS/pve
-# 2023.06.29
+# 2023.06.30
 
 # cd /root >/dev/null 2>&1
 _red() { echo -e "\033[31m\033[01m$@\033[0m"; }
@@ -40,11 +40,27 @@ install_package() {
     else
         apt-get install -y $package_name
         if [ $? -ne 0 ]; then
-            apt-get install -y $package_name --fix-missing
+            apt_output=$(apt-get install -y $package_name --fix-missing 2>&1)
         fi
-        if [ $? -ne 0 ]; then
+        if [ $? -ne 0 ] && [ "$package_name" != "proxmox-ve" ]; then
             _green "$package_name tried to install but failed, exited the program"
             _green "$package_name 已尝试安装但失败，退出程序"
+            exit 1
+        elif [ "$package_name" == "proxmox-ve" ]; then
+            if echo "$apt_output" | grep -qE 'DEBIAN_FRONTEND=dialog dpkg --configure grub-pc' &&
+              echo "$apt_output" | grep -qE 'dpkg --configure -a' &&
+              echo "$apt_output" | grep -qE 'dpkg: error processing package grub-pc \(--configure\):'
+            then
+                DEBIAN_FRONTEND=dialog dpkg --configure grub-pc
+                dpkg --configure -a
+                if [ $? -ne 0 ]; then
+                    _green "$package_name tried to install but failed, exited the program"
+                    _green "$package_name 已尝试安装但失败，退出程序"
+                    exit 1
+                fi
+                apt-get install -y $package_name --fix-missing
+            fi
+        else
             exit 1
         fi
         _green "$package_name tried to install"
