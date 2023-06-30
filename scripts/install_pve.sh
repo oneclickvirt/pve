@@ -64,6 +64,10 @@ install_package() {
                     exit 1
                 fi
                 apt-get install -y $package_name --fix-missing
+            else
+                _green "$package_name tried to install but failed, exited the program"
+                _green "$package_name 已尝试安装但失败，退出程序"
+                exit 1
             fi
         fi
         _green "$package_name tried to install"
