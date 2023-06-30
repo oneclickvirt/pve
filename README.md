@@ -15,6 +15,7 @@
 
 2023.06.30
 
+- 修复部分机器的网络配置是热加载，写在/run/network/interfaces.d/文件夹下的问题
 - 修复安装proxmox-ve时grub-pc配置可能冲突的问题
 
 [更新日志](CHANGELOG.md)

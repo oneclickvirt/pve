@@ -51,7 +51,12 @@ install_package() {
               echo "$apt_output" | grep -qE 'dpkg --configure -a' &&
               echo "$apt_output" | grep -qE 'dpkg: error processing package grub-pc \(--configure\):'
             then
-                DEBIAN_FRONTEND=dialog dpkg --configure grub-pc
+                # 手动选择
+                # DEBIAN_FRONTEND=dialog dpkg --configure grub-pc
+                # 设置debconf的选择
+                echo "grub-pc grub-pc/install_devices multiselect /dev/sda" | sudo debconf-set-selections
+                # 配置grub-pc并自动选择第一个选项确认
+                sudo DEBIAN_FRONTEND=noninteractive dpkg --configure grub-pc
                 dpkg --configure -a
                 if [ $? -ne 0 ]; then
                     _green "$package_name tried to install but failed, exited the program"
@@ -60,8 +65,6 @@ install_package() {
                 fi
                 apt-get install -y $package_name --fix-missing
             fi
-        else
-            exit 1
         fi
         _green "$package_name tried to install"
         _green "$package_name 已尝试安装"
@@ -99,6 +102,41 @@ fi
 }
 
 rebuild_interfaces(){
+# 修复部分网络加载没实时加载
+if [[ -f "/etc/network/interfaces.new" && -f "/etc/network/interfaces" ]]; then
+    chattr -i /etc/network/interfaces
+    cp -f /etc/network/interfaces.new /etc/network/interfaces
+    chattr +i /etc/network/interfaces
+fi
+# 合并文件
+if [ -d "/etc/network/interfaces.d/" ]; then
+    if [ ! -f "/etc/network/interfaces" ]; then
+        touch /etc/network/interfaces
+    fi
+    chattr -i /etc/network/interfaces
+    for file in /etc/network/interfaces.d/*; do
+        if [ -f "$file" ]; then
+            cat "$file" >> /etc/network/interfaces
+            chattr -i "$file"
+            rm "$file"
+        fi
+    done
+    chattr +i /etc/network/interfaces
+fi
+if [ -d "/run/network/interfaces.d/" ]; then
+    if [ ! -f "/etc/network/interfaces" ]; then
+        touch /etc/network/interfaces
+    fi
+    chattr -i /etc/network/interfaces
+    for file in /run/network/interfaces.d/*; do
+        if [ -f "$file" ]; then
+            cat "$file" >> /etc/network/interfaces
+            chattr -i "$file"
+            rm "$file"
+        fi
+    done
+    chattr +i /etc/network/interfaces
+fi
 # 修复部分网络运行部分未空
 if [ ! -e /run/network/interfaces.d/* ]; then
     if [ -f "/etc/network/interfaces" ]; then
@@ -115,23 +153,6 @@ if [ ! -e /run/network/interfaces.d/* ]; then
         fi
         chattr +i /etc/network/interfaces.new
     fi
-fi
-# 修复部分网络加载没实时加载
-if [[ -f "/etc/network/interfaces.new" && -f "/etc/network/interfaces" ]]; then
-    chattr -i /etc/network/interfaces
-    cp -f /etc/network/interfaces.new /etc/network/interfaces
-    chattr +i /etc/network/interfaces
-fi
-# 合并文件
-if [[ -f "/etc/network/interfaces.d/50-cloud-init" && -f "/etc/network/interfaces" ]]; then
-    if [ ! -f "/etc/network/interfaces" ]; then
-        touch /etc/network/interfaces
-    fi
-    chattr -i /etc/network/interfaces
-    cat /etc/network/interfaces.d/50-cloud-init >> /etc/network/interfaces
-    chattr -i /etc/network/interfaces.d/50-cloud-init
-    rm /etc/network/interfaces.d/50-cloud-init
-    chattr +i /etc/network/interfaces
 fi
 # 去除引用
 if [ -f "/etc/network/interfaces" ]; then
@@ -160,13 +181,6 @@ if [[ -f "/etc/network/interfaces.new" && -f "/etc/network/interfaces" ]]; then
     cp -f /etc/network/interfaces /etc/network/interfaces.new
     chattr +i /etc/network/interfaces.new
 fi
-# 允许手动配置
-# if ! grep -q "iface ${interface} inet manual" "/etc/network/interfaces"; then
-#     chattr -i /etc/network/interfaces
-#     echo "Can not find 'iface ${interface} inet manual' in /etc/network/interfaces"
-#     echo "iface ${interface} inet manual" >> "/etc/network/interfaces"
-#     chattr +i /etc/network/interfaces
-# fi
 # 去除空行之外的重复行
 remove_duplicate_lines "/etc/network/interfaces"
 if [ -f "/etc/network/interfaces.new" ]; then
@@ -612,8 +626,8 @@ _green "PVE latest kernel: $latest_kernel"
 # update-grub
 install_package ipcalc
 if [ -f "/etc/network/interfaces" ]; then
-    # 检查/etc/network/interfaces文件中是否有iface eth0 inet dhcp行 - 看来还是得转动态为静态判断东西
-    if grep -q "iface eth0 inet dhcp" /etc/network/interfaces; then
+    # 检查/etc/network/interfaces文件中是否有iface xxxx inet auto行
+    if grep -q "iface $interface inet auto" /etc/network/interfaces; then
         # 获取ipv4、subnet、gateway信息
         gateway=$(ip route | awk '/default/ {print $3}')
         interface_info=$(ip -o -4 addr show dev $interface | awk '{print $4}')
@@ -621,7 +635,7 @@ if [ -f "/etc/network/interfaces" ]; then
         subnet=$(echo $interface_info | cut -d'/' -f2)
         subnet=$(ipcalc -n "$ipv4/$subnet" | grep -oP 'Netmask:\s+\K.*' | awk '{print $1}')
         chattr -i /etc/network/interfaces
-        sed -i "/iface $interface inet dhcp/c\
+        sed -i "/iface $interface inet auto/c\
           iface $interface inet static\n\
           address $ipv4\n\
           netmask $subnet\n\
