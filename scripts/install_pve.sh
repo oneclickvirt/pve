@@ -46,7 +46,7 @@ install_package() {
             _green "$package_name tried to install but failed, exited the program"
             _green "$package_name 已尝试安装但失败，退出程序"
             exit 1
-        elif [ "$package_name" == "proxmox-ve" ]; then
+        elif [ $? -ne 0 ] && [ "$package_name" == "proxmox-ve" ]; then
             if echo "$apt_output" | grep -qE 'DEBIAN_FRONTEND=dialog dpkg --configure grub-pc' &&
               echo "$apt_output" | grep -qE 'dpkg --configure -a' &&
               echo "$apt_output" | grep -qE 'dpkg: error processing package grub-pc \(--configure\):'
@@ -64,10 +64,6 @@ install_package() {
                     exit 1
                 fi
                 apt-get install -y $package_name --fix-missing
-            elif [ $? -ne 0 ]; then
-                _green "$package_name tried to install but failed, exited the program"
-                _green "$package_name 已尝试安装但失败，退出程序"
-                exit 1
             fi
         fi
         _green "$package_name tried to install"
