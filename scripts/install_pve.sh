@@ -678,13 +678,7 @@ systemctl daemon-reload
 systemctl enable check-dns.service
 systemctl start check-dns.service
 # 清除防火墙
-iptables -F
-iptables -X
-iptables -Z
-# 接受所有流量
-iptables -P INPUT ACCEPT
-iptables -P FORWARD ACCEPT
-iptables -P OUTPUT ACCEPT
+install_package ufw
 ufw disable
 # 打印安装后的信息
 url="https://${main_ipv4}:8006/"
