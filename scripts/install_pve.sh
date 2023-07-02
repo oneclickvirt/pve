@@ -1,7 +1,7 @@
 #!/bin/bash
 # from 
 # https://github.com/spiritLHLS/pve
-# 2023.06.30
+# 2023.07.02
 
 # cd /root >/dev/null 2>&1
 _red() { echo -e "\033[31m\033[01m$@\033[0m"; }
@@ -25,9 +25,11 @@ temp_file_apt_fix="/tmp/apt_fix.txt"
 
 remove_duplicate_lines() {
     chattr -i "$1"
+    # 预处理：去除行尾空格和制表符
+    sed -i 's/[ \t]*$//' "$1"
     # 去除重复行并跳过空行和注释行
     if [ -f "$1" ]; then
-      awk '!NF || !seen[$0]++' "$1" > "$1.tmp" && mv -f "$1.tmp" "$1"
+      awk '{ line = $0; gsub(/^[ \t]+/, "", line); gsub(/[ \t]+/, " ", line); if (!NF || !seen[line]++) print $0 }' "$1" > "$1.tmp" && mv -f "$1.tmp" "$1"
     fi
     chattr +i "$1"
 }
