@@ -401,6 +401,9 @@ fi
 
 ########## 正式开始安装
 
+## 更改网络优先级为IPV4优先
+sed -i 's/.*precedence ::ffff:0:0\/96.*/precedence ::ffff:0:0\/96  100/g' /etc/gai.conf && systemctl restart networking
+
 # cloud-init文件修改
 rebuild_cloud_init
 
@@ -438,9 +441,6 @@ if [ "${hostname}" != "pve" ]; then
     fi
     chattr +i /etc/hosts
 fi
-
-## 更改网络优先级为IPV4优先
-sed -i 's/.*precedence ::ffff:0:0\/96.*/precedence ::ffff:0:0\/96  100/g' /etc/gai.conf && systemctl restart networking
 
 ## ChinaIP检测
 if [[ -z "${CN}" ]]; then
