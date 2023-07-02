@@ -625,8 +625,8 @@ _green "Running kernel: $(pveversion)"
 installed_kernels=($(dpkg -l 'pve-kernel-*' | awk '/^ii/ {print $2}' | cut -d'-' -f3- | sort -V))
 latest_kernel=${installed_kernels[-1]}
 _green "PVE latest kernel: $latest_kernel"
-# update-grub
-install_package ipcalc
+_green "Wait 5 seconds to start network"
+sleep 5
 if [ -f "/etc/network/interfaces" ]; then
     # 检查/etc/network/interfaces文件中是否有iface xxxx inet auto行
     if grep -q "iface $interface inet auto" /etc/network/interfaces; then
