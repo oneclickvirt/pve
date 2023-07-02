@@ -115,29 +115,47 @@ if [ -d "/etc/network/interfaces.d/" ]; then
     if [ ! -f "/etc/network/interfaces" ]; then
         touch /etc/network/interfaces
     fi
-    chattr -i /etc/network/interfaces
-    for file in /etc/network/interfaces.d/*; do
-        if [ -f "$file" ]; then
-            cat "$file" >> /etc/network/interfaces
-            chattr -i "$file"
-            rm "$file"
-        fi
-    done
-    chattr +i /etc/network/interfaces
+    if grep -q '^source \/etc\/network\/interfaces\.d\/' "/etc/network/interfaces" || grep -q '^source-directory \/etc\/network\/interfaces\.d' "/etc/network/interfaces"; then
+        chattr -i /etc/network/interfaces
+        for file in /etc/network/interfaces.d/*; do
+            if [ -f "$file" ]; then
+                cat "$file" >> /etc/network/interfaces
+                chattr -i "$file"
+                rm "$file"
+            fi
+        done
+        chattr +i /etc/network/interfaces
+    else
+        for file in /etc/network/interfaces.d/*; do
+            if [ -f "$file" ]; then
+                chattr -i "$file"
+                rm "$file"
+            fi
+        done
+    fi
 fi
 if [ -d "/run/network/interfaces.d/" ]; then
     if [ ! -f "/etc/network/interfaces" ]; then
         touch /etc/network/interfaces
     fi
-    chattr -i /etc/network/interfaces
-    for file in /run/network/interfaces.d/*; do
-        if [ -f "$file" ]; then
-            cat "$file" >> /etc/network/interfaces
-            chattr -i "$file"
-            rm "$file"
-        fi
-    done
-    chattr +i /etc/network/interfaces
+    if grep -q '^source \/run\/network\/interfaces\.d\/' "/etc/network/interfaces" || grep -q '^source-directory \/run\/network\/interfaces\.d' "/etc/network/interfaces"; then
+        chattr -i /etc/network/interfaces
+        for file in /run/network/interfaces.d/*; do
+            if [ -f "$file" ]; then
+                cat "$file" >> /etc/network/interfaces
+                chattr -i "$file"
+                rm "$file"
+            fi
+        done
+        chattr +i /etc/network/interfaces
+    else
+        for file in /run/network/interfaces.d/*; do
+            if [ -f "$file" ]; then
+                chattr -i "$file"
+                rm "$file"
+            fi
+        done
+    fi
 fi
 # 修复部分网络运行部分未空
 if [ ! -e /run/network/interfaces.d/* ]; then
