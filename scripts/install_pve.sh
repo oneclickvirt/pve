@@ -685,13 +685,16 @@ iptables -Z
 iptables -P INPUT ACCEPT
 iptables -P FORWARD ACCEPT
 iptables -P OUTPUT ACCEPT
+ufw disable
 # 打印安装后的信息
 url="https://${main_ipv4}:8006/"
 _green "Installation complete, please open HTTPS web page $url"
 _green "The username and password are the username and password used by the server (e.g. root and root user's password)"
 _green "If the login is correct please do not rush to reboot the system, go to execute the commands of the pre-configured environment and then reboot the system"
+_green "If there is a problem logging in the web side is not up, wait 10 seconds and restart the system to see"
 _green "安装完毕，请打开HTTPS网页 $url"
 _green "用户名、密码就是服务器所使用的用户名、密码(如root和root用户的密码)"
 _green "如果登录无误请不要急着重启系统，去执行预配置环境的命令后再重启系统"
+_green "如果登录有问题web端没起来，等待10秒后重启系统看看"
 rm -rf /root/reboot_pve.txt
 rm -rf /root/ifupdown2_installed.txt
