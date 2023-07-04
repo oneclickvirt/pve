@@ -286,6 +286,13 @@ if [ ! -f "/root/ifupdown2_installed.txt" ]; then
 fi
 }
 
+statistics_of_run-times() {
+COUNT=$(
+  curl -4 -ksm1 "https://hits.seeyoufarm.com/api/count/incr/badge.svg?url=https%3A%2F%2Fgithub.com%2FspiritLHLS%2Fpve&count_bg=%2379C83D&title_bg=%23555555&icon=&icon_color=%23E7E7E7&title=&edge_flat=true" 2>&1 ||
+  curl -6 -ksm1 "https://hits.seeyoufarm.com/api/count/incr/badge.svg?url=https%3A%2F%2Fgithub.com%2FspiritLHLS%2Fpve&count_bg=%2379C83D&title_bg=%23555555&icon=&icon_color=%23E7E7E7&title=&edge_flat=true" 2>&1) &&
+  TODAY=$(expr "$COUNT" : '.*\s\([0-9]\{1,\}\)\s/.*') && TOTAL=$(expr "$COUNT" : '.*/\s\([0-9]\{1,\}\)\s.*')
+}
+
 # 前置环境安装
 if [ "$(id -u)" != "0" ]; then
    _red "This script must be run as root" 1>&2
@@ -390,6 +397,8 @@ fi
 # if dig -x $main_ipv4 | grep -q "vps.ovh"; then
 #     prebuild_ifupdown2
 # fi
+# 统计运行次数
+statistics_of_run-times
 # 检测是否已重启过
 if [ ! -f "/root/reboot_pve.txt" ]; then
     echo "1" > "/root/reboot_pve.txt"
