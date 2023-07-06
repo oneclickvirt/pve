@@ -286,6 +286,46 @@ if [ ! -f "/root/ifupdown2_installed.txt" ]; then
 fi
 }
 
+is_private_ipv4() {
+    local ip_address=$1
+    local ip_parts
+    if [[ -z $ip_address ]]; then
+        return 0 # 输入为空
+    fi
+    IFS='.' read -r -a ip_parts <<< "$ip_address"
+    # 检查IP地址是否符合内网IP地址的范围
+    # 去除 回环，REC 1918，多播 地址
+    if [[ ${ip_parts[0]} -eq 10 ]] ||
+       [[ ${ip_parts[0]} -eq 172 && ${ip_parts[1]} -ge 16 && ${ip_parts[1]} -le 31 ]] ||
+       [[ ${ip_parts[0]} -eq 192 && ${ip_parts[1]} -eq 168 ]] ||
+       [[ ${ip_parts[0]} -eq 127 ]] ||
+       [[ ${ip_parts[0]} -eq 0 ]] ||
+       [[ ${ip_parts[0]} -ge 224 ]]
+    then
+        return 0  # 是内网IP地址
+    else
+        return 1  # 不是内网IP地址
+    fi
+}
+
+check_ipv4(){
+    IPV4=$(ip -4 addr show | grep global | awk '{print $2}' | cut -d '/' -f1 | head -n 1)
+    if is_private_ipv4 "$IPV4"; then # 由于是内网IPV4地址，需要通过API获取外网地址
+        IPV4=""
+        local API_NET=("ipv4.ip.sb" "ipget.net" "ip.ping0.cc" "https://ip4.seeip.org" "https://api.my-ip.io/ip" "https://ipv4.icanhazip.com" "api.ipify.org")
+        for p in "${API_NET[@]}"; do
+            response=$(curl -s4m8 "$p")
+            sleep 1
+            if [ $? -eq 0 ] && ! echo "$response" | grep -q "error"; then
+                IP_API="$p"
+                IPV4="$response"
+                break
+            fi
+        done
+    fi
+    export IPV4
+}
+
 statistics_of_run-times() {
 COUNT=$(
   curl -4 -ksm1 "https://hits.seeyoufarm.com/api/count/incr/badge.svg?url=https%3A%2F%2Fgithub.com%2FspiritLHLS%2Fpve&count_bg=%2379C83D&title_bg=%23555555&icon=&icon_color=%23E7E7E7&title=&edge_flat=true" 2>&1 ||
@@ -689,8 +729,10 @@ systemctl start check-dns.service
 # 清除防火墙
 install_package ufw
 ufw disable
+# 查询公网IPV4
+check_ipv4
 # 打印安装后的信息
-url="https://${main_ipv4}:8006/"
+url="https://${IPV4}:8006/"
 _green "Installation complete, please open HTTPS web page $url"
 _green "The username and password are the username and password used by the server (e.g. root and root user's password)"
 _green "If the login is correct please do not rush to reboot the system, go to execute the commands of the pre-configured environment and then reboot the system"
