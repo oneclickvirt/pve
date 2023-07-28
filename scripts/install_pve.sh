@@ -1,7 +1,7 @@
 #!/bin/bash
 # from 
 # https://github.com/spiritLHLS/pve
-# 2023.07.06
+# 2023.07.28
 
 # cd /root >/dev/null 2>&1
 _red() { echo -e "\033[31m\033[01m$@\033[0m"; }
@@ -194,6 +194,25 @@ if [ -f "/etc/network/interfaces.new" ]; then
         sed -i 's/^source-directory \/etc\/network\/interfaces\.d/#source-directory \/etc\/network\/interfaces.d/' "/etc/network/interfaces.new"
     fi
     chattr +i /etc/network/interfaces.new
+fi
+# 检查/etc/network/interfaces文件中是否有iface xxxx inet auto行
+if [ -f "/etc/network/interfaces" ]; then
+    if grep -q "iface $interface inet auto" /etc/network/interfaces; then
+        # 获取ipv4、subnet、gateway信息
+        gateway=$(ip route | awk '/default/ {print $3}')
+        interface_info=$(ip -o -4 addr show dev $interface | awk '{print $4}')
+        ipv4=$(echo $interface_info | cut -d'/' -f1)
+        subnet=$(echo $interface_info | cut -d'/' -f2)
+        subnet=$(ipcalc -n "$ipv4/$subnet" | grep -oP 'Netmask:\s+\K.*' | awk '{print $1}')
+        chattr -i /etc/network/interfaces
+        sed -i "/iface $interface inet auto/c\
+          iface $interface inet static\n\
+          address $ipv4\n\
+          netmask $subnet\n\
+          gateway $gateway\n\
+          dns-nameservers 8.8.8.8 8.8.4.4" /etc/network/interfaces
+    fi
+    chattr +i /etc/network/interfaces
 fi
 # 反加载
 if [[ -f "/etc/network/interfaces.new" && -f "/etc/network/interfaces" ]]; then
@@ -428,8 +447,15 @@ fi
 rebuild_interfaces
 rebuild_cloud_init
 fix_interfaces_ipv6_auto_type /etc/network/interfaces
-# 特殊处理Hetzner
 output=$(dmidecode -t system)
+# 特殊处理Azure
+if [[ $output == *"Microsoft Corporation"* ]]; then
+    sed -i 's#http://debian-archive.trafficmanager.net/debian#http://deb.debian.org/debian#g' /etc/apt/sources.list
+    sed -i 's#http://debian-archive.trafficmanager.net/debian-security#http://security.debian.org/debian-security#g' /etc/apt/sources.list
+    sed -i 's#http://debian-archive.trafficmanager.net/debian bullseye-updates#http://deb.debian.org/debian bullseye-updates#g' /etc/apt/sources.list
+    sed -i 's#http://debian-archive.trafficmanager.net/debian bullseye-backports#http://deb.debian.org/debian bullseye-backports#g' /etc/apt/sources.list
+fi
+# 特殊处理Hetzner
 if [[ $output == *"Hetzner_vServer"* ]]; then
     prebuild_ifupdown2
 fi
@@ -692,28 +718,6 @@ _green "Running kernel: $(pveversion)"
 installed_kernels=($(dpkg -l 'pve-kernel-*' | awk '/^ii/ {print $2}' | cut -d'-' -f3- | sort -V))
 latest_kernel=${installed_kernels[-1]}
 _green "PVE latest kernel: $latest_kernel"
-_green "Wait 5 seconds to start network"
-sleep 5
-if [ -f "/etc/network/interfaces" ]; then
-    # 检查/etc/network/interfaces文件中是否有iface xxxx inet auto行
-    if grep -q "iface $interface inet auto" /etc/network/interfaces; then
-        # 获取ipv4、subnet、gateway信息
-        gateway=$(ip route | awk '/default/ {print $3}')
-        interface_info=$(ip -o -4 addr show dev $interface | awk '{print $4}')
-        ipv4=$(echo $interface_info | cut -d'/' -f1)
-        subnet=$(echo $interface_info | cut -d'/' -f2)
-        subnet=$(ipcalc -n "$ipv4/$subnet" | grep -oP 'Netmask:\s+\K.*' | awk '{print $1}')
-        chattr -i /etc/network/interfaces
-        sed -i "/iface $interface inet auto/c\
-          iface $interface inet static\n\
-          address $ipv4\n\
-          netmask $subnet\n\
-          gateway $gateway\n\
-          dns-nameservers 8.8.8.8 8.8.4.4" /etc/network/interfaces
-    fi
-    chattr +i /etc/network/interfaces
-fi
-systemctl restart networking
 if [ ! -s "/etc/resolv.conf" ]
 then
     cp /etc/resolv.conf /etc/resolv.conf.bak
