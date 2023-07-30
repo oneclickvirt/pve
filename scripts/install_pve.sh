@@ -438,6 +438,40 @@ check_china(){
     fi
 }
 
+change_debian_apt_sources() {
+  cp /etc/apt/sources.list /etc/apt/sources.list.bak
+  yellow "backup the current /etc/apt/sources.list to /etc/apt/sources.list.bak"
+  DEBIAN_VERSION=$(lsb_release -sr)
+  if [[ -z "${CN}" || "${CN}" != true ]]; then
+    URL="http://deb.debian.org/debian"
+  else
+    # Use mirrors.aliyun.com sources list if IP is in China
+    URL="http://mirrors.aliyun.com/debian"
+  fi
+
+  case $DEBIAN_VERSION in
+    6*) DEBIAN_RELEASE="squeeze";;
+    7*) DEBIAN_RELEASE="wheezy";;
+    8*) DEBIAN_RELEASE="jessie";;
+    9*) DEBIAN_RELEASE="stretch";;
+    10*) DEBIAN_RELEASE="buster";;
+    11*) DEBIAN_RELEASE="bullseye";;
+    12*) DEBIAN_RELEASE="bookworm";;
+    *) echo "The system is not Debian 6/7/8/9/10/11/12 . No changes were made to the apt-get sources." && return 1;;
+  esac
+
+  cat > /etc/apt/sources.list <<EOF
+deb ${URL} ${DEBIAN_RELEASE} main contrib non-free
+deb ${URL} ${DEBIAN_RELEASE}-updates main contrib non-free
+deb ${URL} ${DEBIAN_RELEASE}-backports main contrib non-free
+deb-src ${URL} ${DEBIAN_RELEASE} main contrib non-free
+deb-src ${URL} ${DEBIAN_RELEASE}-updates main contrib non-free
+deb-src ${URL} ${DEBIAN_RELEASE}-backports main contrib non-free
+EOF
+}
+
+# ChinaIP检测
+check_china
 # 前置环境安装与配置
 if [ "$(id -u)" != "0" ]; then
    _red "This script must be run as root"
@@ -472,6 +506,10 @@ if grep -q 'NO_PUBKEY' "$temp_file_apt_fix"; then
     fi
 fi
 rm "$temp_file_apt_fix"
+apt-get update -y
+if [ $? -ne 0 ]; then
+    change_debian_apt_sources
+fi
 # 检测路径
 target_paths="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 for path in $(echo $target_paths | tr ':' ' '); do
@@ -497,8 +535,6 @@ install_package ipcalc
 install_package dmidecode
 install_package dnsutils
 
-# ChinaIP检测
-check_china
 # 部分信息检测
 main_ipv4=$(ip -4 addr show | grep global | awk '{print $2}' | cut -d '/' -f1 | head -n 1)
 # 检测物理接口和MAC地址
