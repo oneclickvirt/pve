@@ -749,16 +749,16 @@ elif [ "$system_arch" = "arch" ]; then
     case $version in
     stretch|buster|bullseye)
         if [[ -z "${CN}" || "${CN}" != true ]]; then
-            repo_url="deb https://global.mirrors.apqa.cn/proxmox/debian/pve bullseye port"
+            echo "deb https://global.mirrors.apqa.cn/proxmox/debian/pve bullseye port">/etc/apt/sources.list.d/pveport.list
         else
-            repo_url="deb https://mirrors.apqa.cn/proxmox/debian/pve bullseye port"
+            echo "deb https://mirrors.apqa.cn/proxmox/debian/pve bullseye port">/etc/apt/sources.list.d/pveport.list
         fi
         ;;
     bookworm)
         if [[ -z "${CN}" || "${CN}" != true ]]; then
-            repo_url="deb https://global.mirrors.apqa.cn/proxmox/debian/pve bookworm port"
+            echo "deb https://global.mirrors.apqa.cn/proxmox/debian/pve bookworm port">/etc/apt/sources.list.d/pveport.list
         else
-            repo_url="deb https://mirrors.apqa.cn/proxmox/debian/pve bookworm port"
+            echo "deb https://mirrors.apqa.cn/proxmox/debian/pve bookworm port">/etc/apt/sources.list.d/pveport.list
         fi
         ;;
     *)
@@ -776,9 +776,6 @@ elif [ "$system_arch" = "arch" ]; then
         curl https://global.mirrors.apqa.cn/proxmox/debian/pveport.gpg -o /etc/apt/trusted.gpg.d/pveport.gpg
     else
         curl https://mirrors.apqa.cn/proxmox/debian/pveport.gpg -o /etc/apt/trusted.gpg.d/pveport.gpg
-    fi
-    if ! grep -q "^deb.*apqa.cn" /etc/apt/sources.list; then
-        echo "$repo_url" >> /etc/apt/sources.list
     fi
 fi
 
