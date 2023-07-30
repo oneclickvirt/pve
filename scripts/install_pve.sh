@@ -522,6 +522,7 @@ if [ ! -d /usr/local/bin ]; then
     # 如果目录不存在，则创建它
     mkdir -p /usr/local/bin
 fi
+systemctl daemon-reload
 # 部分安装包提前安装
 install_package wget
 install_package curl
