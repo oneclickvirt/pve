@@ -668,8 +668,9 @@ fi
 if [ "$system_arch" = "x86" ]; then
     case $version in
     stretch|buster|bullseye|bookworm)
-        repo_url="deb http://download.proxmox.com/debian/pve ${version} pve-no-subscription"
-        if [[ -n "${CN}" ]]; then
+        if [[ -z "${CN}" || "${CN}" != true ]]; then
+            repo_url="deb http://download.proxmox.com/debian/pve ${version} pve-no-subscription"
+        else
             repo_url="deb https://mirrors.tuna.tsinghua.edu.cn/proxmox/debian/pve ${version} pve-no-subscription"
         fi
         ;;
@@ -687,8 +688,9 @@ if [ "$system_arch" = "x86" ]; then
         if [ "$confirm" != "y" ]; then
             exit 1
         fi
-        repo_url="deb http://download.proxmox.com/debian/pve bullseye pve-no-subscription"
-        if [[ -n "${CN}" ]]; then
+        if [[ -z "${CN}" || "${CN}" != true ]]; then
+            repo_url="deb http://download.proxmox.com/debian/pve bullseye pve-no-subscription"
+        else
             repo_url="deb https://mirrors.tuna.tsinghua.edu.cn/proxmox/debian/pve bullseye pve-no-subscription"
         fi
         ;;
@@ -746,14 +748,16 @@ if [ "$system_arch" = "x86" ]; then
 elif [ "$system_arch" = "arch" ]; then
     case $version in
     stretch|buster|bullseye)
-        repo_url="deb https://global.mirrors.apqa.cn/proxmox/debian/pve bullseye port"
-        if [[ -n "${CN}" ]]; then
+        if [[ -z "${CN}" || "${CN}" != true ]]; then
+            repo_url="deb https://global.mirrors.apqa.cn/proxmox/debian/pve bullseye port"
+        else
             repo_url="deb https://mirrors.apqa.cn/proxmox/debian/pve bullseye port"
         fi
         ;;
     bookworm)
-        repo_url="deb https://global.mirrors.apqa.cn/proxmox/debian/pve bookworm port"
-        if [[ -n "${CN}" ]]; then
+        if [[ -z "${CN}" || "${CN}" != true ]]; then
+            repo_url="deb https://global.mirrors.apqa.cn/proxmox/debian/pve bookworm port"
+        else
             repo_url="deb https://mirrors.apqa.cn/proxmox/debian/pve bookworm port"
         fi
         ;;
@@ -768,10 +772,10 @@ elif [ "$system_arch" = "arch" ]; then
         echo "deb https://global.mirrors.apqa.cn/proxmox/debian/pve bullseye port">/etc/apt/sources.list.d/pveport.list
         ;;
     esac
-    if [[ -n "${CN}" ]]; then
-        curl https://mirrors.apqa.cn/proxmox/debian/pveport.gpg -o /etc/apt/trusted.gpg.d/pveport.gpg
-    else
+    if [[ -z "${CN}" || "${CN}" != true ]]; then
         curl https://global.mirrors.apqa.cn/proxmox/debian/pveport.gpg -o /etc/apt/trusted.gpg.d/pveport.gpg
+    else
+        curl https://mirrors.apqa.cn/proxmox/debian/pveport.gpg -o /etc/apt/trusted.gpg.d/pveport.gpg
     fi
     if ! grep -q "^deb.*port" /etc/apt/sources.list; then
         echo "$repo_url" >> /etc/apt/sources.list
@@ -820,10 +824,12 @@ install_package open-iscsi
 rebuild_interfaces
 
 # 如果是国内服务器则替换CT源为国内镜像源
-if [[ -n "${CN}" ]]; then
-    cp -rf /usr/share/perl5/PVE/APLInfo.pm /usr/share/perl5/PVE/APLInfo.pm.bak
-    sed -i 's|http://download.proxmox.com|https://mirrors.tuna.tsinghua.edu.cn/proxmox|g' /usr/share/perl5/PVE/APLInfo.pm
-	  sed -i 's|http://mirrors.ustc.edu.cn/proxmox|https://mirrors.tuna.tsinghua.edu.cn/proxmox|g' /usr/share/perl5/PVE/APLInfo.pm
+if [ "$system_arch" = "x86" ]; then
+    if [[ "${CN}" == true ]]; then
+        cp -rf /usr/share/perl5/PVE/APLInfo.pm /usr/share/perl5/PVE/APLInfo.pm.bak
+        sed -i 's|http://download.proxmox.com|https://mirrors.tuna.tsinghua.edu.cn/proxmox|g' /usr/share/perl5/PVE/APLInfo.pm
+        sed -i 's|http://mirrors.ustc.edu.cn/proxmox|https://mirrors.tuna.tsinghua.edu.cn/proxmox|g' /usr/share/perl5/PVE/APLInfo.pm
+    fi
 fi
 
 # 安装必备模块并替换apt源中的无效订阅
