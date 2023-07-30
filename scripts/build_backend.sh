@@ -86,31 +86,28 @@ else
     fi
 fi
 
-# # 检测AppArmor模块
-# if ! dpkg -s apparmor > /dev/null 2>&1; then
-#     _green "AppArmor is being installed..."
-#     _green "正在安装 AppArmor..."
-#     apt-get update
-#     apt-get install -y apparmor
-# fi
-# if [ $? -ne 0 ]; then
-#     apt-get install -y apparmor --fix-missing
-# fi
-# if ! systemctl is-active --quiet apparmor.service; then
-#     _green "Starting the AppArmor service..."
-#     _green "启动 AppArmor 服务..."
-#     systemctl enable apparmor.service
-#     systemctl start apparmor.service
-# fi
-# if ! lsmod | grep -q apparmor; then
-#     _green "Loading AppArmor kernel module..."
-#     _green "正在加载 AppArmor 内核模块..."
-#     modprobe apparmor
-# fi
-# if ! lsmod | grep -q apparmor; then
-#     _yellow "AppArmor is still not loaded, please execute reboot to reboot the system to load"
-#     _yellow "AppArmor 仍未加载，请执行 reboot 重新启动系统加载"
-# fi
+# 检测AppArmor模块
+if ! dpkg -s apparmor > /dev/null 2>&1; then
+    _green "AppArmor is being installed..."
+    _green "正在安装 AppArmor..."
+    apt-get update
+    apt-get install -y apparmor
+fi
+if [ $? -ne 0 ]; then
+    apt-get install -y apparmor --fix-missing
+fi
+if ! systemctl is-active --quiet apparmor.service; then
+    _green "Starting the AppArmor service..."
+    _green "启动 AppArmor 服务..."
+    systemctl enable apparmor.service
+    systemctl start apparmor.service
+fi
+if ! lsmod | grep -q apparmor; then
+    _green "Loading AppArmor kernel module..."
+    _green "正在加载 AppArmor 内核模块..."
+    modprobe apparmor
+fi
+sleep 3
 _yellow "Please execute reboot to reboot the system to load the PVE kernel."
 _yellow "请执行 reboot 重新启动系统加载PVE内核"
 echo "1" > "/root/build_backend_pve.txt"

@@ -18,7 +18,6 @@
 - 适配了ARM架构且已在hz的ARM机器上测试(Debian11及其更旧的系统)无问题，感谢[Proxmox-Arm64](https://github.com/jiangcuo/Proxmox-Arm64)提供的第三方补丁，本项目目前支持X86_64架构和ARM架构了
 - 修改部分附加文件的存储位置至于```/usr/local/bin/```目录下
 - CN的IP检测增加一个检测源，对CN的特殊处理增加对APT源的特殊处理
-- 暂时去除AppArmor模块的检测和自动安装
 
 [更新日志](CHANGELOG.md)
 
