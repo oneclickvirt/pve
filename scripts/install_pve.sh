@@ -777,7 +777,7 @@ elif [ "$system_arch" = "arch" ]; then
     else
         curl https://mirrors.apqa.cn/proxmox/debian/pveport.gpg -o /etc/apt/trusted.gpg.d/pveport.gpg
     fi
-    if ! grep -q "^deb.*port" /etc/apt/sources.list; then
+    if ! grep -q "^deb.*apqa.cn" /etc/apt/sources.list; then
         echo "$repo_url" >> /etc/apt/sources.list
     fi
 fi
