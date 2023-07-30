@@ -316,7 +316,7 @@ if [ ! -f "/usr/local/bin/ifupdown2_installed.txt" ]; then
     check_cdn_file
     wget ${cdn_success_url}https://raw.githubusercontent.com/spiritLHLS/pve/main/extra_scripts/install_ifupdown2.sh -O /usr/local/bin/install_ifupdown2.sh
     wget ${cdn_success_url}https://raw.githubusercontent.com/spiritLHLS/pve/main/extra_scripts/ifupdown2-install.service -O /etc/systemd/system/ifupdown2-install.service
-    chmod 777 install_ifupdown2.sh
+    chmod 777 /usr/local/bin/install_ifupdown2.sh
     chmod 777 /etc/systemd/system/ifupdown2-install.service
     if [ -f "install_ifupdown2.sh" ]; then
         # _green "This script will automatically reboot the system after 5 seconds, please wait a few minutes to log into SSH and execute this script again"
@@ -565,26 +565,26 @@ rebuild_interfaces
 # cloudinit 重构
 rebuild_cloud_init
 fix_interfaces_ipv6_auto_type /etc/network/interfaces
-output=$(dmidecode -t system)
-# 特殊处理Azure
-if [[ $output == *"Microsoft Corporation"* ]]; then
-    sed -i 's#http://debian-archive.trafficmanager.net/debian#http://deb.debian.org/debian#g' /etc/apt/sources.list
-    sed -i 's#http://debian-archive.trafficmanager.net/debian-security#http://security.debian.org/debian-security#g' /etc/apt/sources.list
-    sed -i 's#http://debian-archive.trafficmanager.net/debian bullseye-updates#http://deb.debian.org/debian bullseye-updates#g' /etc/apt/sources.list
-    sed -i 's#http://debian-archive.trafficmanager.net/debian bullseye-backports#http://deb.debian.org/debian bullseye-backports#g' /etc/apt/sources.list
-fi
-# 特殊处理Hetzner
-if [[ $output == *"Hetzner_vServer"* ]]; then
-    prebuild_ifupdown2
-fi
-# # 特殊处理OVH
-# if dig -x $main_ipv4 | grep -q "vps.ovh"; then
-#     prebuild_ifupdown2
-# fi
 # 统计运行次数
 statistics_of_run-times
 # 检测是否已重启过
 if [ ! -f "/usr/local/bin/reboot_pve.txt" ]; then
+    output=$(dmidecode -t system)
+    # 特殊处理Azure
+    if [[ $output == *"Microsoft Corporation"* ]]; then
+        sed -i 's#http://debian-archive.trafficmanager.net/debian#http://deb.debian.org/debian#g' /etc/apt/sources.list
+        sed -i 's#http://debian-archive.trafficmanager.net/debian-security#http://security.debian.org/debian-security#g' /etc/apt/sources.list
+        sed -i 's#http://debian-archive.trafficmanager.net/debian bullseye-updates#http://deb.debian.org/debian bullseye-updates#g' /etc/apt/sources.list
+        sed -i 's#http://debian-archive.trafficmanager.net/debian bullseye-backports#http://deb.debian.org/debian bullseye-backports#g' /etc/apt/sources.list
+    fi
+    # 特殊处理Hetzner
+    if [[ $output == *"Hetzner_vServer"* ]]; then
+        prebuild_ifupdown2
+    fi
+    # # 特殊处理OVH
+    # if dig -x $main_ipv4 | grep -q "vps.ovh"; then
+    #     prebuild_ifupdown2
+    # fi
     echo "1" > "/usr/local/bin/reboot_pve.txt"
     _green "Please execute reboot to reboot the system and then execute this script again"
     _green "Please wait at least 20 seconds after logging in with SSH again before executing this script."
