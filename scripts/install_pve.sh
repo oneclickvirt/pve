@@ -1,7 +1,8 @@
 #!/bin/bash
 # from 
 # https://github.com/spiritLHLS/pve
-# 2023.07.28
+# 2023.07.30
+
 
 # cd /root >/dev/null 2>&1
 _red() { echo -e "\033[31m\033[01m$@\033[0m"; }
@@ -74,33 +75,57 @@ install_package() {
 }
 
 rebuild_cloud_init(){
-if [ -f "/etc/cloud/cloud.cfg" ]; then
-  chattr -i /etc/cloud/cloud.cfg
-  if grep -q "preserve_hostname: true" "/etc/cloud/cloud.cfg"; then
-    :
-  else
-    sed -E -i 's/preserve_hostname:[[:space:]]*false/preserve_hostname: true/g' "/etc/cloud/cloud.cfg"
-    echo "change preserve_hostname to true"
-  fi
-  if grep -q "disable_root: false" "/etc/cloud/cloud.cfg"; then
-    :
-  else
-    sed -E -i 's/disable_root:[[:space:]]*true/disable_root: false/g' "/etc/cloud/cloud.cfg"
-    echo "change disable_root to false"
-  fi
-  chattr -i /etc/cloud/cloud.cfg
-  content=$(cat /etc/cloud/cloud.cfg)
-  line_number=$(grep -n "^system_info:" "/etc/cloud/cloud.cfg" | cut -d ':' -f 1)
-  if [ -n "$line_number" ]; then
-    lines_after_system_info=$(echo "$content" | sed -n "$((line_number+1)),\$p")
-    if [ -n "$lines_after_system_info" ]; then
-      updated_content=$(echo "$content" | sed "$((line_number+1)),\$d")
-      echo "$updated_content" > "/etc/cloud/cloud.cfg"
+    if [ -f "/etc/cloud/cloud.cfg" ]; then
+        chattr -i /etc/cloud/cloud.cfg
+        if grep -q "preserve_hostname: true" "/etc/cloud/cloud.cfg"; then
+            :
+        else
+            sed -E -i 's/preserve_hostname:[[:space:]]*false/preserve_hostname: true/g' "/etc/cloud/cloud.cfg"
+            echo "change preserve_hostname to true"
+        fi
+        if grep -q "disable_root: false" "/etc/cloud/cloud.cfg"; then
+            :
+        else
+            sed -E -i 's/disable_root:[[:space:]]*true/disable_root: false/g' "/etc/cloud/cloud.cfg"
+            echo "change disable_root to false"
+        fi
+        chattr -i /etc/cloud/cloud.cfg
+        content=$(cat /etc/cloud/cloud.cfg)
+        line_number=$(grep -n "^system_info:" "/etc/cloud/cloud.cfg" | cut -d ':' -f 1)
+        if [ -n "$line_number" ]; then
+            lines_after_system_info=$(echo "$content" | sed -n "$((line_number+1)),\$p")
+            if [ -n "$lines_after_system_info" ]; then
+            updated_content=$(echo "$content" | sed "$((line_number+1)),\$d")
+            echo "$updated_content" > "/etc/cloud/cloud.cfg"
+            fi
+        fi
+        sed -i '/^\s*- set-passwords/s/^/#/' /etc/cloud/cloud.cfg
+        chattr +i /etc/cloud/cloud.cfg
     fi
-  fi
-  sed -i '/^\s*- set-passwords/s/^/#/' /etc/cloud/cloud.cfg
-  chattr +i /etc/cloud/cloud.cfg
-fi
+}
+
+remove_source_input(){
+    # 去除引用
+    if [ -f "/etc/network/interfaces" ]; then
+        chattr -i /etc/network/interfaces
+        if ! grep -q '^#source \/etc\/network\/interfaces\.d\/' "/etc/network/interfaces"; then
+            sed -i '/^source \/etc\/network\/interfaces\.d\// { /^#/! s/^/#/ }' "/etc/network/interfaces"
+        fi
+        if ! grep -q '^#source-directory \/etc\/network\/interfaces\.d' "/etc/network/interfaces"; then
+            sed -i 's/^source-directory \/etc\/network\/interfaces\.d/#source-directory \/etc\/network\/interfaces.d/' "/etc/network/interfaces"
+        fi
+        chattr +i /etc/network/interfaces
+    fi
+    if [ -f "/etc/network/interfaces.new" ]; then
+        chattr -i /etc/network/interfaces.new
+        if ! grep -q '^#source \/etc\/network\/interfaces\.d\/' "/etc/network/interfaces.new"; then
+            sed -i '/^source \/etc\/network\/interfaces\.d\// { /^#/! s/^/#/ }' "/etc/network/interfaces.new"
+        fi
+        if ! grep -q '^#source-directory \/etc\/network\/interfaces\.d' "/etc/network/interfaces.new"; then
+            sed -i 's/^source-directory \/etc\/network\/interfaces\.d/#source-directory \/etc\/network\/interfaces.d/' "/etc/network/interfaces.new"
+        fi
+        chattr +i /etc/network/interfaces.new
+    fi
 }
 
 rebuild_interfaces(){
@@ -175,26 +200,7 @@ if [ ! -e /run/network/interfaces.d/* ]; then
     fi
 fi
 # 去除引用
-if [ -f "/etc/network/interfaces" ]; then
-    chattr -i /etc/network/interfaces
-    if ! grep -q '^#source \/etc\/network\/interfaces\.d\/' "/etc/network/interfaces"; then
-        sed -i '/^source \/etc\/network\/interfaces\.d\// { /^#/! s/^/#/ }' "/etc/network/interfaces"
-    fi
-    if ! grep -q '^#source-directory \/etc\/network\/interfaces\.d' "/etc/network/interfaces"; then
-        sed -i 's/^source-directory \/etc\/network\/interfaces\.d/#source-directory \/etc\/network\/interfaces.d/' "/etc/network/interfaces"
-    fi
-    chattr +i /etc/network/interfaces
-fi
-if [ -f "/etc/network/interfaces.new" ]; then
-    chattr -i /etc/network/interfaces.new
-    if ! grep -q '^#source \/etc\/network\/interfaces\.d\/' "/etc/network/interfaces.new"; then
-        sed -i '/^source \/etc\/network\/interfaces\.d\// { /^#/! s/^/#/ }' "/etc/network/interfaces.new"
-    fi
-    if ! grep -q '^#source-directory \/etc\/network\/interfaces\.d' "/etc/network/interfaces.new"; then
-        sed -i 's/^source-directory \/etc\/network\/interfaces\.d/#source-directory \/etc\/network\/interfaces.d/' "/etc/network/interfaces.new"
-    fi
-    chattr +i /etc/network/interfaces.new
-fi
+remove_source_input
 # 检查/etc/network/interfaces文件中是否有iface xxxx inet auto行
 if [ -f "/etc/network/interfaces" ]; then
     if grep -q "iface $interface inet auto" /etc/network/interfaces; then
@@ -257,7 +263,7 @@ do
         if [ -n "$matches" ]; then
             # SLAAC动态分配，暂不做IPV6的处理
             sed -i "/iface $interface inet6 auto/d" $1
-            echo "$interface" > "/root/iface_auto.txt"
+            echo "$interface" > "/usr/local/bin/iface_auto.txt"
         else
             # 将 "auto" 替换为 "static"
             modified_line="${line/auto/static}"
@@ -305,10 +311,10 @@ check_cdn_file() {
 }
 
 prebuild_ifupdown2(){
-if [ ! -f "/root/ifupdown2_installed.txt" ]; then
+if [ ! -f "/usr/local/bin/ifupdown2_installed.txt" ]; then
     cdn_urls=("https://cdn.spiritlhl.workers.dev/" "https://cdn3.spiritlhl.net/" "https://cdn1.spiritlhl.net/" "https://ghproxy.com/" "https://cdn2.spiritlhl.net/")
     check_cdn_file
-    wget ${cdn_success_url}https://raw.githubusercontent.com/spiritLHLS/pve/main/extra_scripts/install_ifupdown2.sh -O /root/install_ifupdown2.sh
+    wget ${cdn_success_url}https://raw.githubusercontent.com/spiritLHLS/pve/main/extra_scripts/install_ifupdown2.sh -O /usr/local/bin/install_ifupdown2.sh
     wget ${cdn_success_url}https://raw.githubusercontent.com/spiritLHLS/pve/main/extra_scripts/ifupdown2-install.service -O /etc/systemd/system/ifupdown2-install.service
     chmod 777 install_ifupdown2.sh
     chmod 777 /etc/systemd/system/ifupdown2-install.service
@@ -318,7 +324,7 @@ if [ ! -f "/root/ifupdown2_installed.txt" ]; then
         systemctl daemon-reload
         systemctl enable ifupdown2-install.service
         # sleep 5
-        # echo "1" > "/root/reboot_pve.txt"
+        # echo "1" > "/usr/local/bin/reboot_pve.txt"
         # systemctl start ifupdown2-install.service
     fi
 fi
@@ -371,10 +377,80 @@ COUNT=$(
   TODAY=$(expr "$COUNT" : '.*\s\([0-9]\{1,\}\)\s/.*') && TOTAL=$(expr "$COUNT" : '.*/\s\([0-9]\{1,\}\)\s.*')
 }
 
-# 前置环境安装
+get_system_bit() {
+    local sysarch="$(uname -m)"
+    if [ "${sysarch}" = "unknown" ] || [ "${sysarch}" = "" ]; then
+        local sysarch="$(arch)"
+    fi
+    # 根据架构信息设置系统位数并下载文件,其余 * 包括了 x86_64
+    case "${sysarch}" in
+        "i386" | "i686" | "x86_64")
+            system_arch="x86"
+            ;;
+        "armv7l" | "armv8" | "armv8l" | "aarch64")
+            system_arch="arch"
+            ;;
+        *)
+            system_arch=""
+            ;;
+    esac
+}
+
+check_china(){
+    _yellow "IP area being detected ......"
+    if [[ -z "${CN}" ]]; then
+        if [[ $(curl -m 6 -s https://ipapi.co/json | grep 'China') != "" ]]; then
+            _yellow "根据ipapi.co提供的信息，当前IP可能在中国"
+            read -e -r -p "是否选用中国镜像完成相关组件安装? ([y]/n) " input
+            case $input in
+                [yY][eE][sS] | [yY])
+                    echo "使用中国镜像"
+                    CN=true
+                    ;;
+                [nN][oO] | [nN])
+                    echo "不使用中国镜像"
+                    ;;
+                *)
+                    echo "使用中国镜像"
+                    CN=true
+                    ;;
+            esac
+        else
+            if [[ $? -ne 0 ]]; then
+                if [[ $(curl -m 6 -s cip.cc) =~ "中国" ]]; then
+                    _yellow "根据cip.cc提供的信息，当前IP可能在中国"
+                    read -e -r -p "是否选用中国镜像完成相关组件安装? [Y/n] " input
+                    case $input in
+                        [yY][eE][sS] | [yY])
+                            echo "使用中国镜像"
+                            CN=true
+                            ;;
+                        [nN][oO] | [nN])
+                            echo "不使用中国镜像"
+                            ;;
+                        *)
+                            echo "不使用中国镜像"
+                            ;;
+                    esac
+                fi
+            fi
+        fi
+    fi
+}
+
+# 前置环境安装与配置
 if [ "$(id -u)" != "0" ]; then
-   _red "This script must be run as root" 1>&2
+   _red "This script must be run as root"
    exit 1
+fi
+get_system_bit
+if [ -z "${system_arch}" ] || [ ! -v system_arch ]; then
+   _red "This script can only run on machines under x86_64 or arm architecture."
+   exit 1
+fi
+if [ "$system_arch" = "arch" ]; then
+    systemctl disable NetworkManager
+    systemctl stop NetworkManager
 fi
 # 确保apt没有问题
 apt-get update -y
@@ -396,6 +472,18 @@ if grep -q 'NO_PUBKEY' "$temp_file_apt_fix"; then
     fi
 fi
 rm "$temp_file_apt_fix"
+# 检测路径
+target_paths="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+for path in $(echo $target_paths | tr ':' ' '); do
+  if ! echo $PATH | grep -q "$path"; then
+    echo "路径 $path 不在PATH中，将被添加."
+    export PATH="$PATH:$path"
+  fi
+done
+if [ ! -d /usr/local/bin ]; then
+    # 如果目录不存在，则创建它
+    mkdir -p /usr/local/bin
+fi
 # 部分安装包提前安装
 install_package wget
 install_package curl
@@ -409,6 +497,8 @@ install_package ipcalc
 install_package dmidecode
 install_package dnsutils
 
+# ChinaIP检测
+check_china
 # 部分信息检测
 main_ipv4=$(ip -4 addr show | grep global | awk '{print $2}' | cut -d '/' -f1 | head -n 1)
 # 检测物理接口和MAC地址
@@ -434,8 +524,10 @@ if ! grep -q "$interface_1" "/etc/network/interfaces"; then
 else
     interface=${interface_1}
 fi
-# mac_address=$(ip -o link show dev ${interface} | awk '{print $17}')
-# 检查是否存在特定行
+if [ "$system_arch" = "arch" ]; then
+    mac_address=$(ip -o link show dev ${interface} | awk '{print $17}')
+fi
+# 检查是否存在特定配置
 if [ -f "/etc/network/interfaces.d/50-cloud-init" ]; then
     if grep -Fxq "# /etc/cloud/cloud.cfg.d/99-disable-network-config.cfg with the following:" /etc/network/interfaces.d/50-cloud-init && grep -Fxq "# network: {config: disabled}" /etc/network/interfaces.d/50-cloud-init; then
         if [ ! -f "/etc/cloud/cloud.cfg.d/99-disable-network-config.cfg" ]; then
@@ -444,9 +536,9 @@ if [ -f "/etc/network/interfaces.d/50-cloud-init" ]; then
         fi
     fi
 fi
+# 特殊化处理各虚拟化
 if [ ! -f "/etc/network/interfaces" ]; then
     touch "/etc/network/interfaces"
-    # 获取ipv4、subnet、gateway信息
     gateway=$(ip route | awk '/default/ {print $3}')
     interface_info=$(ip -o -4 addr show dev $interface | awk '{print $4}')
     ipv4=$(echo $interface_info | cut -d'/' -f1)
@@ -459,11 +551,18 @@ if [ ! -f "/etc/network/interfaces" ]; then
     echo "    address $ipv4" >> /etc/network/interfaces
     echo "    netmask $subnet" >> /etc/network/interfaces
     echo "    gateway $gateway" >> /etc/network/interfaces
-    echo "    dns-nameservers 8.8.8.8 8.8.4.4" >> /etc/network/interfaces
+    if [[ -z "${CN}" || "${CN}" != true ]]; then
+        echo "    dns-nameservers 8.8.8.8 8.8.4.4" >> /etc/network/interfaces
+    else
+        echo "    dns-nameservers 8.8.8.8 223.5.5.5" >> /etc/network/interfaces
+    fi
     chattr +i /etc/network/interfaces
 fi
 # 网络配置修改
 rebuild_interfaces
+
+
+# cloudinit 重构
 rebuild_cloud_init
 fix_interfaces_ipv6_auto_type /etc/network/interfaces
 output=$(dmidecode -t system)
@@ -485,8 +584,8 @@ fi
 # 统计运行次数
 statistics_of_run-times
 # 检测是否已重启过
-if [ ! -f "/root/reboot_pve.txt" ]; then
-    echo "1" > "/root/reboot_pve.txt"
+if [ ! -f "/usr/local/bin/reboot_pve.txt" ]; then
+    echo "1" > "/usr/local/bin/reboot_pve.txt"
     _green "Please execute reboot to reboot the system and then execute this script again"
     _green "Please wait at least 20 seconds after logging in with SSH again before executing this script."
     _green "请执行 reboot 重启系统后再次执行本脚本，再次使用SSH登录后请等待至少20秒再执行本脚本"
@@ -495,7 +594,12 @@ fi
 
 ########## 正式开始安装
 
-## 更改网络优先级为IPV4优先
+# 如果是CN的IP则增加DNS先
+if [[ "${CN}" == true ]]; then
+    echo "nameserver 223.5.5.5" >> /etc/resolv.conf
+fi
+
+# 更改网络优先级为IPV4优先
 sed -i 's/.*precedence ::ffff:0:0\/96.*/precedence ::ffff:0:0\/96  100/g' /etc/gai.conf && systemctl restart networking
 
 # cloud-init文件修改
@@ -536,30 +640,9 @@ if [ "${hostname}" != "pve" ]; then
     chattr +i /etc/hosts
 fi
 
-## ChinaIP检测
-if [[ -z "${CN}" ]]; then
-  if [[ $(curl -m 10 -s https://ipapi.co/json | grep 'China') != "" ]]; then
-      _yellow "根据ipapi.co提供的信息，当前IP可能在中国"
-      read -e -r -p "是否选用中国镜像完成安装? [Y/n] " input
-      case $input in
-          [yY][eE][sS] | [yY])
-              echo "使用中国镜像"
-              CN=true
-          ;;
-          [nN][oO] | [nN])
-              echo "不使用中国镜像"
-          ;;
-          *)
-              echo "使用中国镜像"
-              CN=true
-          ;;
-      esac
-  fi
-fi
-
 # 再次预检查 
 apt-get install gnupg -y
-if [ $(uname -m) != "x86_64" ] || [ ! -f /etc/debian_version ] || [ $(grep MemTotal /proc/meminfo | awk '{print $2}') -lt 2000000 ] || [ $(grep -c ^processor /proc/cpuinfo) -lt 2 ] || [ $(ping -c 3 google.com > /dev/null 2>&1; echo $?) -ne 0 ]; then
+if [ ! -f /etc/debian_version ] || [ $(grep MemTotal /proc/meminfo | awk '{print $2}') -lt 2000000 ] || [ $(grep -c ^processor /proc/cpuinfo) -lt 2 ] || [ $(ping -c 3 google.com > /dev/null 2>&1; echo $?) -ne 0 ]; then
   _red "Error: This system does not meet the minimum requirements for Proxmox VE installation."
   _yellow "Do you want to continue the installation? (Enter to not continue the installation by default) (y/[n])"
   reading "是否要继续安装？(回车则默认不继续安装) (y/[n]) " confirm
@@ -574,84 +657,125 @@ fi
 # 新增pve源
 apt-get install lsb-release -y
 version=$(lsb_release -cs)
-case $version in
-  stretch|buster|bullseye|bookworm)
-    repo_url="deb http://download.proxmox.com/debian/pve ${version} pve-no-subscription"
+# 如果是CN的IP则修改apt源先
+if [[ "${CN}" == true ]]; then
+    rm /etc/apt/sources.list
+    echo "deb https://mirrors.tuna.tsinghua.edu.cn/debian/ ${version} main contrib non-free" >> /etc/apt/sources.list
+    echo "deb https://mirrors.tuna.tsinghua.edu.cn/debian/ ${version}-updates main contrib non-free" >> /etc/apt/sources.list
+    echo "deb https://mirrors.tuna.tsinghua.edu.cn/debian/ ${version}-backports main contrib non-free" >> /etc/apt/sources.list
+    echo "deb https://mirrors.tuna.tsinghua.edu.cn/debian-security ${version}-security main contrib non-free" >> /etc/apt/sources.list
+fi
+if [ "$system_arch" = "x86" ]; then
+    case $version in
+    stretch|buster|bullseye|bookworm)
+        repo_url="deb http://download.proxmox.com/debian/pve ${version} pve-no-subscription"
+        if [[ -n "${CN}" ]]; then
+            repo_url="deb https://mirrors.tuna.tsinghua.edu.cn/proxmox/debian/pve ${version} pve-no-subscription"
+        fi
+        ;;
+    # bookworm)
+    #   repo_url="deb http://download.proxmox.com/debian/pve ${version} pvetest"
+    #   if [[ -n "${CN}" ]]; then
+    #     repo_url="deb https://mirrors.tuna.tsinghua.edu.cn/proxmox/debian/pve ${version} pvetest"
+    #   fi
+    #   ;;
+    *)
+        _red "Error: Unsupported Debian version"
+        _yellow "Do you want to continue the installation? (Enter to not continue the installation by default) (y/[n])"
+        reading "是否要继续安装(识别到不是Debian9~Debian12的范围)？(回车则默认不继续安装) (y/[n]) " confirm
+        echo ""
+        if [ "$confirm" != "y" ]; then
+            exit 1
+        fi
+        repo_url="deb http://download.proxmox.com/debian/pve bullseye pve-no-subscription"
+        if [[ -n "${CN}" ]]; then
+            repo_url="deb https://mirrors.tuna.tsinghua.edu.cn/proxmox/debian/pve bullseye pve-no-subscription"
+        fi
+        ;;
+    esac
+    case $version in
+    stretch)
+        if [ ! -f "/etc/apt/trusted.gpg.d/proxmox-ve-release-4.x.gpg" ]; then
+            wget http://download.proxmox.com/debian/proxmox-ve-release-4.x.gpg -O /etc/apt/trusted.gpg.d/proxmox-ve-release-4.x.gpg
+            chmod +r /etc/apt/trusted.gpg.d/proxmox-ve-release-4.x.gpg
+        fi
+        if [ ! -f "/etc/apt/trusted.gpg.d/proxmox-ve-release-6.x.gpg" ]; then
+            wget http://download.proxmox.com/debian/proxmox-ve-release-6.x.gpg -O /etc/apt/trusted.gpg.d/proxmox-ve-release-6.x.gpg
+            chmod +r /etc/apt/trusted.gpg.d/proxmox-ve-release-6.x.gpg
+        fi
+        ;;
+    buster)
+        if [ ! -f "/etc/apt/trusted.gpg.d/proxmox-ve-release-5.x.gpg" ]; then
+            wget http://download.proxmox.com/debian/proxmox-ve-release-5.x.gpg -O /etc/apt/trusted.gpg.d/proxmox-ve-release-5.x.gpg
+            chmod +r /etc/apt/trusted.gpg.d/proxmox-ve-release-5.x.gpg
+        fi
+        if [ ! -f "/etc/apt/trusted.gpg.d/proxmox-ve-release-6.x.gpg" ]; then
+            wget http://download.proxmox.com/debian/proxmox-ve-release-6.x.gpg -O /etc/apt/trusted.gpg.d/proxmox-ve-release-6.x.gpg
+            chmod +r /etc/apt/trusted.gpg.d/proxmox-ve-release-6.x.gpg
+        fi
+        ;;
+    bullseye)
+        if [ ! -f "/etc/apt/trusted.gpg.d/proxmox-ve-release-6.x.gpg" ]; then
+            wget http://download.proxmox.com/debian/proxmox-ve-release-6.x.gpg -O /etc/apt/trusted.gpg.d/proxmox-ve-release-6.x.gpg
+            chmod +r /etc/apt/trusted.gpg.d/proxmox-ve-release-6.x.gpg
+        fi
+        if [ ! -f "/etc/apt/trusted.gpg.d/proxmox-release-bullseye.gpg" ]; then
+            wget http://download.proxmox.com/debian/proxmox-release-bullseye.gpg -O /etc/apt/trusted.gpg.d/proxmox-release-bullseye.gpg
+            chmod +r /etc/apt/trusted.gpg.d/proxmox-release-bullseye.gpg
+        fi
+        ;;
+    bookworm)
+        if [ ! -f "/etc/apt/trusted.gpg.d/proxmox-release-bookworm.gpg" ]; then
+            wget http://download.proxmox.com/debian/proxmox-release-bookworm.gpg -O /etc/apt/trusted.gpg.d/proxmox-release-bookworm.gpg
+            chmod +r /etc/apt/trusted.gpg.d/proxmox-release-bookworm.gpg
+        fi
+        ;;
+    *)
+        _red "Error: Unsupported Debian version"
+        _yellow "Do you want to continue the installation? (Enter to not continue the installation by default) (y/[n])"
+        reading "是否要继续安装(识别到不是Debian9~Debian12的范围)？(回车则默认不继续安装) (y/[n]) " confirm
+        echo ""
+        if [ "$confirm" != "y" ]; then
+            exit 1
+        fi
+        ;;
+    esac
+    if ! grep -q "^deb.*pve-no-subscription" /etc/apt/sources.list; then
+        echo "$repo_url" >> /etc/apt/sources.list
+    fi
+elif [ "$system_arch" = "arch" ]; then
+    case $version in
+    stretch|buster|bullseye)
+        repo_url="deb https://global.mirrors.apqa.cn/proxmox/debian/pve bullseye port"
+        if [[ -n "${CN}" ]]; then
+            repo_url="deb https://mirrors.apqa.cn/proxmox/debian/pve bullseye port"
+        fi
+        ;;
+    bookworm)
+        repo_url="deb https://global.mirrors.apqa.cn/proxmox/debian/pve bookworm port"
+        if [[ -n "${CN}" ]]; then
+            repo_url="deb https://mirrors.apqa.cn/proxmox/debian/pve bookworm port"
+        fi
+        ;;
+    *)
+        _red "Error: Unsupported Debian version"
+        _yellow "Do you want to continue the installation? (Enter to not continue the installation by default) (y/[n])"
+        reading "是否要继续安装(识别到不是Debian9~Debian12的范围)？(回车则默认不继续安装) (y/[n]) " confirm
+        echo ""
+        if [ "$confirm" != "y" ]; then
+            exit 1
+        fi
+        echo "deb https://global.mirrors.apqa.cn/proxmox/debian/pve bullseye port">/etc/apt/sources.list.d/pveport.list
+        ;;
+    esac
     if [[ -n "${CN}" ]]; then
-      repo_url="deb https://mirrors.tuna.tsinghua.edu.cn/proxmox/debian/pve ${version} pve-no-subscription"
+        curl https://mirrors.apqa.cn/proxmox/debian/pveport.gpg -o /etc/apt/trusted.gpg.d/pveport.gpg
+    else
+        curl https://global.mirrors.apqa.cn/proxmox/debian/pveport.gpg -o /etc/apt/trusted.gpg.d/pveport.gpg
     fi
-    ;;
-  # bookworm)
-  #   repo_url="deb http://download.proxmox.com/debian/pve ${version} pvetest"
-  #   if [[ -n "${CN}" ]]; then
-  #     repo_url="deb https://mirrors.tuna.tsinghua.edu.cn/proxmox/debian/pve ${version} pvetest"
-  #   fi
-  #   ;;
-  *)
-    _red "Error: Unsupported Debian version"
-    _yellow "Do you want to continue the installation? (Enter to not continue the installation by default) (y/[n])"
-    reading "是否要继续安装(识别到不是Debian9~Debian12的范围)？(回车则默认不继续安装) (y/[n]) " confirm
-    echo ""
-    if [ "$confirm" != "y" ]; then
-      exit 1
+    if ! grep -q "^deb.*port" /etc/apt/sources.list; then
+        echo "$repo_url" >> /etc/apt/sources.list
     fi
-    repo_url="deb http://download.proxmox.com/debian/pve bullseye pve-no-subscription"
-    if [[ -n "${CN}" ]]; then
-      repo_url="deb https://mirrors.tuna.tsinghua.edu.cn/proxmox/debian/pve bullseye pve-no-subscription"
-    fi
-    ;;
-esac
-
-case $version in
-  stretch)
-    if [ ! -f "/etc/apt/trusted.gpg.d/proxmox-ve-release-4.x.gpg" ]; then
-      wget http://download.proxmox.com/debian/proxmox-ve-release-4.x.gpg -O /etc/apt/trusted.gpg.d/proxmox-ve-release-4.x.gpg
-      chmod +r /etc/apt/trusted.gpg.d/proxmox-ve-release-4.x.gpg
-    fi
-    if [ ! -f "/etc/apt/trusted.gpg.d/proxmox-ve-release-6.x.gpg" ]; then
-      wget http://download.proxmox.com/debian/proxmox-ve-release-6.x.gpg -O /etc/apt/trusted.gpg.d/proxmox-ve-release-6.x.gpg
-      chmod +r /etc/apt/trusted.gpg.d/proxmox-ve-release-6.x.gpg
-    fi
-    ;;
-  buster)
-    if [ ! -f "/etc/apt/trusted.gpg.d/proxmox-ve-release-5.x.gpg" ]; then
-      wget http://download.proxmox.com/debian/proxmox-ve-release-5.x.gpg -O /etc/apt/trusted.gpg.d/proxmox-ve-release-5.x.gpg
-      chmod +r /etc/apt/trusted.gpg.d/proxmox-ve-release-5.x.gpg
-    fi
-    if [ ! -f "/etc/apt/trusted.gpg.d/proxmox-ve-release-6.x.gpg" ]; then
-      wget http://download.proxmox.com/debian/proxmox-ve-release-6.x.gpg -O /etc/apt/trusted.gpg.d/proxmox-ve-release-6.x.gpg
-      chmod +r /etc/apt/trusted.gpg.d/proxmox-ve-release-6.x.gpg
-    fi
-    ;;
-  bullseye)
-    if [ ! -f "/etc/apt/trusted.gpg.d/proxmox-ve-release-6.x.gpg" ]; then
-      wget http://download.proxmox.com/debian/proxmox-ve-release-6.x.gpg -O /etc/apt/trusted.gpg.d/proxmox-ve-release-6.x.gpg
-      chmod +r /etc/apt/trusted.gpg.d/proxmox-ve-release-6.x.gpg
-    fi
-    if [ ! -f "/etc/apt/trusted.gpg.d/proxmox-release-bullseye.gpg" ]; then
-      wget http://download.proxmox.com/debian/proxmox-release-bullseye.gpg -O /etc/apt/trusted.gpg.d/proxmox-release-bullseye.gpg
-      chmod +r /etc/apt/trusted.gpg.d/proxmox-release-bullseye.gpg
-    fi
-    ;;
-  bookworm)
-    if [ ! -f "/etc/apt/trusted.gpg.d/proxmox-release-bookworm.gpg" ]; then
-      wget http://download.proxmox.com/debian/proxmox-release-bookworm.gpg -O /etc/apt/trusted.gpg.d/proxmox-release-bookworm.gpg
-      chmod +r /etc/apt/trusted.gpg.d/proxmox-release-bookworm.gpg
-    fi
-    ;;
-  *)
-    _red "Error: Unsupported Debian version"
-    _yellow "Do you want to continue the installation? (Enter to not continue the installation by default) (y/[n])"
-    reading "是否要继续安装(识别到不是Debian9~Debian12的范围)？(回车则默认不继续安装) (y/[n]) " confirm
-    echo ""
-    if [ "$confirm" != "y" ]; then
-      exit 1
-    fi
-    ;;
-esac
-
-if ! grep -q "^deb.*pve-no-subscription" /etc/apt/sources.list; then
-    echo "$repo_url" >> /etc/apt/sources.list
 fi
 
 # 备份网络设置
@@ -741,7 +865,11 @@ chattr +i /etc/network/interfaces
 if [ ! -s "/etc/resolv.conf" ]
 then
     cp /etc/resolv.conf /etc/resolv.conf.bak
-    echo -e "nameserver 1.1.1.1\nnameserver 8.8.8.8\nnameserver 8.8.4.4\nnameserver 2606:4700:4700::1111\nnameserver 2001:4860:4860::8888\nnameserver 2001:4860:4860::8844" >> /etc/resolv.conf
+    if [[ "${CN}" == true ]]; then
+        echo -e "nameserver 8.8.8.8\nnameserver 223.5.5.5\nnameserver 2001:4860:4860::8888\nnameserver 2001:4860:4860::8844" > /etc/resolv.conf
+    else
+        echo -e "nameserver 8.8.8.8\nnameserver 8.8.4.4\nnameserver 2001:4860:4860::8888\nnameserver 2001:4860:4860::8844" > /etc/resolv.conf
+    fi
 fi
 wget ${cdn_success_url}https://raw.githubusercontent.com/spiritLHLS/pve/main/extra_scripts/check-dns.sh -O /usr/local/bin/check-dns.sh
 wget ${cdn_success_url}https://raw.githubusercontent.com/spiritLHLS/pve/main/extra_scripts/check-dns.service -O /etc/systemd/system/check-dns.service
@@ -765,5 +893,5 @@ _green "安装完毕，请打开HTTPS网页 $url"
 _green "用户名、密码就是服务器所使用的用户名、密码(如root和root用户的密码)"
 _green "如果登录无误请不要急着重启系统，去执行预配置环境的命令后再重启系统"
 _green "如果登录有问题web端没起来，等待10秒后重启系统看看"
-rm -rf /root/reboot_pve.txt
-rm -rf /root/ifupdown2_installed.txt
+rm -rf /usr/local/bin/reboot_pve.txt
+rm -rf /usr/local/bin/ifupdown2_installed.txt
