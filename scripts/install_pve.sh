@@ -858,8 +858,12 @@ elif [ "$system_arch" = "arch" ]; then
 fi
 
 # 备份网络设置
-cp /etc/network/interfaces /etc/network/interfaces.bak
-cp /etc/network/interfaces.new /etc/network/interfaces.new.bak
+if [ -f /etc/network/interfaces ]; then
+    cp /etc/network/interfaces /etc/network/interfaces.bak
+fi
+if [ -f /etc/network/interfaces.new ]; then
+    cp /etc/network/interfaces.new /etc/network/interfaces.new.bak
+fi
 rebuild_interfaces
 
 # 下载pve
