@@ -624,7 +624,7 @@ check_haveged
 _yellow "Detecting system information, will probably stay on the page for up to 1~2 minutes"
 _yellow "正在检测系统信息，大概会停留在该页面最多1~2分钟"
 
-check_interface()
+check_interface(){
     if [ -z "$interface_2" ]; then
         interface=${interface_1}
         return
@@ -652,13 +652,12 @@ check_interface()
             for iface in $interfaces_list; do
                 if [[ "$iface" = "$interface_1" || "$iface" = "$interface_2" ]]; then
                     interface="$iface"
-                    return
                 fi
             done
             if [ -z "$interface" ]; then
                 interface="eth0"
-                return
             fi
+            return
         fi
     else
         interface="eth0"
