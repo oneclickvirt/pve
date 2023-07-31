@@ -537,8 +537,6 @@ if [ "$system_arch" = "arch" ]; then
     systemctl disable NetworkManager
     systemctl stop NetworkManager
 fi
-# 确保时间没问题
-check_time_zone
 # 确保apt没有问题
 apt-get update -y
 apt-get full-upgrade -y
@@ -591,6 +589,8 @@ install_package dmidecode
 install_package dnsutils
 install_package ethtool
 check_haveged
+# 确保时间没问题
+check_time_zone
 
 # 检测系统信息
 _yellow "Detecting system information, will probably stay on the page for up to 1~2 minutes"
@@ -656,8 +656,6 @@ if [ ! -f "/etc/network/interfaces" ]; then
 fi
 # 网络配置修改
 rebuild_interfaces
-
-
 # cloudinit 重构
 rebuild_cloud_init
 fix_interfaces_ipv6_auto_type /etc/network/interfaces
