@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/spiritLHLS/pve
-# 2023.06.29
+# 2023.07.31
 # 自动选择要绑定的IPV4地址
 
 
@@ -38,6 +38,25 @@ else
     _green "Locale set to $utf8_locale"
 fi
 
+get_system_arch() {
+    local sysarch="$(uname -m)"
+    if [ "${sysarch}" = "unknown" ] || [ "${sysarch}" = "" ]; then
+        local sysarch="$(arch)"
+    fi
+    # 根据架构信息设置系统位数并下载文件,其余 * 包括了 x86_64
+    case "${sysarch}" in
+        "i386" | "i686" | "x86_64")
+            system_arch="x86"
+            ;;
+        "armv7l" | "armv8" | "armv8l" | "aarch64")
+            system_arch="arch"
+            ;;
+        *)
+            system_arch=""
+            ;;
+    esac
+}
+
 check_cdn() {
     local o_url=$1
     for cdn_url in "${cdn_urls[@]}"; do
@@ -63,25 +82,70 @@ cdn_urls=("https://cdn.spiritlhl.workers.dev/" "https://cdn3.spiritlhl.net/" "ht
 if [ ! -d "qcow" ]; then
     mkdir qcow
 fi
-# "centos7" "alpinelinux_v3_15" "alpinelinux_v3_17" "rockylinux8" "QuTScloud_5.0.1" 
-systems=("debian10" "debian11" "debian9" "ubuntu18" "ubuntu20" "ubuntu22" "archlinux" "centos9-stream" "centos8-stream" "almalinux8" "almalinux9" "fedora33" "fedora34" "opensuse-leap-15")
-for sys in ${systems[@]}; do
-    if [[ "$system" == "$sys" ]]; then
-        file_path="/root/qcow/${system}.qcow2"
-        break
-    fi
-done
-if [[ -z "$file_path" ]]; then
-    _red "Unable to install corresponding system, please check https://github.com/spiritLHLS/Images/ for supported system images "
-    _red "无法安装对应系统，请查看 https://github.com/spiritLHLS/Images/ 支持的系统镜像 "
-    exit 1
+get_system_arch
+if [ -z "${system_arch}" ] || [ ! -v system_arch ]; then
+   _red "This script can only run on machines under x86_64 or arm architecture."
+   exit 1
 fi
-if [ ! -f "$file_path" ]; then
-    # v1.0 基础安装包预安装
-    # v1.1 增加agent安装包预安装，方便在宿主机上看到虚拟机的进程
-    check_cdn_file
-    url="${cdn_success_url}https://github.com/spiritLHLS/Images/releases/download/v1.1/${system}.qcow2"
-    curl -L -o "$file_path" "$url"
+if [ "$system_arch" = "x86" ]; then
+    systems=("debian10" "debian11" "debian9" "ubuntu18" "ubuntu20" "ubuntu22" "archlinux" "centos9-stream" "centos8-stream" "almalinux8" "almalinux9" "fedora33" "fedora34" "opensuse-leap-15")
+    for sys in ${systems[@]}; do
+        if [[ "$system" == "$sys" ]]; then
+            file_path="/root/qcow/${system}.qcow2"
+            break
+        fi
+    done
+    if [[ -z "$file_path" ]]; then
+        _red "Unable to install corresponding system, please check https://github.com/spiritLHLS/Images/ for supported system images "
+        _red "无法安装对应系统，请查看 https://github.com/spiritLHLS/Images/ 支持的系统镜像 "
+        exit 1
+    fi
+    if [ ! -f "$file_path" ]; then
+        # v1.0 基础安装包预安装
+        # v1.1 增加agent安装包预安装，方便在宿主机上看到虚拟机的进程
+        check_cdn_file
+        url="${cdn_success_url}https://github.com/spiritLHLS/Images/releases/download/v1.1/${system}.qcow2"
+        curl -L -o "$file_path" "$url"
+    fi
+elif [ "$system_arch" = "arch" ]; then
+    systems=("ubuntu14" "ubuntu16" "ubuntu18" "ubuntu20" "ubuntu22")
+    for sys in ${systems[@]}; do
+        if [[ "$system" == "$sys" ]]; then
+            file_path="/root/qcow/${system}.img"
+            break
+        fi
+    done
+    if [[ -z "$file_path" ]]; then
+        # https://www.debian.org/mirror/list
+        _red "Unable to install corresponding system, please check http://cloud-images.ubuntu.com for supported system images "
+        _red "无法安装对应系统，请查看 http://cloud-images.ubuntu.com 支持的系统镜像 "
+        exit 1
+    fi
+    if [ -n "$file_path" ] && [ -f "$file_path" ]; then
+        case "$system" in
+            ubuntu14)
+                version="trusty"
+                ;;
+            ubuntu16)
+                version="xenial"
+                ;;
+            ubuntu18)
+                version="bionic"
+                ;;
+            ubuntu20)
+                version="focal"
+                ;;
+            ubuntu22)
+                version="jammy"
+                ;;
+            *)
+                echo "Unsupported Ubuntu version."
+                exit 1
+                ;;
+        esac
+        url="http://cloud-images.ubuntu.com/${version}/current/${version}-server-cloudimg-arm64.img"
+        curl -L -o "$file_path" "$url"
+    fi
 fi
 
 first_digit=${vm_num:0:1}
@@ -160,8 +224,14 @@ _green "The current IP to which the VM will be bound is: ${user_ip}"
 _green "当前虚拟机将绑定的IP为：${user_ip}"
 
 qm create $vm_num --agent 1 --scsihw virtio-scsi-single --serial0 socket --cores $core --sockets 1 --cpu host --net0 virtio,bridge=vmbr0,firewall=0
-qm importdisk $vm_num /root/qcow/${system}.qcow2 ${storage}
-qm set $vm_num --scsihw virtio-scsi-pci --scsi0 ${storage}:${vm_num}/vm-${vm_num}-disk-0.raw
+if [ "$system_arch" = "x86" ]; then
+    qm importdisk $vm_num /root/qcow/${system}.qcow2 ${storage}
+    qm set $vm_num --scsihw virtio-scsi-pci --scsi0 ${storage}:${vm_num}/vm-${vm_num}-disk-0.raw
+else
+    qm set $vm_num --bios ovmf
+    qm importdisk $vm_num /root/qcow/${system}.img ${storage}
+    qm set $vm_num --scsihw virtio-scsi-pci --scsi0 ${storage}:${vm_num}/vm-${vm_num}-disk-0.raw
+fi
 qm set $vm_num --bootdisk scsi0
 qm set $vm_num --boot order=scsi0
 qm set $vm_num --memory $memory

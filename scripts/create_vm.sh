@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/spiritLHLS/pve
-# 2023.06.29
+# 2023.07.31
 
 # cd /root
 
@@ -19,6 +19,25 @@ else
   export LANGUAGE="$utf8_locale"
   echo "Locale set to $utf8_locale"
 fi
+
+get_system_arch() {
+    local sysarch="$(uname -m)"
+    if [ "${sysarch}" = "unknown" ] || [ "${sysarch}" = "" ]; then
+        local sysarch="$(arch)"
+    fi
+    # 根据架构信息设置系统位数并下载文件,其余 * 包括了 x86_64
+    case "${sysarch}" in
+        "i386" | "i686" | "x86_64")
+            system_arch="x86"
+            ;;
+        "armv7l" | "armv8" | "armv8l" | "aarch64")
+            system_arch="arch"
+            ;;
+        *)
+            system_arch=""
+            ;;
+    esac
+}
 
 check_cdn() {
   local o_url=$1
@@ -154,27 +173,51 @@ build_new_vms(){
             _yellow "输入无效，请输入一个正整数。"
         fi
     done
-    while true; do
-        sys_status="false"
-        _green "What system does each virtual machine use? (Leave blank or enter debian11 if all use debian11):"
-        reading "每个虚拟机都使用什么系统？(若都使用debian11，则留空或输入debian11)：" system
-        if [ -z "$system" ]; then
-          system="debian11"
-        fi
-        systems=("debian10" "debian11" "debian9" "ubuntu18" "ubuntu20" "ubuntu22" "archlinux" "centos9-stream" "centos8-stream" "almalinux8" "almalinux9" "fedora33" "fedora34" "opensuse-leap-15")
-        for sys in ${systems[@]}; do
-          if [[ "$system" == "$sys" ]]; then
-            sys_status="true"
-            break
+    if [ "$system_arch" = "x86" ]; then
+      while true; do
+          sys_status="false"
+          _green "What system does each virtual machine use? (Leave blank or enter debian11 if all use debian11):"
+          reading "每个虚拟机都使用什么系统？(若都使用debian11，则留空或输入debian11)：" system
+          if [ -z "$system" ]; then
+            system="debian11"
           fi
-        done
-        if [ "$sys_status" = "true" ]; then
-            break
-        else
-            _yellow "This system is not supported, please check https://github.com/spiritLHLS/Images for the names of supported systems"
-            _yellow "不支持该系统，请查看 https://github.com/spiritLHLS/Images 支持的系统名字"
-        fi
-    done
+          systems=("debian10" "debian11" "debian9" "ubuntu18" "ubuntu20" "ubuntu22" "archlinux" "centos9-stream" "centos8-stream" "almalinux8" "almalinux9" "fedora33" "fedora34" "opensuse-leap-15")
+          for sys in ${systems[@]}; do
+            if [[ "$system" == "$sys" ]]; then
+              sys_status="true"
+              break
+            fi
+          done
+          if [ "$sys_status" = "true" ]; then
+              break
+          else
+              _yellow "This system is not supported, please check https://github.com/spiritLHLS/Images for the names of supported systems"
+              _yellow "不支持该系统，请查看 https://github.com/spiritLHLS/Images 支持的系统名字"
+          fi
+      done
+    else
+      while true; do
+          sys_status="false"
+          _green "What system does each virtual machine use? (Leave blank or enter debian11 if all use debian11):"
+          reading "每个虚拟机都使用什么系统？(若都使用ubuntu22，则留空或输入ubuntu22)：" system
+          if [ -z "$system" ]; then
+            system="ubuntu22"
+          fi
+          systems=("ubuntu14" "ubuntu16" "ubuntu18" "ubuntu20" "ubuntu22")
+          for sys in ${systems[@]}; do
+            if [[ "$system" == "$sys" ]]; then
+              sys_status="true"
+              break
+            fi
+          done
+          if [ "$sys_status" = "true" ]; then
+              break
+          else
+              _yellow "Unable to install corresponding system, please check http://cloud-images.ubuntu.com for supported system images "
+              _yellow "无法安装对应系统，请查看 http://cloud-images.ubuntu.com 支持的系统镜像 "
+          fi
+      done
+    fi
     for ((i=1; i<=$new_nums; i++)); do
         vm_num=$(($vm_num + 1))
         user=$(cat /dev/urandom | tr -dc 'a-zA-Z' | fold -w 4 | head -n 1)
@@ -193,6 +236,11 @@ build_new_vms(){
 }
 
 pre_check
+get_system_arch
+if [ -z "${system_arch}" ] || [ ! -v system_arch ]; then
+   _red "This script can only run on machines under x86_64 or arm architecture."
+   exit 1
+fi
 check_info
 build_new_vms
 check_info

@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/spiritLHLS/pve
-# 2023.06.29
+# 2023.07.31
 
 # cd /root
 
@@ -19,6 +19,25 @@ else
   export LANGUAGE="$utf8_locale"
   echo "Locale set to $utf8_locale"
 fi
+
+get_system_arch() {
+    local sysarch="$(uname -m)"
+    if [ "${sysarch}" = "unknown" ] || [ "${sysarch}" = "" ]; then
+        local sysarch="$(arch)"
+    fi
+    # 根据架构信息设置系统位数并下载文件,其余 * 包括了 x86_64
+    case "${sysarch}" in
+        "i386" | "i686" | "x86_64")
+            system_arch="x86"
+            ;;
+        "armv7l" | "armv8" | "armv8l" | "aarch64")
+            system_arch="arch"
+            ;;
+        *)
+            system_arch=""
+            ;;
+    esac
+}
 
 check_cdn() {
   local o_url=$1

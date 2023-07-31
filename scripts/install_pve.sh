@@ -428,7 +428,7 @@ COUNT=$(
   TODAY=$(expr "$COUNT" : '.*\s\([0-9]\{1,\}\)\s/.*') && TOTAL=$(expr "$COUNT" : '.*/\s\([0-9]\{1,\}\)\s.*')
 }
 
-get_system_bit() {
+get_system_arch() {
     local sysarch="$(uname -m)"
     if [ "${sysarch}" = "unknown" ] || [ "${sysarch}" = "" ]; then
         local sysarch="$(arch)"
@@ -528,7 +528,7 @@ if [ "$(id -u)" != "0" ]; then
    _red "This script must be run as root"
    exit 1
 fi
-get_system_bit
+get_system_arch
 if [ -z "${system_arch}" ] || [ ! -v system_arch ]; then
    _red "This script can only run on machines under x86_64 or arm architecture."
    exit 1
