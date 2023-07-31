@@ -290,6 +290,19 @@ if [ -f "/etc/network/interfaces" ]; then
     fi
     chattr +i /etc/network/interfaces
 fi
+# 检测回环是否存在
+if ! grep -q "auto lo" "/etc/network/interfaces"; then
+    chattr -i /etc/network/interfaces
+    echo "auto lo" >> "/etc/network/interfaces"
+    chattr +i /etc/network/interfaces
+    _blue "Can not find 'auto lo' in /etc/network/interfaces, add it"
+fi
+if ! grep -q "iface lo inet loopback" "/etc/network/interfaces"; then
+    chattr -i /etc/network/interfaces
+    echo "iface lo inet loopback" >> "/etc/network/interfaces"
+    chattr +i /etc/network/interfaces
+    _blue "Can not find 'iface lo inet loopback' in /etc/network/interfaces, add it"
+fi
 # 反加载
 if [[ -f "/etc/network/interfaces.new" && -f "/etc/network/interfaces" ]]; then
     chattr -i /etc/network/interfaces.new
