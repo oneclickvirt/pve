@@ -1,6 +1,7 @@
 #!/bin/bash
 # from 
 # https://github.com/spiritLHLS/pve
+# 2023.07.31
 
 if [ -f "/etc/resolv.conf" ]
 then
@@ -38,6 +39,55 @@ else
   export LANGUAGE="$utf8_locale"
   echo "Locale set to $utf8_locale"
 fi
+
+check_china(){
+    echo "IP area being detected ......"
+    if [[ -z "${CN}" ]]; then
+        if [[ $(curl -m 6 -s https://ipapi.co/json | grep 'China') != "" ]]; then
+            echo "根据ipapi.co提供的信息，当前IP可能在中国"
+            CN=true
+        else
+            if [[ $? -ne 0 ]]; then
+                if [[ $(curl -m 6 -s cip.cc) =~ "中国" ]]; then
+                    echo "根据cip.cc提供的信息，当前IP可能在中国"
+                    CN=true
+                fi
+            fi
+        fi
+    fi
+}
+
+change_debian_apt_sources() {
+  cp /etc/apt/sources.list /etc/apt/sources.list.bak
+  echo "backup the current /etc/apt/sources.list to /etc/apt/sources.list.bak"
+  DEBIAN_VERSION=$(lsb_release -sr)
+  if [[ -z "${CN}" || "${CN}" != true ]]; then
+    URL="http://deb.debian.org/debian"
+  else
+    # Use mirrors.aliyun.com sources list if IP is in China
+    URL="http://mirrors.aliyun.com/debian"
+  fi
+
+  case $DEBIAN_VERSION in
+    6*) DEBIAN_RELEASE="squeeze";;
+    7*) DEBIAN_RELEASE="wheezy";;
+    8*) DEBIAN_RELEASE="jessie";;
+    9*) DEBIAN_RELEASE="stretch";;
+    10*) DEBIAN_RELEASE="buster";;
+    11*) DEBIAN_RELEASE="bullseye";;
+    12*) DEBIAN_RELEASE="bookworm";;
+    *) echo "The system is not Debian 6/7/8/9/10/11/12 . No changes were made to the apt-get sources." && return 1;;
+  esac
+
+  cat > /etc/apt/sources.list <<EOF
+deb ${URL} ${DEBIAN_RELEASE} main contrib non-free
+deb ${URL} ${DEBIAN_RELEASE}-updates main contrib non-free
+deb ${URL} ${DEBIAN_RELEASE}-backports main contrib non-free
+deb-src ${URL} ${DEBIAN_RELEASE} main contrib non-free
+deb-src ${URL} ${DEBIAN_RELEASE}-updates main contrib non-free
+deb-src ${URL} ${DEBIAN_RELEASE}-backports main contrib non-free
+EOF
+}
 
 checkupdate(){
 if command -v apt-get > /dev/null 2>&1; then
@@ -84,6 +134,12 @@ remove_duplicate_lines() {
   awk '!NF || !x[$0]++' "$1" > "$1.tmp" && mv -f "$1.tmp" "$1"
 }
 
+check_china
+if [[ "${CN}" == true ]]; then
+    if [[ "${SYSTEM}" == "Debian" ]]; then
+        change_debian_apt_sources
+    fi
+fi
 checkupdate
 install_required_modules
 if [ -f "/etc/motd" ]; then
