@@ -310,6 +310,12 @@ if [[ $dmidecode_output == *"Hetzner_vServer"* ]] || [[ $dmidecode_output == *"M
         chattr +i /etc/network/interfaces
     fi
 fi
+# 检测物理接口是否已auto链接
+if ! grep -q "auto ${interface}" /etc/network/interfaces; then
+    chattr -i /etc/network/interfaces
+    echo "auto ${interface}" >> /etc/network/interfaces
+    chattr +i /etc/network/interfaces
+fi
 # 反加载
 if [[ -f "/etc/network/interfaces.new" && -f "/etc/network/interfaces" ]]; then
     chattr -i /etc/network/interfaces.new
