@@ -699,10 +699,11 @@ if [ ! -f "/usr/local/bin/reboot_pve.txt" ]; then
         sed -i 's#http://debian-archive.trafficmanager.net/debian bullseye-updates#http://deb.debian.org/debian bullseye-updates#g' /etc/apt/sources.list
         sed -i 's#http://debian-archive.trafficmanager.net/debian bullseye-backports#http://deb.debian.org/debian bullseye-backports#g' /etc/apt/sources.list
     fi
-    # 特殊处理Hetzner
     if [[ $output == *"Hetzner_vServer"* ]]; then
+        # 特殊处理Hetzner
         prebuild_ifupdown2
     elif [[ "${inet_dhcp}" == true ]]; then
+        # 特殊处理原有配置是dhcp的情况
         prebuild_ifupdown2
     fi
     # # 特殊处理OVH
