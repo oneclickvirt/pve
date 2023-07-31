@@ -1,7 +1,7 @@
 #!/bin/bash
 # from 
 # https://github.com/spiritLHLS/pve
-# 2023.07.30
+# 2023.07.31
 
 
 # cd /root >/dev/null 2>&1
@@ -536,7 +536,11 @@ install_package service
 install_package ipcalc
 install_package dmidecode
 install_package dnsutils
+install_package ethtool
 
+# 检测系统信息
+_yellow "Detecting system information, will probably stay on the page for up to 1~2 minutes"
+_yellow "正在检测系统信息，大概会停留在该页面最多1~2分钟"
 # 部分信息检测
 main_ipv4=$(ip -4 addr show | grep global | awk '{print $2}' | cut -d '/' -f1 | head -n 1)
 # 检测物理接口和MAC地址
@@ -847,9 +851,13 @@ if echo $output | grep -q "NO_PUBKEY"; then
     _yellow "try sudo apt-key adv --keyserver keyserver.ubuntu.com --recvrebuild_interface-keys missing key"
     exit 1
 fi
-# 修复可能存在的auto类型
+# 修复网卡可能存在的auto类型
 rebuild_interfaces
 fix_interfaces_ipv6_auto_type /etc/network/interfaces
+auto_interface=$(grep '^auto ' /etc/network/interfaces | grep -v '^auto lo' | awk '{print $2}' | head -n 1)
+if ! grep -q "^post-up /sbin/ethtool" /etc/network/interfaces; then
+    echo "post-up /sbin/ethtool -K $auto_interface tx off rx off" >> /etc/network/interfaces
+fi
 # 部分机器中途service丢失了，尝试修复
 install_package service
 # 正式安装
