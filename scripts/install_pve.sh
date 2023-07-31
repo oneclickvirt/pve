@@ -41,7 +41,7 @@ install_package() {
         _green "$package_name already installed"
         _green "$package_name 已经安装"
     else
-        apt-get install -y $package_name
+        apt-get install -o Dpkg::Options::="--force-confnew" -y $package_name
         if [ $? -ne 0 ]; then
             apt_output=$(apt-get install -y $package_name --fix-missing 2>&1)
         fi
@@ -72,6 +72,58 @@ install_package() {
         _green "$package_name tried to install"
         _green "$package_name 已尝试安装"
     fi
+}
+
+check_haveged(){
+    _yellow "checking haveged"
+    if ! command -v haveged > /dev/null 2>&1; then
+        apt-get install -o Dpkg::Options::="--force-confnew" -y haveged
+    fi
+    if which systemctl >/dev/null 2>&1; then
+        systemctl disable --now haveged
+        systemctl enable --now haveged
+    else
+        service haveged stop
+        service haveged start
+    fi
+}
+
+check_time_zone(){
+    _yellow "adjusting the time"
+    if command -v ntpd > /dev/null 2>&1; then
+        if which systemctl >/dev/null 2>&1; then
+            systemctl stop chronyd
+            systemctl stop ntpd
+        else
+            service chronyd stop
+            service ntpd stop
+        fi
+        if lsof -i:123 | grep -q "ntpd"; then
+            echo "Port 123 is already in use. Skipping ntpd command."
+        else
+            ntpd -gq
+            if which systemctl >/dev/null 2>&1; then
+                systemctl start ntpd
+            else
+                service ntpd start
+            fi
+        fi
+        sleep 0.5
+        return
+    fi
+    if ! command -v chronyd > /dev/null 2>&1; then
+        apt-get install -o Dpkg::Options::="--force-confnew" -y chrony > /dev/null 2>&1
+    fi
+    if which systemctl >/dev/null 2>&1; then
+        systemctl stop chronyd
+        chronyd -q
+        systemctl start chronyd
+    else
+        service chronyd stop
+        chronyd -q
+        service chronyd start
+    fi
+    sleep 0.5
 }
 
 rebuild_cloud_init(){
@@ -486,6 +538,8 @@ if [ "$system_arch" = "arch" ]; then
     systemctl disable NetworkManager
     systemctl stop NetworkManager
 fi
+# 确保时间没问题
+check_time_zone
 # 确保apt没有问题
 apt-get update -y
 apt-get full-upgrade -y
@@ -537,6 +591,7 @@ install_package ipcalc
 install_package dmidecode
 install_package dnsutils
 install_package ethtool
+check_haveged
 
 # 检测系统信息
 _yellow "Detecting system information, will probably stay on the page for up to 1~2 minutes"
@@ -629,8 +684,8 @@ if [ ! -f "/usr/local/bin/reboot_pve.txt" ]; then
     # fi
     echo "1" > "/usr/local/bin/reboot_pve.txt"
     _green "Please execute reboot to reboot the system and then execute this script again"
-    _green "Please wait at least 20 seconds after logging in with SSH again before executing this script."
-    _green "请执行 reboot 重启系统后再次执行本脚本，再次使用SSH登录后请等待至少20秒再执行本脚本"
+    _green "Please wait for at least 20 seconds without automatically rebooting the system before executing this script."
+    _green "请执行 reboot 重启系统后再次执行本脚本，再次使用SSH登录后请等待至少20秒未自动重启系统再执行本脚本"
     exit 1
 fi
 
