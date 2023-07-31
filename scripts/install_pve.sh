@@ -988,9 +988,9 @@ fix_interfaces_ipv6_auto_type
 # 特殊处理Hetzner和Azure的情况
 if [[ $dmidecode_output == *"Hetzner_vServer"* ]] || [[ $dmidecode_output == *"Microsoft Corporation"* ]]; then
     auto_interface=$(grep '^auto ' /etc/network/interfaces | grep -v '^auto lo' | awk '{print $2}' | head -n 1)
-    if ! grep -q "^post-up ${$ethtool_path}" /etc/network/interfaces; then
+    if ! grep -q "^post-up ${ethtool_path}" /etc/network/interfaces; then
         chattr -i /etc/network/interfaces
-        echo "post-up ${$ethtool_path} -K $auto_interface tx off rx off" >> /etc/network/interfaces
+        echo "post-up ${ethtool_path} -K $auto_interface tx off rx off" >> /etc/network/interfaces
         chattr +i /etc/network/interfaces
     fi
 fi
