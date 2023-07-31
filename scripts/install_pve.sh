@@ -588,9 +588,9 @@ rm "$temp_file_apt_fix"
 apt-get update -y
 if [ $? -ne 0 ]; then
     change_debian_apt_sources
-    systemctl daemon-reload
     apt-get update -y
 fi
+systemctl daemon-reload
 # 检测路径
 target_paths="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 for path in $(echo $target_paths | tr ':' ' '); do
