@@ -264,6 +264,11 @@ if [ -f "/etc/network/interfaces" ]; then
 fi
 # 检查/etc/network/interfaces文件中是否有iface xxxx inet dhcp行
 if [ -f "/etc/network/interfaces" ]; then
+    if grep -qF "inet dhcp" /etc/network/interfaces; then
+        inet_dhcp=true
+    else
+        inet_dhcp=false
+    fi
     if grep -q "iface $interface inet dhcp" /etc/network/interfaces; then
         # 获取ipv4、subnet、gateway信息
         gateway=$(ip route | awk '/default/ {print $3}')
@@ -676,11 +681,6 @@ if [ ! -f "/etc/network/interfaces" ]; then
     chattr +i /etc/network/interfaces
 fi
 # 网络配置修改
-if grep -q "iface $interface inet dhcp" /etc/network/interfaces; then
-    inet_dhcp=true
-else
-    inet_dhcp=false
-fi
 rebuild_interfaces
 # cloudinit 重构
 rebuild_cloud_init
