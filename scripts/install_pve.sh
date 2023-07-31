@@ -943,15 +943,6 @@ install_package novnc
 install_package cloud-init
 rebuild_cloud_init
 # install_package isc-dhcp-server
-
-# 打印内核
-running_kernel=$(uname -r)
-_green "Running kernel: $(pveversion)"
-installed_kernels=($(dpkg -l 'pve-kernel-*' | awk '/^ii/ {print $2}' | cut -d'-' -f3- | sort -V))
-if [ ${#installed_kernels[@]} -gt 0 ]; then
-    latest_kernel=${installed_kernels[-1]}
-    _green "PVE latest kernel: $latest_kernel"
-fi
 chattr +i /etc/network/interfaces
 if [ ! -s "/etc/resolv.conf" ]
 then
@@ -976,6 +967,14 @@ ufw disable
 check_ipv4
 # 打印安装后的信息
 url="https://${IPV4}:8006/"
+# 打印内核
+running_kernel=$(uname -r)
+_green "Running kernel: $(pveversion)"
+installed_kernels=($(dpkg -l 'pve-kernel-*' | awk '/^ii/ {print $2}' | cut -d'-' -f3- | sort -V))
+if [ ${#installed_kernels[@]} -gt 0 ]; then
+    latest_kernel=${installed_kernels[-1]}
+    _green "PVE latest kernel: $latest_kernel"
+fi
 _green "Installation complete, please open HTTPS web page $url"
 _green "The username and password are the username and password used by the server (e.g. root and root user's password)"
 _green "If the login is correct please do not rush to reboot the system, go to execute the commands of the pre-configured environment and then reboot the system"
