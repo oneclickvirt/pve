@@ -244,34 +244,52 @@ if [ -f "/etc/network/interfaces" ]; then
         subnet=$(echo $interface_info | cut -d'/' -f2)
         subnet=$(ipcalc -n "$ipv4/$subnet" | grep -oP 'Netmask:\s+\K.*' | awk '{print $1}')
         chattr -i /etc/network/interfaces
-        sed -i "/iface $interface inet auto/c\
-          iface $interface inet static\n\
-          address $ipv4\n\
-          netmask $subnet\n\
-          gateway $gateway\n\
-          dns-nameservers 8.8.8.8 8.8.4.4" /etc/network/interfaces
+        if [[ -z "${CN}" || "${CN}" != true ]]; then
+            sed -i "/iface $interface inet auto/c\
+                iface $interface inet static\n\
+                address $ipv4\n\
+                netmask $subnet\n\
+                gateway $gateway\n\
+                dns-nameservers 8.8.8.8 8.8.4.4" /etc/network/interfaces
+        else
+            sed -i "/iface $interface inet auto/c\
+                iface $interface inet static\n\
+                address $ipv4\n\
+                netmask $subnet\n\
+                gateway $gateway\n\
+                dns-nameservers 8.8.8.8 223.5.5.5" /etc/network/interfaces
+        fi
     fi
     chattr +i /etc/network/interfaces
 fi
-# # 检查/etc/network/interfaces文件中是否有iface xxxx inet dhcp行
-# if [ -f "/etc/network/interfaces" ]; then
-#     if grep -q "iface $interface inet dhcp" /etc/network/interfaces; then
-#         # 获取ipv4、subnet、gateway信息
-#         gateway=$(ip route | awk '/default/ {print $3}')
-#         interface_info=$(ip -o -4 addr show dev $interface | awk '{print $4}')
-#         ipv4=$(echo $interface_info | cut -d'/' -f1)
-#         subnet=$(echo $interface_info | cut -d'/' -f2)
-#         subnet=$(ipcalc -n "$ipv4/$subnet" | grep -oP 'Netmask:\s+\K.*' | awk '{print $1}')
-#         chattr -i /etc/network/interfaces
-#         sed -i "/iface $interface inet dhcp/c\
-#           iface $interface inet static\n\
-#           address $ipv4\n\
-#           netmask $subnet\n\
-#           gateway $gateway\n\
-#           dns-nameservers 8.8.8.8 8.8.4.4" /etc/network/interfaces
-#     fi
-#     chattr +i /etc/network/interfaces
-# fi
+# 检查/etc/network/interfaces文件中是否有iface xxxx inet dhcp行
+if [ -f "/etc/network/interfaces" ]; then
+    if grep -q "iface $interface inet dhcp" /etc/network/interfaces; then
+        # 获取ipv4、subnet、gateway信息
+        gateway=$(ip route | awk '/default/ {print $3}')
+        interface_info=$(ip -o -4 addr show dev $interface | awk '{print $4}')
+        ipv4=$(echo $interface_info | cut -d'/' -f1)
+        subnet=$(echo $interface_info | cut -d'/' -f2)
+        subnet=$(ipcalc -n "$ipv4/$subnet" | grep -oP 'Netmask:\s+\K.*' | awk '{print $1}')
+        chattr -i /etc/network/interfaces
+        if [[ -z "${CN}" || "${CN}" != true ]]; then
+            sed -i "/iface $interface inet dhcp/c\
+                iface $interface inet static\n\
+                address $ipv4\n\
+                netmask $subnet\n\
+                gateway $gateway\n\
+                dns-nameservers 8.8.8.8 8.8.4.4" /etc/network/interfaces
+        else
+            sed -i "/iface $interface inet dhcp/c\
+                iface $interface inet static\n\
+                address $ipv4\n\
+                netmask $subnet\n\
+                gateway $gateway\n\
+                dns-nameservers 8.8.8.8 223.5.5.5" /etc/network/interfaces
+        fi
+    fi
+    chattr +i /etc/network/interfaces
+fi
 # 反加载
 if [[ -f "/etc/network/interfaces.new" && -f "/etc/network/interfaces" ]]; then
     chattr -i /etc/network/interfaces.new
