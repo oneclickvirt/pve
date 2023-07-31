@@ -90,29 +90,10 @@ check_haveged(){
 
 check_time_zone(){
     _yellow "adjusting the time"
-    if command -v ntpd > /dev/null 2>&1; then
-        if which systemctl >/dev/null 2>&1; then
-            systemctl stop chronyd
-            systemctl stop ntpd
-        else
-            service chronyd stop
-            service ntpd stop
-        fi
-        if lsof -i:123 | grep -q "ntpd"; then
-            echo "Port 123 is already in use. Skipping ntpd command."
-        else
-            ntpd -gq
-            if which systemctl >/dev/null 2>&1; then
-                systemctl start ntpd
-            else
-                service ntpd start
-            fi
-        fi
-        sleep 0.5
-        return
-    fi
+    systemctl stop ntpd
+    service ntpd stop
     if ! command -v chronyd > /dev/null 2>&1; then
-        apt-get install -o Dpkg::Options::="--force-confnew" -y chrony > /dev/null 2>&1
+        apt-get install -o Dpkg::Options::="--force-confnew" -y chrony
     fi
     if which systemctl >/dev/null 2>&1; then
         systemctl stop chronyd
