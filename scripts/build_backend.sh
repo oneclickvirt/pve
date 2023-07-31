@@ -108,6 +108,14 @@ if ! lsmod | grep -q apparmor; then
     modprobe apparmor
 fi
 sleep 3
-_yellow "Please execute reboot to reboot the system to load the PVE kernel."
-_yellow "请执行 reboot 重新启动系统加载PVE内核"
+installed_kernels=($(dpkg -l 'pve-kernel-*' | awk '/^ii/ {print $2}' | cut -d'-' -f3- | sort -V))
+if [ ${#installed_kernels[@]} -gt 0 ]; then
+    latest_kernel=${installed_kernels[-1]}
+    _green "PVE latest kernel: $latest_kernel"
+    _yellow "Please execute reboot to reboot the system to load the PVE kernel."
+    _yellow "请执行 reboot 重新启动系统加载PVE内核"
+else
+    _yellow "The current kernel is already a PVE kernel, no need to reboot the system to update the kernel"
+    _yellow "当前内核已是PVE内核，无需重启系统更新内核"
+fi
 echo "1" > "/root/build_backend_pve.txt"
