@@ -312,8 +312,10 @@ if ! grep -q "iface lo inet loopback" "/etc/network/interfaces"; then
 fi
 # 修改v6共存的类型为dhcp类型
 if grep -q "iface ${interface} inet6 manual" /etc/network/interfaces && grep -q "try_dhcp 1" /etc/network/interfaces; then
-  sed -i 's/iface ${interface} inet6 manual/iface ${interface} inet6 dhcp/' /etc/network/interfaces
-  sed -i '/try_dhcp 1/d' /etc/network/interfaces
+    chattr -i /etc/network/interfaces
+    sed -i 's/iface ${interface} inet6 manual/iface ${interface} inet6 dhcp/' /etc/network/interfaces
+    sed -i '/try_dhcp 1/d' /etc/network/interfaces
+    chattr +i /etc/network/interfaces
 fi
 # 反加载
 if [[ -f "/etc/network/interfaces.new" && -f "/etc/network/interfaces" ]]; then
