@@ -310,14 +310,6 @@ if [[ $dmidecode_output == *"Hetzner_vServer"* ]]; then
         chattr +i /etc/network/interfaces
     fi
 fi
-# 当v6是共存的类型时删除v6
-if grep -q "iface ${interface} inet6 manual" /etc/network/interfaces && grep -q "try_dhcp 1" /etc/network/interfaces; then
-    chattr -i /etc/network/interfaces
-    # sed -i 's/iface ${interface} inet6 manual/iface ${interface} inet6 dhcp/' /etc/network/interfaces
-    sed -i '/iface ${interface} inet6 manual/d' /etc/network/interfaces
-    sed -i '/try_dhcp 1/d' /etc/network/interfaces
-    chattr +i /etc/network/interfaces
-fi
 # 反加载
 if [[ -f "/etc/network/interfaces.new" && -f "/etc/network/interfaces" ]]; then
     chattr -i /etc/network/interfaces.new
@@ -693,6 +685,14 @@ fi
 # 网络配置修改
 dmidecode_output=$(dmidecode -t system)
 rebuild_interfaces
+# 当v6是共存的类型时删除v6
+if grep -q "iface ${interface} inet6 manual" /etc/network/interfaces && grep -q "try_dhcp 1" /etc/network/interfaces; then
+    chattr -i /etc/network/interfaces
+    # sed -i 's/iface ${interface} inet6 manual/iface ${interface} inet6 dhcp/' /etc/network/interfaces
+    sed -i '/iface ${interface} inet6 manual/d' /etc/network/interfaces
+    sed -i '/try_dhcp 1/d' /etc/network/interfaces
+    chattr +i /etc/network/interfaces
+fi
 # cloudinit 重构
 rebuild_cloud_init
 fix_interfaces_ipv6_auto_type
@@ -952,11 +952,14 @@ fi
 # 修复网卡可能存在的auto类型
 rebuild_interfaces
 fix_interfaces_ipv6_auto_type
-auto_interface=$(grep '^auto ' /etc/network/interfaces | grep -v '^auto lo' | awk '{print $2}' | head -n 1)
-if ! grep -q "^post-up /sbin/ethtool" /etc/network/interfaces; then
-    chattr -i /etc/network/interfaces
-    echo "post-up /sbin/ethtool -K $auto_interface tx off rx off" >> /etc/network/interfaces
-    chattr +i /etc/network/interfaces
+# 特殊处理Hetzner
+if [[ $dmidecode_output == *"Hetzner_vServer"* ]]; then
+    auto_interface=$(grep '^auto ' /etc/network/interfaces | grep -v '^auto lo' | awk '{print $2}' | head -n 1)
+    if ! grep -q "^post-up /sbin/ethtool" /etc/network/interfaces; then
+        chattr -i /etc/network/interfaces
+        echo "post-up /sbin/ethtool -K $auto_interface tx off rx off" >> /etc/network/interfaces
+        chattr +i /etc/network/interfaces
+    fi
 fi
 # 部分机器中途service丢失了，尝试修复
 install_package service
