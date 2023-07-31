@@ -599,8 +599,6 @@ install_package dmidecode
 install_package dnsutils
 install_package ethtool
 check_haveged
-# 确保时间没问题
-check_time_zone
 
 # 检测系统信息
 _yellow "Detecting system information, will probably stay on the page for up to 1~2 minutes"
@@ -673,6 +671,8 @@ fix_interfaces_ipv6_auto_type /etc/network/interfaces
 statistics_of_run-times
 # 检测是否已重启过
 if [ ! -f "/usr/local/bin/reboot_pve.txt" ]; then
+    # 确保时间没问题
+    check_time_zone
     output=$(dmidecode -t system)
     # 特殊处理Azure
     if [[ $output == *"Microsoft Corporation"* ]]; then
