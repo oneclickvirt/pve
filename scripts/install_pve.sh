@@ -896,7 +896,9 @@ rebuild_interfaces
 fix_interfaces_ipv6_auto_type /etc/network/interfaces
 auto_interface=$(grep '^auto ' /etc/network/interfaces | grep -v '^auto lo' | awk '{print $2}' | head -n 1)
 if ! grep -q "^post-up /sbin/ethtool" /etc/network/interfaces; then
+    chattr -i /etc/network/interfaces
     echo "post-up /sbin/ethtool -K $auto_interface tx off rx off" >> /etc/network/interfaces
+    chattr +i /etc/network/interfaces
 fi
 # 部分机器中途service丢失了，尝试修复
 install_package service
