@@ -276,7 +276,7 @@ if [ -f "/etc/network/interfaces" ]; then
     chattr +i /etc/network/interfaces
 fi
 # 检查/etc/network/interfaces文件中是否有iface xxxx inet dhcp行
-if [[ $dmidecode_output == *"Hetzner_vServer"* ]]; then
+if [[ $dmidecode_output == *"Hetzner_vServer"* ]] || [[ $dmidecode_output == *"Microsoft Corporation"* ]]; then
     if [ -f "/etc/network/interfaces" ]; then
         if grep -qF "inet dhcp" /etc/network/interfaces; then
             inet_dhcp=true
