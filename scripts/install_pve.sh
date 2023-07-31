@@ -363,8 +363,6 @@ check_cdn_file() {
 
 prebuild_ifupdown2(){
 if [ ! -f "/usr/local/bin/ifupdown2_installed.txt" ]; then
-    cdn_urls=("https://cdn.spiritlhl.workers.dev/" "https://cdn3.spiritlhl.net/" "https://cdn1.spiritlhl.net/" "https://ghproxy.com/" "https://cdn2.spiritlhl.net/")
-    check_cdn_file
     wget ${cdn_success_url}https://raw.githubusercontent.com/spiritLHLS/pve/main/extra_scripts/install_ifupdown2.sh -O /usr/local/bin/install_ifupdown2.sh
     wget ${cdn_success_url}https://raw.githubusercontent.com/spiritLHLS/pve/main/extra_scripts/ifupdown2-install.service -O /etc/systemd/system/ifupdown2-install.service
     chmod 777 /usr/local/bin/install_ifupdown2.sh
@@ -523,6 +521,9 @@ EOF
 
 # ChinaIP检测
 check_china
+# cdn检测
+cdn_urls=("https://cdn.spiritlhl.workers.dev/" "https://cdn3.spiritlhl.net/" "https://cdn1.spiritlhl.net/" "https://ghproxy.com/" "https://cdn2.spiritlhl.net/")
+check_cdn_file
 # 前置环境安装与配置
 if [ "$(id -u)" != "0" ]; then
    _red "This script must be run as root"
@@ -536,6 +537,15 @@ fi
 if [ "$system_arch" = "arch" ]; then
     systemctl disable NetworkManager
     systemctl stop NetworkManager
+fi
+if [ ! -f "/usr/local/bin/check-dns.sh" ]; then
+    wget ${cdn_success_url}https://raw.githubusercontent.com/spiritLHLS/pve/main/extra_scripts/check-dns.sh -O /usr/local/bin/check-dns.sh
+    wget ${cdn_success_url}https://raw.githubusercontent.com/spiritLHLS/pve/main/extra_scripts/check-dns.service -O /etc/systemd/system/check-dns.service
+    chmod +x /usr/local/bin/check-dns.sh
+    chmod +x /etc/systemd/system/check-dns.service
+    systemctl daemon-reload
+    systemctl enable check-dns.service
+    systemctl start check-dns.service
 fi
 # 确保apt没有问题
 apt-get update -y
@@ -971,13 +981,6 @@ then
         echo -e "nameserver 8.8.8.8\nnameserver 8.8.4.4\nnameserver 2001:4860:4860::8888\nnameserver 2001:4860:4860::8844" > /etc/resolv.conf
     fi
 fi
-wget ${cdn_success_url}https://raw.githubusercontent.com/spiritLHLS/pve/main/extra_scripts/check-dns.sh -O /usr/local/bin/check-dns.sh
-wget ${cdn_success_url}https://raw.githubusercontent.com/spiritLHLS/pve/main/extra_scripts/check-dns.service -O /etc/systemd/system/check-dns.service
-chmod +x /usr/local/bin/check-dns.sh
-chmod +x /etc/systemd/system/check-dns.service
-systemctl daemon-reload
-systemctl enable check-dns.service
-systemctl start check-dns.service
 # 清除防火墙
 install_package ufw
 ufw disable
