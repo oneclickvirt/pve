@@ -948,8 +948,10 @@ rebuild_cloud_init
 running_kernel=$(uname -r)
 _green "Running kernel: $(pveversion)"
 installed_kernels=($(dpkg -l 'pve-kernel-*' | awk '/^ii/ {print $2}' | cut -d'-' -f3- | sort -V))
-latest_kernel=${installed_kernels[-1]}
-_green "PVE latest kernel: $latest_kernel"
+if [ ${#installed_kernels[@]} -gt 0 ]; then
+    latest_kernel=${installed_kernels[-1]}
+    _green "PVE latest kernel: $latest_kernel"
+fi
 chattr +i /etc/network/interfaces
 if [ ! -s "/etc/resolv.conf" ]
 then
