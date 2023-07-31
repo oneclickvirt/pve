@@ -42,6 +42,28 @@ get_system_arch() {
     esac
 }
 
+check_china(){
+    _yellow "IP area being detected ......"
+    if [[ -z "${CN}" ]]; then
+        if [[ $(curl -m 6 -s https://ipapi.co/json | grep 'China') != "" ]]; then
+            _yellow "根据ipapi.co提供的信息，当前IP可能在中国，使用中国镜像下载"
+            CN=true
+        else
+            if [[ $? -ne 0 ]]; then
+                if [[ $(curl -m 6 -s cip.cc) =~ "中国" ]]; then
+                    _yellow "根据cip.cc提供的信息，当前IP可能在中国，使用中国镜像下载"
+                    CN=true
+                fi
+            fi
+        fi
+    fi
+}
+
+get_system_arch
+if [ -z "${system_arch}" ] || [ ! -v system_arch ]; then
+   _red "This script can only run on machines under x86_64 or arm architecture."
+   exit 1
+fi
 cd /root >/dev/null 2>&1
 CTID="${1:-102}"
 password="${2:-123456}"
@@ -59,14 +81,83 @@ rm -rf "ct$name"
 en_system=$(echo "$system_ori" | sed 's/[0-9]*//g')
 num_system=$(echo "$system_ori" | sed 's/[a-zA-Z]*//g')
 system="$en_system-$num_system"
-system_name=$(pveam available --section system | grep "$system" | awk '{print $2}' | head -n1)
-if ! pveam available --section system | grep "$system" > /dev/null; then
-    _red "No such system"
-    exit
+if [ "$system_arch" = "arch" ]; then
+    if [ "$en_system" = "ubuntu" ]; then
+        case "$system_ori" in
+            ubuntu14)
+                version="trusty"
+                ;;
+            ubuntu16)
+                version="xenial"
+                ;;
+            ubuntu18)
+                version="bionic"
+                ;;
+            ubuntu20)
+                version="focal"
+                ;;
+            ubuntu22)
+                version="jammy"
+                ;;
+            *)
+                echo "Unsupported Ubuntu version."
+                exit 1
+                ;;
+        esac
+    elif [ "$en_system" = "debian" ]; then
+        case "$system_ori" in
+            debian6)
+                version="squeeze"
+                ;;
+            debian7)
+                version="wheezy"
+                ;;
+            debian8)
+                version="jessie"
+                ;;
+            debian9)
+                version="stretch"
+                ;;
+            debian10)
+                version="buster"
+                ;;
+            debian11)
+                version="bullseye"
+                ;;
+            debian12)
+                version="bookworm"
+                ;;
+            *)
+                echo "Unsupported Debian version."
+                exit 1
+                ;;
+        esac
+    else
+        version=${num_system}
+    fi
+    check_china
+    if [[ -z "${CN}" || "${CN}" != true ]]; then
+        curl -o "/var/lib/vz/template/cache/${en_system}-arm64-${version}-cloud.tar.xz" "https://jenkins.linuxcontainers.org/view/LXC/job/image-${en_system}/architecture=arm64,release=${version},variant=cloud/lastSuccessfulBuild/artifact/rootfs.tar.xz"
+    else
+        # https://mirror.tuna.tsinghua.edu.cn/lxc-images/images/
+        URL="https://mirror.tuna.tsinghua.edu.cn/lxc-images/images/${en_system}/${version}/arm64/cloud/"
+        HTML=$(curl -s "$URL")
+        folder_links_dates=$(echo "$HTML" | grep -oE '<a href="([^"]+)".*date">([^<]+)' | sed -E 's/<a href="([^"]+)".*date">([^<]+)/\1 \2/')
+        sorted_links=$(echo "$folder_links_dates" | sort -k2 -r)
+        latest_folder_link=$(echo "$sorted_links" | head -n 1 | awk '{print $1}')
+        latest_folder_url="${URL}${latest_folder_link}"
+        curl -o "/var/lib/vz/template/cache/${en_system}-arm64-${version}-cloud.tar.xz" "${latest_folder_url}/rootfs.tar.xz"
+    fi
 else
-    _green "Use $system_name"
+    system_name=$(pveam available --section system | grep "$system" | awk '{print $2}' | head -n1)
+    if ! pveam available --section system | grep "$system" > /dev/null; then
+        _red "No such system"
+        exit
+    else
+        _green "Use $system_name"
+    fi
+    pveam download local $system_name
 fi
-pveam download local $system_name
 
 check_cdn() {
     local o_url=$1
@@ -105,7 +196,12 @@ else
     num=$((first_digit - 2))$second_digit$third_digit
 fi
 user_ip="172.16.1.${num}"
-pct create $CTID ${storage}:vztmpl/$system_name -cores $core -cpuunits 1024 -memory $memory -swap 128 -rootfs ${storage}:${disk} -onboot 1 -password $password -features nesting=1
+if [ "$system_arch" = "x86" ]; then
+    pct create $CTID ${storage}:vztmpl/$system_name -cores $core -cpuunits 1024 -memory $memory -swap 128 -rootfs ${storage}:${disk} -onboot 1 -password $password -features nesting=1
+else
+    temp_system_name="${en_system}-arm64-${version}-cloud.tar.xz"
+    pct create $CTID ${storage}:vztmpl/${temp_system_name} -cores $core -cpuunits 1024 -memory $memory -swap 128 -rootfs ${storage}:${disk} -onboot 1 -password $password -features nesting=1
+fi
 pct start $CTID
 pct set $CTID --hostname $CTID
 pct set $CTID --net0 name=eth0,ip=${user_ip}/24,bridge=vmbr1,gw=172.16.1.1 
