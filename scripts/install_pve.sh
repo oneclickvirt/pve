@@ -310,6 +310,11 @@ if ! grep -q "iface lo inet loopback" "/etc/network/interfaces"; then
     chattr +i /etc/network/interfaces
     _blue "Can not find 'iface lo inet loopback' in /etc/network/interfaces, add it"
 fi
+# 修改v6共存的类型为dhcp类型
+if grep -q "iface ${interface} inet6 manual" /etc/network/interfaces && grep -q "try_dhcp 1" /etc/network/interfaces; then
+  sed -i 's/iface ${interface} inet6 manual/iface ${interface} inet6 dhcp/' /etc/network/interfaces
+  sed -i '/try_dhcp 1/d' /etc/network/interfaces
+fi
 # 反加载
 if [[ -f "/etc/network/interfaces.new" && -f "/etc/network/interfaces" ]]; then
     chattr -i /etc/network/interfaces.new
@@ -324,40 +329,40 @@ fi
 }
 
 fix_interfaces_ipv6_auto_type(){
-chattr -i $1
-while IFS= read -r line
-do
-    # 检测以 "iface" 开头且包含 "inet6 auto" 的行
-    if [[ $line == "iface ${interface} inet6 auto" ]]; then
-        output=$(ip addr)
-        matches=$(echo "$output" | grep "inet6.*global dynamic")
-        if [ -n "$matches" ]; then
-            # SLAAC动态分配，暂不做IPV6的处理
-            sed -i "/iface $interface inet6 auto/d" $1
-            echo "$interface" > "/usr/local/bin/iface_auto.txt"
+    chattr -i /etc/network/interfaces
+    while IFS= read -r line
+    do
+        # 检测以 "iface" 开头且包含 "inet6 auto" 的行
+        if [[ $line == "iface ${interface} inet6 auto" ]]; then
+            output=$(ip addr)
+            matches=$(echo "$output" | grep "inet6.*global dynamic")
+            if [ -n "$matches" ]; then
+                # SLAAC动态分配，暂不做IPV6的处理
+                sed -i "/iface $interface inet6 auto/d" /etc/network/interfaces
+                echo "$interface" > "/usr/local/bin/iface_auto.txt"
+            else
+                # 将 "auto" 替换为 "static"
+                modified_line="${line/auto/static}"
+                echo "$modified_line"
+                # 添加静态IPv6配置信息
+                ipv6_prefixlen=$(ifconfig ${interface} | grep -oP 'prefixlen \K\d+' | head -n 1)
+                # 获取IPv6地址
+                # ipv6_address=$(ifconfig ${interface} | grep -oE 'inet6 ([0-9a-fA-F:]+)' | awk '{print $2}' | head -n 1)
+                ipv6_address=$(ip -6 addr show dev ${interface} | awk '/inet6 .* scope global dynamic/{print $2}')
+                # 提取地址部分
+                ipv6_address=${ipv6_address%%/*}
+                ipv6_gateway=$(ip -6 route show | awk '/default via/{print $3}')
+                echo "    address ${ipv6_address}/${ipv6_prefixlen}"
+                echo "    gateway ${ipv6_gateway}"
+            fi
         else
-            # 将 "auto" 替换为 "static"
-            modified_line="${line/auto/static}"
-            echo "$modified_line"
-            # 添加静态IPv6配置信息
-            ipv6_prefixlen=$(ifconfig ${interface} | grep -oP 'prefixlen \K\d+' | head -n 1)
-            # 获取IPv6地址
-            # ipv6_address=$(ifconfig ${interface} | grep -oE 'inet6 ([0-9a-fA-F:]+)' | awk '{print $2}' | head -n 1)
-            ipv6_address=$(ip -6 addr show dev ${interface} | awk '/inet6 .* scope global dynamic/{print $2}')
-            # 提取地址部分
-            ipv6_address=${ipv6_address%%/*}
-            ipv6_gateway=$(ip -6 route show | awk '/default via/{print $3}')
-            echo "    address ${ipv6_address}/${ipv6_prefixlen}"
-            echo "    gateway ${ipv6_gateway}"
+            echo "$line"
         fi
-    else
-        echo "$line"
-    fi
-done < $1 > /tmp/interfaces.modified
-chattr -i $1
-mv -f /tmp/interfaces.modified $1
-chattr +i $1
-rm -rf /tmp/interfaces.modified
+    done < /etc/network/interfaces > /tmp/interfaces.modified
+    chattr -i /etc/network/interfaces
+    mv -f /tmp/interfaces.modified /etc/network/interfaces
+    chattr +i /etc/network/interfaces
+    rm -rf /tmp/interfaces.modified
 }
 
 check_cdn() {
@@ -687,7 +692,7 @@ dmidecode_output=$(dmidecode -t system)
 rebuild_interfaces
 # cloudinit 重构
 rebuild_cloud_init
-fix_interfaces_ipv6_auto_type /etc/network/interfaces
+fix_interfaces_ipv6_auto_type
 # 统计运行次数
 statistics_of_run-times
 # 检测是否已重启过
@@ -943,7 +948,7 @@ if echo $output | grep -q "NO_PUBKEY"; then
 fi
 # 修复网卡可能存在的auto类型
 rebuild_interfaces
-fix_interfaces_ipv6_auto_type /etc/network/interfaces
+fix_interfaces_ipv6_auto_type
 auto_interface=$(grep '^auto ' /etc/network/interfaces | grep -v '^auto lo' | awk '{print $2}' | head -n 1)
 if ! grep -q "^post-up /sbin/ethtool" /etc/network/interfaces; then
     chattr -i /etc/network/interfaces
