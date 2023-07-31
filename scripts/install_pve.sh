@@ -263,37 +263,39 @@ if [ -f "/etc/network/interfaces" ]; then
     chattr +i /etc/network/interfaces
 fi
 # 检查/etc/network/interfaces文件中是否有iface xxxx inet dhcp行
-if [ -f "/etc/network/interfaces" ]; then
-    if grep -qF "inet dhcp" /etc/network/interfaces; then
-        inet_dhcp=true
-    else
-        inet_dhcp=false
-    fi
-    if grep -q "iface $interface inet dhcp" /etc/network/interfaces; then
-        # 获取ipv4、subnet、gateway信息
-        gateway=$(ip route | awk '/default/ {print $3}')
-        interface_info=$(ip -o -4 addr show dev $interface | awk '{print $4}')
-        ipv4=$(echo $interface_info | cut -d'/' -f1)
-        subnet=$(echo $interface_info | cut -d'/' -f2)
-        subnet=$(ipcalc -n "$ipv4/$subnet" | grep -oP 'Netmask:\s+\K.*' | awk '{print $1}')
-        chattr -i /etc/network/interfaces
-        if [[ -z "${CN}" || "${CN}" != true ]]; then
-            sed -i "/iface $interface inet dhcp/c\
-                iface $interface inet static\n\
-                address $ipv4\n\
-                netmask $subnet\n\
-                gateway $gateway\n\
-                dns-nameservers 8.8.8.8 8.8.4.4" /etc/network/interfaces
+if [[ $dmidecode_output == *"Hetzner_vServer"* ]]; then
+    if [ -f "/etc/network/interfaces" ]; then
+        if grep -qF "inet dhcp" /etc/network/interfaces; then
+            inet_dhcp=true
         else
-            sed -i "/iface $interface inet dhcp/c\
-                iface $interface inet static\n\
-                address $ipv4\n\
-                netmask $subnet\n\
-                gateway $gateway\n\
-                dns-nameservers 8.8.8.8 223.5.5.5" /etc/network/interfaces
+            inet_dhcp=false
         fi
+        if grep -q "iface $interface inet dhcp" /etc/network/interfaces; then
+            # 获取ipv4、subnet、gateway信息
+            gateway=$(ip route | awk '/default/ {print $3}')
+            interface_info=$(ip -o -4 addr show dev $interface | awk '{print $4}')
+            ipv4=$(echo $interface_info | cut -d'/' -f1)
+            subnet=$(echo $interface_info | cut -d'/' -f2)
+            subnet=$(ipcalc -n "$ipv4/$subnet" | grep -oP 'Netmask:\s+\K.*' | awk '{print $1}')
+            chattr -i /etc/network/interfaces
+            if [[ -z "${CN}" || "${CN}" != true ]]; then
+                sed -i "/iface $interface inet dhcp/c\
+                    iface $interface inet static\n\
+                    address $ipv4\n\
+                    netmask $subnet\n\
+                    gateway $gateway\n\
+                    dns-nameservers 8.8.8.8 8.8.4.4" /etc/network/interfaces
+            else
+                sed -i "/iface $interface inet dhcp/c\
+                    iface $interface inet static\n\
+                    address $ipv4\n\
+                    netmask $subnet\n\
+                    gateway $gateway\n\
+                    dns-nameservers 8.8.8.8 223.5.5.5" /etc/network/interfaces
+            fi
+        fi
+        chattr +i /etc/network/interfaces
     fi
-    chattr +i /etc/network/interfaces
 fi
 # 检测回环是否存在
 if ! grep -q "auto lo" "/etc/network/interfaces"; then
@@ -681,6 +683,7 @@ if [ ! -f "/etc/network/interfaces" ]; then
     chattr +i /etc/network/interfaces
 fi
 # 网络配置修改
+dmidecode_output=$(dmidecode -t system)
 rebuild_interfaces
 # cloudinit 重构
 rebuild_cloud_init
@@ -691,9 +694,8 @@ statistics_of_run-times
 if [ ! -f "/usr/local/bin/reboot_pve.txt" ]; then
     # 确保时间没问题
     check_time_zone
-    output=$(dmidecode -t system)
     # 特殊处理Azure
-    if [[ $output == *"Microsoft Corporation"* ]]; then
+    if [[ $dmidecode_output == *"Microsoft Corporation"* ]]; then
         sed -i 's#http://debian-archive.trafficmanager.net/debian#http://deb.debian.org/debian#g' /etc/apt/sources.list
         sed -i 's#http://debian-archive.trafficmanager.net/debian-security#http://security.debian.org/debian-security#g' /etc/apt/sources.list
         sed -i 's#http://debian-archive.trafficmanager.net/debian bullseye-updates#http://deb.debian.org/debian bullseye-updates#g' /etc/apt/sources.list
@@ -703,7 +705,7 @@ if [ ! -f "/usr/local/bin/reboot_pve.txt" ]; then
         #     prebuild_ifupdown2
         # fi
     fi
-    if [[ $output == *"Hetzner_vServer"* ]]; then
+    if [[ $dmidecode_output == *"Hetzner_vServer"* ]]; then
         # 特殊处理Hetzner
         prebuild_ifupdown2
     fi
