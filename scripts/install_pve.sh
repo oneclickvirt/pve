@@ -676,6 +676,11 @@ if [ ! -f "/etc/network/interfaces" ]; then
     chattr +i /etc/network/interfaces
 fi
 # 网络配置修改
+if grep -q "iface $interface inet dhcp" /etc/network/interfaces; then
+    inet_dhcp=true
+else
+    inet_dhcp=false
+fi
 rebuild_interfaces
 # cloudinit 重构
 rebuild_cloud_init
@@ -696,6 +701,8 @@ if [ ! -f "/usr/local/bin/reboot_pve.txt" ]; then
     fi
     # 特殊处理Hetzner
     if [[ $output == *"Hetzner_vServer"* ]]; then
+        prebuild_ifupdown2
+    elif [[ "${inet_dhcp}" == true ]]; then
         prebuild_ifupdown2
     fi
     # # 特殊处理OVH
