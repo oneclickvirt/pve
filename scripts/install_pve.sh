@@ -623,34 +623,61 @@ check_haveged
 # 检测系统信息
 _yellow "Detecting system information, will probably stay on the page for up to 1~2 minutes"
 _yellow "正在检测系统信息，大概会停留在该页面最多1~2分钟"
-# 部分信息检测
-main_ipv4=$(ip -4 addr show | grep global | awk '{print $2}' | cut -d '/' -f1 | head -n 1)
-# 检测物理接口和MAC地址
-interface_1=$(lshw -C network | awk '/logical name:/{print $3}' | head -1)
-interface_2=$(lshw -C network | awk '/logical name:/{print $3}' | sed -n '2p')
-if [ -z "$interface_1" ]; then
-  interface="eth0"
-fi
-if ! grep -q "$interface_1" "/etc/network/interfaces"; then
-    if [ -f "/etc/network/interfaces.d/50-cloud-init" ];then
-        if ! grep -q "$interface_1" "/etc/network/interfaces.d/50-cloud-init" && grep -q "$interface_2" "/etc/network/interfaces.d/50-cloud-init"; then
-            interface=${interface_2}
-        else
+
+check_interface()
+    if [ -z "$interface_2" ]; then
+        interface=${interface_1}
+        return
+    elif [ -n "$interface_1" ] && [ -n "$interface_2" ]; then
+        if ! grep -q "$interface_1" "/etc/network/interfaces" && ! grep -q "$interface_2" "/etc/network/interfaces" && [ -f "/etc/network/interfaces.d/50-cloud-init" ]; then
+            if grep -q "$interface_1" "/etc/network/interfaces.d/50-cloud-init" || grep -q "$interface_2" "/etc/network/interfaces.d/50-cloud-init"; then
+                if ! grep -q "$interface_1" "/etc/network/interfaces.d/50-cloud-init" && grep -q "$interface_2" "/etc/network/interfaces.d/50-cloud-init"; then
+                    interface=${interface_2}
+                    return
+                elif ! grep -q "$interface_2" "/etc/network/interfaces.d/50-cloud-init" && grep -q "$interface_1" "/etc/network/interfaces.d/50-cloud-init"; then
+                    interface=${interface_1}
+                    return
+                fi
+            fi
+        fi
+        if grep -q "$interface_1" "/etc/network/interfaces"; then
             interface=${interface_1}
+            return
+        elif grep -q "$interface_2" "/etc/network/interfaces"; then
+            interface=${interface_2}
+            return
+        else
+            interfaces_list=$(ip addr show | awk '/^[0-9]+: [^lo]/ {print $2}' | cut -d ':' -f 1)
+            interface=""
+            for iface in $interfaces_list; do
+                if [[ "$iface" = "$interface_1" || "$iface" = "$interface_2" ]]; then
+                    interface="$iface"
+                    return
+                fi
+            done
+            if [ -z "$interface" ]; then
+                interface="eth0"
+                return
+            fi
         fi
     else
-        if grep -q "$interface_2" "/etc/network/interfaces"; then
-            interface=${interface_2}
-        else
-            interface=${interface_1}
-        fi
+        interface="eth0"
+        return
     fi
-else
-    interface=${interface_1}
-fi
-if [ "$system_arch" = "arch" ]; then
-    mac_address=$(ip -o link show dev ${interface} | awk '{print $17}')
-fi
+    _red "Physical interface not found, exit execution"
+    _red "找不到物理接口，退出执行"
+    exit 1
+}
+
+# 检测主IPV4地址
+main_ipv4=$(ip -4 addr show | grep global | awk '{print $2}' | cut -d '/' -f1 | head -n 1)
+# 检测物理接口和MAC地址
+interface_1=$(lshw -C network | awk '/logical name:/{print $3}' | sed -n '1p')
+interface_2=$(lshw -C network | awk '/logical name:/{print $3}' | sed -n '2p')
+check_interface
+# if [ "$system_arch" = "arch" ]; then
+#     mac_address=$(ip -o link show dev ${interface} | awk '{print $17}')
+# fi
 # 检查是否存在特定配置
 if [ -f "/etc/network/interfaces.d/50-cloud-init" ]; then
     if grep -Fxq "# /etc/cloud/cloud.cfg.d/99-disable-network-config.cfg with the following:" /etc/network/interfaces.d/50-cloud-init && grep -Fxq "# network: {config: disabled}" /etc/network/interfaces.d/50-cloud-init; then
