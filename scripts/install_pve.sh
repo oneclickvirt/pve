@@ -978,7 +978,7 @@ fi
 # 修复网卡可能存在的auto类型
 rebuild_interfaces
 fix_interfaces_ipv6_auto_type
-# 特殊处理Hetzner
+# 特殊处理Hetzner和Azure的情况
 if [[ $dmidecode_output == *"Hetzner_vServer"* ]] || [[ $dmidecode_output == *"Microsoft Corporation"* ]]; then
     auto_interface=$(grep '^auto ' /etc/network/interfaces | grep -v '^auto lo' | awk '{print $2}' | head -n 1)
     if ! grep -q "^post-up /sbin/ethtool" /etc/network/interfaces; then
