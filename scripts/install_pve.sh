@@ -168,6 +168,19 @@ if [[ -f "/etc/network/interfaces.new" && -f "/etc/network/interfaces" ]]; then
     cp -f /etc/network/interfaces.new /etc/network/interfaces
     chattr +i /etc/network/interfaces
 fi
+# 检测回环是否存在
+if ! grep -q "auto lo" "/etc/network/interfaces"; then
+    chattr -i /etc/network/interfaces
+    echo "auto lo" >> "/etc/network/interfaces"
+    chattr +i /etc/network/interfaces
+    _blue "Can not find 'auto lo' in /etc/network/interfaces, add it"
+fi
+if ! grep -q "iface lo inet loopback" "/etc/network/interfaces"; then
+    chattr -i /etc/network/interfaces
+    echo "iface lo inet loopback" >> "/etc/network/interfaces"
+    chattr +i /etc/network/interfaces
+    _blue "Can not find 'iface lo inet loopback' in /etc/network/interfaces, add it"
+fi
 # 合并文件
 if [ -d "/etc/network/interfaces.d/" ]; then
     if [ ! -f "/etc/network/interfaces" ]; then
@@ -297,23 +310,11 @@ if [[ $dmidecode_output == *"Hetzner_vServer"* ]]; then
         chattr +i /etc/network/interfaces
     fi
 fi
-# 检测回环是否存在
-if ! grep -q "auto lo" "/etc/network/interfaces"; then
-    chattr -i /etc/network/interfaces
-    echo "auto lo" >> "/etc/network/interfaces"
-    chattr +i /etc/network/interfaces
-    _blue "Can not find 'auto lo' in /etc/network/interfaces, add it"
-fi
-if ! grep -q "iface lo inet loopback" "/etc/network/interfaces"; then
-    chattr -i /etc/network/interfaces
-    echo "iface lo inet loopback" >> "/etc/network/interfaces"
-    chattr +i /etc/network/interfaces
-    _blue "Can not find 'iface lo inet loopback' in /etc/network/interfaces, add it"
-fi
-# 修改v6共存的类型为dhcp类型
+# 当v6是共存的类型时删除v6
 if grep -q "iface ${interface} inet6 manual" /etc/network/interfaces && grep -q "try_dhcp 1" /etc/network/interfaces; then
     chattr -i /etc/network/interfaces
-    sed -i 's/iface ${interface} inet6 manual/iface ${interface} inet6 dhcp/' /etc/network/interfaces
+    # sed -i 's/iface ${interface} inet6 manual/iface ${interface} inet6 dhcp/' /etc/network/interfaces
+    sed -i '/iface ${interface} inet6 manual/d' /etc/network/interfaces
     sed -i '/try_dhcp 1/d' /etc/network/interfaces
     chattr +i /etc/network/interfaces
 fi
