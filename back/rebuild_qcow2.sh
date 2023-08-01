@@ -8,7 +8,6 @@ then
     sudo apt-get install -y libguestfs-tools
     sudo apt-get install -y libguestfs-tools --fix-missing
 fi
-
 if ! command -v rngd &> /dev/null
 then
     echo "rng-tools not found, installing rng-tools"
@@ -16,20 +15,12 @@ then
     sudo apt-get install -y rng-tools
     sudo apt-get install -y rng-tools --fix-missing
 fi
-
-# export LIBGUESTFS_DEBUG=1 LIBGUESTFS_TRACE=1
 qcow_file=$1
 echo "转换文件$qcow_file中......"
-# if [[ "$qcow_file" == *"alpine"* ]]; then
-#     virt-sysprep --enable alpine -a "$qcow_file"
-# elif [[ "$qcow_file" == *"centos"* ]]; then
-#     virt-sysprep --enable centos -a "$qcow_file"
-# elif [[ "$qcow_file" == *"almalinux"* ]]; then
-#     virt-sysprep --enable almalinux -a "$qcow_file"
-# fi
 if [[ "$qcow_file" == *"debian"* || "$qcow_file" == *"ubuntu"* || "$qcow_file" == *"arch"* ]]; then
     virt-customize -a $qcow_file --run-command "sed -i 's/ssh_pwauth:[[:space:]]*0/ssh_pwauth: 1/g' /etc/cloud/cloud.cfg"
-    virt-customize -a $qcow_file --run-command "echo 'Modified from https://github.com/spiritLHLS/Images' >> /etc/motd"
+    virt-customize -a $qcow_file --run-command "echo '' > /etc/motd"
+    virt-customize -a $qcow_file --run-command "echo 'Modified from https://github.com/oneclickvirt/kvm_images' >> /etc/motd"
     virt-customize -a $qcow_file --run-command "echo 'Related repo https://github.com/spiritLHLS/pve' >> /etc/motd"
     virt-customize -a $qcow_file --run-command "echo '--by https://t.me/spiritlhl' >> /etc/motd"
     echo "启用SSH功能..."
@@ -54,26 +45,27 @@ if [[ "$qcow_file" == *"debian"* || "$qcow_file" == *"ubuntu"* || "$qcow_file" =
         virt-customize -a $qcow_file --run-command "systemctl start qemu-guest-agent"
     fi
 elif [[ "$qcow_file" == *"alpine"* ]]; then
-    virt-customize -a $qcow_file --run-command "sed -i 's/disable_root:[[:space:]]*1/disable_root: 0/g' /etc/cloud/cloud.cfg"
-    virt-customize -a $qcow_file --run-command "sed -i 's/ssh_pwauth:[[:space:]]*0/ssh_pwauth: 1/g' /etc/cloud/cloud.cfg"
-    virt-customize -a $qcow_file --run-command "echo 'Modified from https://github.com/spiritLHLS/Images' >> /etc/motd"
+    virt-customize -a $qcow_file --run-command "apk update"
+    virt-customize -a $qcow_file --run-command "apk add --no-cache wget curl openssh-server sshpass"
+    echo "启用SSH功能..."
+    virt-customize -a $qcow_file --run-command "cd /etc/ssh"
+    virt-customize -a $qcow_file --run-command "ssh-keygen -A"
+    echo "启用root登录..."
+    virt-customize -a $qcow_file --run-command "sed -i.bak '/^#PermitRootLogin\|PermitRootLogin/c PermitRootLogin yes' /etc/ssh/sshd_config"
+    virt-customize -a $qcow_file --run-command "sed -i.bak 's/^#\?PasswordAuthentication.*/PasswordAuthentication yes/g' /etc/ssh/sshd_config"
+    virt-customize -a $qcow_file --run-command "sed -i.bak '/^#ListenAddress\|ListenAddress/c ListenAddress 0.0.0.0' /etc/ssh/sshd_config"
+    virt-customize -a $qcow_file --run-command "sed -i.bak '/^#AddressFamily\|AddressFamily/c AddressFamily any' /etc/ssh/sshd_config"
+    virt-customize -a $qcow_file --run-command "sed -i.bak 's/^#\?\(Port\).*/\1 22/' /etc/ssh/sshd_config"
+    virt-customize -a $qcow_file --run-command "sed -i.bak -E 's/^#?(Port).*/\1 22/' /etc/ssh/sshd_config"
+    virt-customize -a $qcow_file --run-command "echo '' > /etc/motd"
+    virt-customize -a $qcow_file --run-command "echo 'Modified from https://github.com/oneclickvirt/kvm_images' >> /etc/motd"
     virt-customize -a $qcow_file --run-command "echo 'Related repo https://github.com/spiritLHLS/pve' >> /etc/motd"
     virt-customize -a $qcow_file --run-command "echo '--by https://t.me/spiritlhl' >> /etc/motd"
-    echo "启用SSH功能..."
-    # virt-customize -a $qcow_file --run-command "apk update"
-    # virt-customize -a $qcow_file --run-command "apk add --no-cache wget curl openssh-server sshpass"
-    # virt-customize -a $qcow_file --run-command "cd /etc/ssh"
-    # virt-customize -a $qcow_file --run-command "ssh-keygen -A"
-    echo "启用root登录..."
-    # virt-customize -a $qcow_file --run-command "sed -i.bak '/^#PermitRootLogin/c PermitRootLogin yes' /etc/ssh/sshd_config"
-    # virt-customize -a $qcow_file --run-command "sed -i.bak '/^#PasswordAuthentication/c PasswordAuthentication yes' /etc/ssh/sshd_config"
-    # virt-customize -a $qcow_file --run-command "sed -i.bak '/^#ListenAddress/c ListenAddress 0.0.0.0' /etc/ssh/sshd_config"
-    # virt-customize -a $qcow_file --run-command "sed -i.bak '/^#AddressFamily/c AddressFamily any' /etc/ssh/sshd_config"
-    # virt-customize -a $qcow_file --run-command "sed -i.bak 's/^#\?Port.*/Port 22/' /etc/ssh/sshd_config"
-    # virt-customize -a $qcow_file --run-command "/usr/sbin/sshd"
-elif [[ "$qcow_file" == *"almalinux9"* ]]; then
+    virt-customize -a $qcow_file --run-command "/usr/sbin/sshd"
+elif [[ "$qcow_file" == *"almalinux9"* || "$qcow_file" == *"rockylinux"* ]]; then
     virt-customize -a $qcow_file --run-command "sed -i 's/ssh_pwauth:[[:space:]]*0/ssh_pwauth: 1/g' /etc/cloud/cloud.cfg"
-    virt-customize -a $qcow_file --run-command "echo 'Modified from https://github.com/spiritLHLS/Images' >> /etc/motd"
+    virt-customize -a $qcow_file --run-command "echo '' > /etc/motd"
+    virt-customize -a $qcow_file --run-command "echo 'Modified from https://github.com/oneclickvirt/kvm_images' >> /etc/motd"
     virt-customize -a $qcow_file --run-command "echo 'Related repo https://github.com/spiritLHLS/pve' >> /etc/motd"
     virt-customize -a $qcow_file --run-command "echo '--by https://t.me/spiritlhl' >> /etc/motd"
     echo "启用SSH功能..."
@@ -98,9 +90,10 @@ elif [[ "$qcow_file" == *"almalinux9"* ]]; then
     virt-customize -a $qcow_file --run-command "systemctl restart ssh"
     virt-customize -a $qcow_file --run-command "yum update -y && yum install qemu-guest-agent -y"
     virt-customize -a $qcow_file --run-command "systemctl start qemu-guest-agent"
-elif [[ "$qcow_file" == *"almalinux"* || "$qcow_file" == *"centos9-stream"* || "$qcow_file" == *"centos8-stream"* || "$qcow_file" == *"centos7"* ]]; then
+elif [[ "$qcow_file" == *"almalinux8"* || "$qcow_file" == *"centos9-stream"* || "$qcow_file" == *"centos8-stream"* || "$qcow_file" == *"centos7"* ]]; then
     virt-customize -a $qcow_file --run-command "sed -i 's/ssh_pwauth:[[:space:]]*0/ssh_pwauth: 1/g' /etc/cloud/cloud.cfg"
-    virt-customize -a $qcow_file --run-command "echo 'Modified from https://github.com/spiritLHLS/Images' >> /etc/motd"
+    virt-customize -a $qcow_file --run-command "echo '' > /etc/motd"
+    virt-customize -a $qcow_file --run-command "echo 'Modified from https://github.com/oneclickvirt/kvm_images' >> /etc/motd"
     virt-customize -a $qcow_file --run-command "echo 'Related repo https://github.com/spiritLHLS/pve' >> /etc/motd"
     virt-customize -a $qcow_file --run-command "echo '--by https://t.me/spiritlhl' >> /etc/motd"
     echo "启用SSH功能..."
@@ -127,7 +120,8 @@ elif [[ "$qcow_file" == *"almalinux"* || "$qcow_file" == *"centos9-stream"* || "
 else
     virt-customize -a $qcow_file --run-command "sed -i 's/disable_root:[[:space:]]*1/disable_root: 0/g' /etc/cloud/cloud.cfg"
     virt-customize -a $qcow_file --run-command "sed -i 's/ssh_pwauth:[[:space:]]*0/ssh_pwauth: 1/g' /etc/cloud/cloud.cfg"
-    virt-customize -a $qcow_file --run-command "echo 'Modified from https://github.com/spiritLHLS/Images' >> /etc/motd"
+    virt-customize -a $qcow_file --run-command "echo '' > /etc/motd"
+    virt-customize -a $qcow_file --run-command "echo 'Modified from https://github.com/oneclickvirt/kvm_images' >> /etc/motd"
     virt-customize -a $qcow_file --run-command "echo 'Related repo https://github.com/spiritLHLS/pve' >> /etc/motd"
     virt-customize -a $qcow_file --run-command "echo '--by https://t.me/spiritlhl' >> /etc/motd"
     echo "启用SSH功能..."
@@ -156,15 +150,3 @@ echo "覆盖原文件..."
 mv ${qcow_file}.tmp $qcow_file
 rm -rf *.bak
 echo "$qcow_file修改完成"
-
-
-# qcow_file="alpinelinux_v3_17.qcow2"
-# virt-customize -a $qcow_file --run-command "apk update"
-# virt-customize -a $qcow_file --run-command "apk add --no-cache openssh-server sshpass openssh-keygen"
-# virt-customize -a $qcow_file --run-command "ssh-keygen -A"
-# virt-customize -a $qcow_file --run-command "sed -i.bak '/^#PermitRootLogin\|PermitRootLogin/c PermitRootLogin yes' /etc/ssh/sshd_config"
-# virt-customize -a $qcow_file --run-command "sed -i.bak '/^#PasswordAuthentication\|PasswordAuthentication/c PasswordAuthentication yes' /etc/ssh/sshd_config"
-# virt-customize -a $qcow_file --run-command "sed -i.bak '/^#ListenAddress\|ListenAddress/c ListenAddress 0.0.0.0' /etc/ssh/sshd_config"
-# virt-customize -a $qcow_file --run-command "sed -i.bak '/^#AddressFamily\|AddressFamily/c AddressFamily any' /etc/ssh/sshd_config"
-# virt-customize -a $qcow_file --run-command "sed -i.bak -E 's/^#?(Port).*/\1 22/' /etc/ssh/sshd_config"
-# virt-customize -a $qcow_file --run-command "/usr/sbin/sshd"
