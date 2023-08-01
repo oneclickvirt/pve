@@ -1,4 +1,5 @@
 #!/bin/bash
+# from https://github.com/spiritLHLS/pve
 
 apt-get install -y libguestfs-tools rng-tools curl
 apt-get install -y libguestfs-tools rng-tools curl --fix-missing
