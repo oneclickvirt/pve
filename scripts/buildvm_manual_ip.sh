@@ -124,15 +124,15 @@ if [ "$system_arch" = "x86" ]; then
         fi
     done
     if [[ -z "$file_path" ]]; then
-        _red "Unable to install corresponding system, please check https://github.com/spiritLHLS/Images/ for supported system images "
-        _red "无法安装对应系统，请查看 https://github.com/spiritLHLS/Images/ 支持的系统镜像 "
+        _red "Unable to install corresponding system, please check https://github.com/oneclickvirt/kvm_images/ for supported system images "
+        _red "无法安装对应系统，请查看 https://github.com/oneclickvirt/kvm_images/ 支持的系统镜像 "
         exit 1
     fi
     if [ ! -f "$file_path" ]; then
         # v1.0 基础安装包预安装
         # v1.1 增加agent安装包预安装，方便在宿主机上看到虚拟机的进程
         check_cdn_file
-        url="${cdn_success_url}https://github.com/spiritLHLS/Images/releases/download/v1.1/${system}.qcow2"
+        url="${cdn_success_url}https://github.com/oneclickvirt/kvm_images/releases/download/v1.1/${system}.qcow2"
         curl -L -o "$file_path" "$url"
     fi
 elif [ "$system_arch" = "arch" ]; then
