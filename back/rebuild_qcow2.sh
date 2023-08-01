@@ -51,16 +51,14 @@ elif [[ "$qcow_file" == *"alpine"* ]]; then
     virt-customize -a $qcow_file --run-command "cd /etc/ssh"
     virt-customize -a $qcow_file --run-command "ssh-keygen -A"
     echo "启用root登录..."
-    virt-customize -a $qcow_file --run-command "sed -i.bak '/^#PermitRootLogin\|PermitRootLogin/c PermitRootLogin yes' /etc/ssh/sshd_config"
-    virt-customize -a $qcow_file --run-command "sed -i.bak 's/^#\?PasswordAuthentication.*/PasswordAuthentication yes/g' /etc/ssh/sshd_config"
-    virt-customize -a $qcow_file --run-command "sed -i.bak '/^#ListenAddress\|ListenAddress/c ListenAddress 0.0.0.0' /etc/ssh/sshd_config"
-    virt-customize -a $qcow_file --run-command "sed -i.bak '/^#AddressFamily\|AddressFamily/c AddressFamily any' /etc/ssh/sshd_config"
-    virt-customize -a $qcow_file --run-command "sed -i.bak 's/^#\?\(Port\).*/\1 22/' /etc/ssh/sshd_config"
-    virt-customize -a $qcow_file --run-command "sed -i.bak -E 's/^#?(Port).*/\1 22/' /etc/ssh/sshd_config"
-    virt-customize -a $qcow_file --run-command "echo '' > /etc/motd"
-    virt-customize -a $qcow_file --run-command "echo 'Modified from https://github.com/oneclickvirt/kvm_images' >> /etc/motd"
-    virt-customize -a $qcow_file --run-command "echo 'Related repo https://github.com/spiritLHLS/pve' >> /etc/motd"
-    virt-customize -a $qcow_file --run-command "echo '--by https://t.me/spiritlhl' >> /etc/motd"
+    virt-customize -a $qcow_file --edit '/etc/cloud/cloud.cfg:s/preserve_hostname: *false/preserve_hostname: true/'
+    virt-customize -a $qcow_file --edit '/etc/cloud/cloud.cfg:s/disable_root: *true/disable_root: false/'
+    virt-customize -a $qcow_file --edit '/etc/ssh/sshd_config:s/^#\?PasswordAuthentication.*/PasswordAuthentication yes/'
+    virt-customize -a $qcow_file --edit '/etc/ssh/sshd_config:s/^#?\(Port\).*/\1 22/'
+    virt-customize -a $qcow_file --edit '/etc/ssh/sshd_config:s/^#PermitRootLogin\|PermitRootLogin/c PermitRootLogin yes/'
+    virt-customize -a $qcow_file --edit '/etc/ssh/sshd_config:s/^#AddressFamily\|AddressFamily/c AddressFamily any/'
+    virt-customize -a $qcow_file --edit '/etc/ssh/sshd_config:s/^#ListenAddress\|ListenAddress/c ListenAddress 0.0.0.0/'
+    virt-customize -a $qcow_file --edit '/etc/motd:s|^|Modified from https://github.com/oneclickvirt/kvm_images\nRelated repo https://github.com/spiritLHLS/pve\n--by https://t.me/spiritlhl\n|'
     virt-customize -a $qcow_file --run-command "/usr/sbin/sshd"
 elif [[ "$qcow_file" == *"almalinux9"* || "$qcow_file" == *"rockylinux"* ]]; then
     virt-customize -a $qcow_file --run-command "sed -i 's/ssh_pwauth:[[:space:]]*0/ssh_pwauth: 1/g' /etc/cloud/cloud.cfg"
