@@ -53,12 +53,11 @@ elif [[ "$qcow_file" == *"alpine"* ]]; then
     echo "启用root登录..."
     virt-customize -a $qcow_file --edit '/etc/cloud/cloud.cfg:s/preserve_hostname: *false/preserve_hostname: true/'
     virt-customize -a $qcow_file --edit '/etc/cloud/cloud.cfg:s/disable_root: *true/disable_root: false/'
-    virt-customize -a $qcow_file --edit '/etc/ssh/sshd_config:s/PasswordAuthentication *no/PasswordAuthentication yes/'
+    virt-customize -a $qcow_file --edit '/etc/ssh/sshd_config:s/PasswordAuthentication no/PasswordAuthentication yes/'
     virt-customize -a $qcow_file --edit '/etc/ssh/sshd_config:s/^#?\(Port\).*/\1 22/'
     virt-customize -a $qcow_file --edit '/etc/ssh/sshd_config:s/^#PermitRootLogin\|PermitRootLogin/c PermitRootLogin yes/'
     virt-customize -a $qcow_file --edit '/etc/ssh/sshd_config:s/^#AddressFamily\|AddressFamily/c AddressFamily any/'
     virt-customize -a $qcow_file --edit '/etc/ssh/sshd_config:s/^#ListenAddress\|ListenAddress/c ListenAddress 0.0.0.0/'
-    virt-customize -a $qcow_file --edit '/etc/motd:s|^|Modified from https://github.com/oneclickvirt/kvm_images\nRelated repo https://github.com/spiritLHLS/pve\n--by https://t.me/spiritlhl\n|'
     virt-customize -a $qcow_file --run-command "/usr/sbin/sshd"
 elif [[ "$qcow_file" == *"almalinux9"* || "$qcow_file" == *"rockylinux"* ]]; then
     virt-customize -a $qcow_file --run-command "sed -i 's/ssh_pwauth:[[:space:]]*0/ssh_pwauth: 1/g' /etc/cloud/cloud.cfg"
