@@ -100,8 +100,8 @@ if [ "$system_arch" = "x86" ]; then
         "ubuntu20"
         "ubuntu22"
         "centos7"
-        "archlinux" 
-        "almalinux8" 
+        "archlinux"
+        "almalinux8"
         "almalinux9" 
         "fedora33" 
         "fedora34" 
@@ -218,6 +218,7 @@ user_ip="172.16.1.${num}"
 qm set $vm_num --ipconfig0 ip=${user_ip}/24,gw=172.16.1.1
 qm set $vm_num --cipassword $password --ciuser $user
 # qm set $vm_num --agent 1
+sleep 3
 qm resize $vm_num scsi0 ${disk}G
 if [ $? -ne 0 ]; then
     if [[ $disk =~ ^[0-9]+G$ ]]; then

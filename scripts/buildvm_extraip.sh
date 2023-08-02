@@ -97,8 +97,8 @@ if [ "$system_arch" = "x86" ]; then
         "ubuntu20"
         "ubuntu22"
         "centos7"
-        "archlinux" 
-        "almalinux8" 
+        "archlinux"
+        "almalinux8"
         "almalinux9" 
         "fedora33" 
         "fedora34" 
@@ -275,6 +275,7 @@ qm set $vm_num --nameserver 8.8.8.8
 qm set $vm_num --searchdomain 8.8.4.4
 qm set $vm_num --ipconfig0 ip=${user_ip}/${user_ip_range},gw=${gateway}
 qm set $vm_num --cipassword $password --ciuser $user
+sleep 3
 # qm set $vm_num --agent 1
 qm resize $vm_num scsi0 ${disk}G
 if [ $? -ne 0 ]; then
