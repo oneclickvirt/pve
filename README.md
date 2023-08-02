@@ -23,6 +23,8 @@
 
 [virt.spiritlhl.net](https://virt.spiritlhl.net/) 中 Proxmox VE 分区内容
 
+[https://github.com/oneclickvirt/kvm_images](https://github.com/oneclickvirt/kvm_images) 为对应虚拟机镜像仓库
+
 ## Stargazers over time
 
 [![Stargazers over time](https://starchart.cc/spiritLHLS/pve.svg)](https://starchart.cc/spiritLHLS/pve)
