@@ -130,6 +130,8 @@ if [ "$system_arch" = "x86" ]; then
         "fedora33"
         "fedora34"
         "opensuse-leap-15"
+        "alpinelinux_edge"
+        "alpinelinux_stable"
         )
     for sys in ${systems[@]}; do
         if [[ "$system" == "$sys" ]]; then
@@ -145,7 +147,7 @@ if [ "$system_arch" = "x86" ]; then
     if [ ! -f "$file_path" ]; then
         check_cdn_file
         ver=""
-        v20=("fedora34" "almalinux8" "debian11" "debian12" "ubuntu18" "ubuntu20" "ubuntu22" "centos7")
+        v20=("fedora34" "almalinux8" "debian11" "debian12" "ubuntu18" "ubuntu20" "ubuntu22" "centos7" "alpinelinux_edge" "alpinelinux_stable")
         v11=("ubuntu18" "ubuntu20" "ubuntu22" "debian10" "debian11")
         v10=("almalinux8" "archlinux" "fedora33" "opensuse-leap-15" "ubuntu18" "ubuntu20" "ubuntu22" "debian10" "debian11")
         ver_list=(v20 v11 v10)
