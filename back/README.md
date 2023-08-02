@@ -36,6 +36,17 @@ qm exec 虚拟机ID /bin/bash
 qemu-img convert -p -O qcow2 /var/lib/vz/images/152/vm-152-disk-0.raw /root/xxx
 ```
 
+```
+dd if=/dev/zero of=/null.dat
+rm -f /null.dat
+```
+
+```
+cp --sparse=always /var/lib/vz/images/152/vm-152-disk-0.raw /var/lib/vz/images/152/vm-152-disk-0-new.raw
+qemu-img convert -p -O qcow2 /var/lib/vz/images/152/vm-152-disk-0-new.raw /root/xxx
+qemu-img convert -c -O qcow2 /root/xxxxx /root/xxxxx
+```
+
 ### 卸载所有虚拟机
 
 ```
