@@ -279,6 +279,13 @@ qm set $vm_num --ipconfig0 ip=${user_ip}/${user_ip_range},gw=${gateway}
 qm set $vm_num --cipassword $password --ciuser $user
 # qm set $vm_num --agent 1
 qm resize $vm_num scsi0 ${disk}G
+if [ $? -ne 0 ]; then
+    if [[ $disk =~ ^[0-9]+G$ ]]; then
+        dnum=${disk::-1}
+        disk_m=$((dnum * 1024))
+        qm resize $vm_num scsi0 ${disk_m}M
+    fi
+fi
 qm start $vm_num
 
 echo "$vm_num $user $password $core $memory $disk $system $storage $user_ip" >> "vm${vm_num}"

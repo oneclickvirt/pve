@@ -221,6 +221,13 @@ qm set $vm_num --ipconfig0 ip=${user_ip}/24,gw=172.16.1.1
 qm set $vm_num --cipassword $password --ciuser $user
 # qm set $vm_num --agent 1
 qm resize $vm_num scsi0 ${disk}G
+if [ $? -ne 0 ]; then
+    if [[ $disk =~ ^[0-9]+G$ ]]; then
+        dnum=${disk::-1}
+        disk_m=$((dnum * 1024))
+        qm resize $vm_num scsi0 ${disk_m}M
+    fi
+fi
 qm start $vm_num
 
 iptables -t nat -A PREROUTING -p tcp --dport ${sshn} -j DNAT --to-destination ${user_ip}:22
