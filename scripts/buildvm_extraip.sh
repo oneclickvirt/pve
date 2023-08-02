@@ -100,6 +100,7 @@ if [ "$system_arch" = "x86" ]; then
         "archlinux"
         "almalinux8"
         "fedora33" 
+        "fedora34" 
         "opensuse-leap-15"
         )
     for sys in ${systems[@]}; do
@@ -118,7 +119,7 @@ if [ "$system_arch" = "x86" ]; then
         ver=""
         v20=("almalinux8" "debian11" "debian12" "ubuntu18" "ubuntu20" "ubuntu22" "centos7")
         v11=("ubuntu18" "ubuntu20" "ubuntu22" "debian10" "debian11")
-        v10=("almalinux8" "archlinux" "fedora33" "opensuse-leap-15" "ubuntu18" "ubuntu20" "ubuntu22" "debian10" "debian11")
+        v10=("almalinux8" "archlinux" "fedora33" "fedora34" "opensuse-leap-15" "ubuntu18" "ubuntu20" "ubuntu22" "debian10" "debian11")
         ver_list=(v20 v11 v10)
         ver_name_list=("v2.0" "v1.1" "v1.0")
         for ver in "${ver_list[@]}"; do
