@@ -32,6 +32,10 @@ guestfish -a xxx -i -c "cat /etc/ssh/sshd_config"
 qm exec 虚拟机ID /bin/bash
 ```
 
+```
+qemu-img convert -p -O qcow2 /var/lib/vz/images/152/vm-152-disk-0.raw /root/xxx
+```
+
 ### 卸载所有虚拟机
 
 ```
