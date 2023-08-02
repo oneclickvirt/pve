@@ -156,14 +156,14 @@ if [ -f "/etc/selinux/config" ]; then
 fi
 setenforce 0;
 if [ -f /etc/ssh/sshd_config ]; then
-    sed -i "s/^#\?Port.*/Port $sshport/g" /etc/ssh/sshd_config
-    sed -i "s/^#\?PermitRootLogin.*/PermitRootLogin yes/g" /etc/ssh/sshd_config
-    sed -i "s/^#\?PasswordAuthentication.*/PasswordAuthentication yes/g" /etc/ssh/sshd_config
+    sed -i 's/^#\?Port.*/Port $sshport/g' /etc/ssh/sshd_config
+    sed -i 's/^#\?PermitRootLogin.*/PermitRootLogin yes/g' /etc/ssh/sshd_config
+    sed -i 's/^#\?PasswordAuthentication.*/PasswordAuthentication yes/g' /etc/ssh/sshd_config
     sed -i 's/#ListenAddress 0.0.0.0/ListenAddress 0.0.0.0/' /etc/ssh/sshd_config
     sed -i 's/#ListenAddress ::/ListenAddress ::/' /etc/ssh/sshd_config
     sed -i 's/#AddressFamily any/AddressFamily any/' /etc/ssh/sshd_config
     sed -i '/^#UsePAM\|UsePAM/c #UsePAM no' /etc/ssh/sshd_config
-    sed -i "s/^#\?PubkeyAuthentication.*/PubkeyAuthentication no/g" /etc/ssh/sshd_config
+    sed -i 's/^#\?PubkeyAuthentication.*/PubkeyAuthentication no/g' /etc/ssh/sshd_config
     sed -i '/^AuthorizedKeysFile/s/^/#/' /etc/ssh/sshd_config
 fi
 if [ -f /etc/ssh/sshd_config.d/50-cloud-init.conf ]; then
