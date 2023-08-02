@@ -127,8 +127,7 @@ if [ "$system_arch" = "x86" ]; then
         "centos7"
         "archlinux"
         "almalinux8"
-        "fedora33" 
-        "fedora34" 
+        "fedora33"
         "opensuse-leap-15"
         )
     for sys in ${systems[@]}; do
@@ -147,7 +146,7 @@ if [ "$system_arch" = "x86" ]; then
         ver=""
         v20=("almalinux8" "debian11" "debian12" "ubuntu18" "ubuntu20" "ubuntu22" "centos7")
         v11=("ubuntu18" "ubuntu20" "ubuntu22" "debian10" "debian11")
-        v10=("almalinux8" "archlinux" "fedora33" "fedora34" "opensuse-leap-15" "ubuntu18" "ubuntu20" "ubuntu22" "debian10" "debian11")
+        v10=("almalinux8" "archlinux" "fedora33" "opensuse-leap-15" "ubuntu18" "ubuntu20" "ubuntu22" "debian10" "debian11")
         ver_list=(v20 v11 v10)
         ver_name_list=("v2.0" "v1.1" "v1.0")
         for ver in "${ver_list[@]}"; do
@@ -262,10 +261,12 @@ _green "当前虚拟机将绑定的IP为：${user_ip}"
 qm create $vm_num --agent 1 --scsihw virtio-scsi-single --serial0 socket --cores $core --sockets 1 --cpu host --net0 virtio,bridge=vmbr0,firewall=0
 if [ "$system_arch" = "x86" ]; then
     qm importdisk $vm_num /root/qcow/${system}.qcow2 ${storage}
+    sleep 3
     qm set $vm_num --scsihw virtio-scsi-pci --scsi0 ${storage}:${vm_num}/vm-${vm_num}-disk-0.raw
 else
     qm set $vm_num --bios ovmf
     qm importdisk $vm_num /root/qcow/${system}.img ${storage}
+    sleep 3
     qm set $vm_num --scsihw virtio-scsi-pci --scsi0 ${storage}:${vm_num}/vm-${vm_num}-disk-0.raw
 fi
 qm set $vm_num --bootdisk scsi0
@@ -278,7 +279,7 @@ qm set $vm_num --searchdomain 8.8.4.4
 qm set $vm_num --ipconfig0 ip=${user_ip}/${user_ip_range},gw=${gateway}
 qm set $vm_num --cipassword $password --ciuser $user
 # qm set $vm_num --agent 1
-sleep 3
+sleep 5
 qm resize $vm_num scsi0 ${disk}G
 if [ $? -ne 0 ]; then
     if [[ $disk =~ ^[0-9]+G$ ]]; then
