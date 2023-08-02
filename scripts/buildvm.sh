@@ -1,7 +1,7 @@
 #!/bin/bash
 # from 
 # https://github.com/spiritLHLS/pve
-# 2023.07.31
+# 2023.08.02
 
 
 # ./buildvm.sh VMID 用户名 密码 CPU核数 内存 硬盘 SSH端口 80端口 443端口 外网端口起 外网端口止 系统 存储盘
@@ -91,7 +91,25 @@ if [ -z "${system_arch}" ] || [ ! -v system_arch ]; then
    exit 1
 fi
 if [ "$system_arch" = "x86" ]; then
-    systems=("debian10" "debian11" "debian9" "ubuntu18" "ubuntu20" "ubuntu22" "archlinux" "centos9-stream" "centos8-stream" "almalinux8" "almalinux9" "fedora33" "fedora34" "opensuse-leap-15")
+    file_path=""
+    systems=(
+        "debian9"
+        "debian10" 
+        "debian11"
+        "debian12"
+        "ubuntu18"
+        "ubuntu20"
+        "ubuntu22"
+        "centos7"
+        "centos8-stream"
+        "centos9-stream" 
+        "archlinux" 
+        "almalinux8" 
+        "almalinux9" 
+        "fedora33" 
+        "fedora34" 
+        "opensuse-leap-15"
+        )
     for sys in ${systems[@]}; do
         if [[ "$system" == "$sys" ]]; then
             file_path="/root/qcow/${system}.qcow2"
@@ -104,11 +122,30 @@ if [ "$system_arch" = "x86" ]; then
         exit 1
     fi
     if [ ! -f "$file_path" ]; then
-        # v1.0 基础安装包预安装
-        # v1.1 增加agent安装包预安装，方便在宿主机上看到虚拟机的进程
         check_cdn_file
-        url="${cdn_success_url}https://github.com/oneclickvirt/kvm_images/releases/download/v1.1/${system}.qcow2"
-        curl -L -o "$file_path" "$url"
+        ver=""
+        v20=("almalinux8" "debian11" "debian12" "ubuntu18" "ubuntu20" "ubuntu22" "centos7")
+        v11=("centos9-stream" "almalinux9" "ubuntu18" "ubuntu20" "ubuntu22" "debian9" "debian10" "debian11")
+        v10=("almalinux8" "archlinux" "fedora33" "fedora34" "opensuse-leap-15" "ubuntu18" "ubuntu20" "ubuntu22" "debian9" "debian10" "debian11")
+        ver_list=(v20 v11 v10)
+        ver_name_list=("v2.0" "v1.1" "v1.0")
+        for ver in "${ver_list[@]}"; do
+            array_name="${ver}[@]"
+            array=("${!array_name}")
+            if [[ " ${array[*]} " == *" $system "* ]]; then
+                index=$(echo ${ver_list[*]} | tr -s ' ' '\n' | grep -n "$ver" | cut -d':' -f1)
+                ver="${ver_name_list[$((index-1))]}"
+                break
+            fi
+        done
+        if [[ -n "$ver" ]]; then
+            url="${cdn_success_url}https://github.com/oneclickvirt/kvm_images/releases/download/${ver}/${system}.qcow2"
+            curl -L -o "$file_path" "$url"
+        else
+            _red "Unable to install corresponding system, please check https://github.com/oneclickvirt/kvm_images/ for supported system images "
+            _red "无法安装对应系统，请查看 https://github.com/oneclickvirt/kvm_images/ 支持的系统镜像 "
+            exit 1
+        fi
     fi
 elif [ "$system_arch" = "arch" ]; then
     systems=("ubuntu14" "ubuntu16" "ubuntu18" "ubuntu20" "ubuntu22")
