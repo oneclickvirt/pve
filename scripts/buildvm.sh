@@ -100,8 +100,6 @@ if [ "$system_arch" = "x86" ]; then
         "ubuntu20"
         "ubuntu22"
         "centos7"
-        "centos8-stream"
-        "centos9-stream" 
         "archlinux" 
         "almalinux8" 
         "almalinux9" 
