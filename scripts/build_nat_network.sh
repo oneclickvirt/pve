@@ -1,10 +1,11 @@
 #!/bin/bash
 # from 
 # https://github.com/spiritLHLS/pve
-# 2023.06.29
+# 2023.08.03
 
 
-# 打印信息
+########## 预设部分输出和部分中间变量
+
 _red() { echo -e "\033[31m\033[01m$@\033[0m"; }
 _green() { echo -e "\033[32m\033[01m$@\033[0m"; }
 _yellow() { echo -e "\033[33m\033[01m$@\033[0m"; }
@@ -20,62 +21,30 @@ else
   export LANGUAGE="$utf8_locale"
   echo "Locale set to $utf8_locale"
 fi
+rm -rf /usr/local/bin/build_backend_pve.txt
 
-rm -rf /root/build_backend_pve.txt
+########## 查询信息
 
-# 查询信息
 if ! command -v lshw > /dev/null 2>&1; then
-      apt-get install -y lshw
+        apt-get install -y lshw
 fi
-# 提取物理网卡名字
-interface_1=$(lshw -C network | awk '/logical name:/{print $3}' | head -1)
-interface_2=$(lshw -C network | awk '/logical name:/{print $3}' | sed -n '2p')
-if [ -z "$interface_1" ]; then
-  interface="eth0"
+if ! command -v ipcalc > /dev/null 2>&1; then
+        apt-get install -y ipcalc
 fi
-if ! grep -q "$interface_1" "/etc/network/interfaces"; then
-    if [ -f "/etc/network/interfaces.d/50-cloud-init" ];then
-        if ! grep -q "$interface_1" "/etc/network/interfaces.d/50-cloud-init" && grep -q "$interface_2" "/etc/network/interfaces.d/50-cloud-init"; then
-            interface=${interface_2}
-        else
-            interface=${interface_1}
-        fi
-    else
-        if grep -q "$interface_2" "/etc/network/interfaces"; then
-            interface=${interface_2}
-        else
-            interface=${interface_1}
-        fi
-    fi
-else
-    interface=${interface_1}
+
+# 检测IPV6相关的信息
+if [ -f /usr/local/bin/pve_check_ipv6 ]; then
+    ipv6_address=$(cat /usr/local/bin/pve_check_ipv6)
 fi
-# 提取IPV4地址
-ipv4_address=$(ip addr show | awk '/inet .*global/ && !/inet6/ {print $2}')
-# 提取IPV4网关
-gateway=$(ip route | awk '/default/ {print $3}')
-# 获取IPV6子网前缀
-SUBNET_PREFIX=$(ip -6 addr show | grep -E 'inet6.*global' | awk '{print $2}' | awk -F'/' '{print $1}' | head -n 1 | rev | cut -d ':' -f 2- | rev):0
-# 提取IPV6地址
-ipv6_address=$(ip addr show | awk '/inet6.*scope global/ { print $2 }' | head -n 1)
-# 检查是否存在 IPV6 
-if [ -z "$SUBNET_PREFIX" ] || [ "$SUBNET_PREFIX" = ":0" ]; then
-    _red "No IPV6 subnet, no automatic mapping"
-    _red "无 IPV6 子网，不进行自动映射"
-else
-    _blue "The IPV6 subnet prefix of the host is $SUBNET_PREFIX"
-    _blue "母鸡的IPV6子网前缀为 $SUBNET_PREFIX"
+if [ -f /usr/local/bin/pve_ipv6_prefixlen ]; then
+    ipv6_prefixlen=$(cat /usr/local/bin/pve_ipv6_prefixlen)
 fi
-if [ -z "$ipv6_address" ]; then
-    _red "No IPV6 address on the parent machine, no automatic mapping"
-    _red "母机无 IPV6 地址，不进行自动映射"
-else
-    _blue "The IPV6 address of the host is $ipv6_address"
-    _blue "母鸡的IPV6地址为 $ipv6_address"
+if [ -f /usr/local/bin/pve_ipv6_gateway ]; then
+    ipv6_gateway=$(cat /usr/local/bin/pve_ipv6_gateway)
 fi
 
 # 录入网关
-if [ -f /etc/network/interfaces ]; then
+if [ ! -f /etc/network/interfaces.bak ]; then
     cp /etc/network/interfaces /etc/network/interfaces.bak
 fi
 # 修正部分网络设置重复的错误
@@ -95,62 +64,17 @@ fi
 interfaces_file="/etc/network/interfaces"
 chattr -i "$interfaces_file"
 if ! grep -q "auto lo" "$interfaces_file"; then
-#     echo "auto lo" >> "$interfaces_file"
     _blue "Can not find 'auto lo' in ${interfaces_file}"
     exit 1
 fi
 if ! grep -q "iface lo inet loopback" "$interfaces_file"; then
-#     echo "iface lo inet loopback" >> "$interfaces_file"
     _blue "Can not find 'iface lo inet loopback' in ${interfaces_file}"
     exit 1
-fi
-if grep -q "vmbr0" "$interfaces_file"; then
-    _blue "vmbr0 already exists in ${interfaces_file}"
-    _blue "vmbr0 已存在在 ${interfaces_file}"
-else
-if [ -z "$SUBNET_PREFIX" ] || [ "$SUBNET_PREFIX" = ":0" ] || [ -z "$ipv6_address" ]; then
-cat << EOF | sudo tee -a "$interfaces_file"
-auto vmbr0
-iface vmbr0 inet static
-    address $ipv4_address
-    gateway $gateway
-    bridge_ports $interface
-    bridge_stp off
-    bridge_fd 0
-EOF
-elif [ -f "/root/iface_auto.txt" ]; then
-cat << EOF | sudo tee -a "$interfaces_file"
-auto vmbr0
-iface vmbr0 inet static
-    address $ipv4_address
-    gateway $gateway
-    bridge_ports $interface
-    bridge_stp off
-    bridge_fd 0
-
-iface vmbr0 inet6 auto
-    bridge_ports $interface
-EOF
-else
-cat << EOF | sudo tee -a "$interfaces_file"
-auto vmbr0
-iface vmbr0 inet static
-    address $ipv4_address
-    gateway $gateway
-    bridge_ports $interface
-    bridge_stp off
-    bridge_fd 0
-
-iface vmbr0 inet6 static
-        address ${ipv6_address}
-        gateway ${SUBNET_PREFIX}
-EOF
-fi
 fi
 if grep -q "vmbr1" "$interfaces_file"; then
     _blue "vmbr1 already exists in ${interfaces_file}"
     _blue "vmbr1 已存在在 ${interfaces_file}"
-elif [ -f "/root/iface_auto.txt" ]; then
+elif [ -f "/usr/local/bin/iface_auto.txt" ]; then
 cat << EOF | sudo tee -a "$interfaces_file"
 auto vmbr1
 iface vmbr1 inet static
@@ -166,7 +90,7 @@ iface vmbr1 inet static
 
 pre-up echo 2 > /proc/sys/net/ipv6/conf/vmbr0/accept_ra
 EOF
-else
+elif [ -z "$ipv6_address" ] || [ -z "$ipv6_prefixlen" ] || [ -z "$ipv6_gateway" ]; then
 cat << EOF | sudo tee -a "$interfaces_file"
 auto vmbr1
 iface vmbr1 inet static
@@ -180,9 +104,30 @@ iface vmbr1 inet static
     post-up iptables -t nat -A POSTROUTING -s '172.16.1.0/24' -o vmbr0 -j MASQUERADE
     post-down iptables -t nat -D POSTROUTING -s '172.16.1.0/24' -o vmbr0 -j MASQUERADE
 EOF
+else
+cat << EOF | sudo tee -a "$interfaces_file"
+auto vmbr1
+iface vmbr1 inet static
+    address 172.16.1.1
+    netmask 255.255.255.0
+    bridge_ports none
+    bridge_stp off
+    bridge_fd 0
+    post-up echo 1 > /proc/sys/net/ipv4/ip_forward
+    post-up echo 1 > /proc/sys/net/ipv4/conf/vmbr1/proxy_arp
+    post-up iptables -t nat -A POSTROUTING -s '172.16.1.0/24' -o vmbr0 -j MASQUERADE
+    post-down iptables -t nat -D POSTROUTING -s '172.16.1.0/24' -o vmbr0 -j MASQUERADE
+
+iface vmbr1 inet6 static
+    address 2001:db8:1::1/64
+    post-up sysctl -w net.ipv6.conf.all.forwarding=1
+    post-up ip6tables -t nat -A POSTROUTING -s 2001:db8:1::/64 -o vmbr0 -j MASQUERADE
+    post-down sysctl -w net.ipv6.conf.all.forwarding=0
+    post-down ip6tables -t nat -D POSTROUTING -s 2001:db8:1::/64 -o vmbr0 -j MASQUERADE
+EOF
 fi
 chattr +i "$interfaces_file"
-rm -rf /root/iface_auto.txt
+rm -rf /usr/local/bin/iface_auto.txt
 
 # 加载iptables并设置回源且允许NAT端口转发
 apt-get install -y iptables iptables-persistent

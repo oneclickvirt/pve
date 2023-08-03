@@ -1,7 +1,7 @@
 #!/bin/bash
 # from 
 # https://github.com/spiritLHLS/pve
-# 2023.07.30
+# 2023.08.03
 
 
 # 打印信息
@@ -20,7 +20,7 @@ else
   echo "Locale set to $utf8_locale"
 fi
 
-if [ -f "/root/build_backend_pve.txt" ]; then
+if [ -f "/usr/local/bin/build_backend_pve.txt" ]; then
     _green "You have already executed this script, if you have already rebooted your system, please execute the subsequent script commands to automatically configure the gateway, if you have not rebooted your system, please reboot your system"
     _grenn "Do not run this script repeatedly"
     _green "你已执行过本脚本，如果已重启过系统，请执行后续的自动配置网关的脚本命令，如果未重启过系统，请重启系统"
@@ -118,4 +118,4 @@ else
     _yellow "The current kernel is already a PVE kernel, no need to reboot the system to update the kernel"
     _yellow "当前内核已是PVE内核，无需重启系统更新内核"
 fi
-echo "1" > "/root/build_backend_pve.txt"
+echo "1" > "/usr/local/bin/build_backend_pve.txt"

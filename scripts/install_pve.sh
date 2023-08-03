@@ -75,14 +75,10 @@ install_package() {
         if [ $? -ne 0 ]; then
             apt_output=$(apt-get install -y $package_name --fix-missing 2>&1)
         fi
-        if [ $? -ne 0 ] && [ "$package_name" != "proxmox-ve" ]; then
-            _green "$package_name tried to install but failed, exited the program"
-            _green "$package_name 已尝试安装但失败，退出程序"
-            exit 1
-        elif [ $? -ne 0 ] && [ "$package_name" == "proxmox-ve" ]; then
-            if echo "$apt_output" | grep -qE 'DEBIAN_FRONTEND=dialog dpkg --configure grub-pc' &&
-              echo "$apt_output" | grep -qE 'dpkg --configure -a' &&
-              echo "$apt_output" | grep -qE 'dpkg: error processing package grub-pc \(--configure\):'
+        if [ $? -ne 0 ]; then
+            if  echo "$apt_output" | grep -qE 'DEBIAN_FRONTEND=dialog dpkg --configure grub-pc' &&
+                echo "$apt_output" | grep -qE 'dpkg --configure -a' &&
+                echo "$apt_output" | grep -qE 'dpkg: error processing package grub-pc \(--configure\):'
             then
                 # 手动选择
                 # DEBIAN_FRONTEND=dialog dpkg --configure grub-pc
@@ -98,6 +94,11 @@ install_package() {
                 fi
                 apt-get install -y $package_name --fix-missing
             fi
+        fi
+        if [ $? -ne 0 ]; then
+            _green "$package_name tried to install but failed, exited the program"
+            _green "$package_name 已尝试安装但失败，退出程序"
+            exit 1
         fi
         _green "$package_name tried to install"
         _green "$package_name 已尝试安装"
@@ -280,26 +281,21 @@ remove_source_input
 # 检查/etc/network/interfaces文件中是否有iface xxxx inet auto行
 if [ -f "/etc/network/interfaces" ]; then
     if grep -q "iface $interface inet auto" /etc/network/interfaces; then
-        # 获取ipv4、subnet、gateway信息
-        gateway=$(ip route | awk '/default/ {print $3}')
-        interface_info=$(ip -o -4 addr show dev $interface | awk '{print $4}')
-        ipv4=$(echo $interface_info | cut -d'/' -f1)
-        subnet=$(echo $interface_info | cut -d'/' -f2)
-        subnet=$(ipcalc -n "$ipv4/$subnet" | grep -oP 'Netmask:\s+\K.*' | awk '{print $1}')
+        subnet=$(ipcalc -n "$ipv4_address" | grep -oP 'Netmask:\s+\K.*' | awk '{print $1}')
         chattr -i /etc/network/interfaces
         if [[ -z "${CN}" || "${CN}" != true ]]; then
             sed -i "/iface $interface inet auto/c\
                 iface $interface inet static\n\
-                address $ipv4\n\
+                address $ipv4_address\n\
                 netmask $subnet\n\
-                gateway $gateway\n\
+                gateway $ipv4_gateway\n\
                 dns-nameservers 8.8.8.8 8.8.4.4" /etc/network/interfaces
         else
             sed -i "/iface $interface inet auto/c\
                 iface $interface inet static\n\
-                address $ipv4\n\
+                address $ipv4_address\n\
                 netmask $subnet\n\
-                gateway $gateway\n\
+                gateway $ipv4_gateway\n\
                 dns-nameservers 8.8.8.8 223.5.5.5" /etc/network/interfaces
         fi
     fi
@@ -315,25 +311,21 @@ if [[ $dmidecode_output == *"Hetzner_vServer"* ]] || [[ $dmidecode_output == *"M
         fi
         if grep -q "iface $interface inet dhcp" /etc/network/interfaces; then
             # 获取ipv4、subnet、gateway信息
-            gateway=$(ip route | awk '/default/ {print $3}')
-            interface_info=$(ip -o -4 addr show dev $interface | awk '{print $4}')
-            ipv4=$(echo $interface_info | cut -d'/' -f1)
-            subnet=$(echo $interface_info | cut -d'/' -f2)
-            subnet=$(ipcalc -n "$ipv4/$subnet" | grep -oP 'Netmask:\s+\K.*' | awk '{print $1}')
+            subnet=$(ipcalc -n "$ipv4_address" | grep -oP 'Netmask:\s+\K.*' | awk '{print $1}')
             chattr -i /etc/network/interfaces
             if [[ -z "${CN}" || "${CN}" != true ]]; then
                 sed -i "/iface $interface inet dhcp/c\
                     iface $interface inet static\n\
-                    address $ipv4\n\
+                    address $ipv4_address\n\
                     netmask $subnet\n\
-                    gateway $gateway\n\
+                    gateway $ipv4_gateway\n\
                     dns-nameservers 8.8.8.8 8.8.4.4" /etc/network/interfaces
             else
                 sed -i "/iface $interface inet dhcp/c\
                     iface $interface inet static\n\
-                    address $ipv4\n\
+                    address $ipv4_address\n\
                     netmask $subnet\n\
-                    gateway $gateway\n\
+                    gateway $ipv4_gateway\n\
                     dns-nameservers 8.8.8.8 223.5.5.5" /etc/network/interfaces
             fi
         fi
@@ -376,13 +368,6 @@ fix_interfaces_ipv6_auto_type(){
                 modified_line="${line/auto/static}"
                 echo "$modified_line"
                 # 添加静态IPv6配置信息
-                ipv6_prefixlen=$(ifconfig ${interface} | grep -oP 'prefixlen \K\d+' | head -n 1)
-                # 获取IPv6地址
-                # ipv6_address=$(ifconfig ${interface} | grep -oE 'inet6 ([0-9a-fA-F:]+)' | awk '{print $2}' | head -n 1)
-                ipv6_address=$(ip -6 addr show dev ${interface} | awk '/inet6 .* scope global dynamic/{print $2}')
-                # 提取地址部分
-                ipv6_address=${ipv6_address%%/*}
-                ipv6_gateway=$(ip -6 route show | awk '/default via/{print $3}')
                 echo "    address ${ipv6_address}/${ipv6_prefixlen}"
                 echo "    gateway ${ipv6_gateway}"
             fi
@@ -394,6 +379,62 @@ fix_interfaces_ipv6_auto_type(){
     mv -f /tmp/interfaces.modified /etc/network/interfaces
     chattr +i /etc/network/interfaces
     rm -rf /tmp/interfaces.modified
+}
+
+is_private_ipv6() {
+    local address=$1
+    # 输入为空
+    if [[ -z $ip_address ]]; then
+        return 0
+    fi
+    # 检查IPv6地址是否以fe80开头（链接本地地址）
+    if [[ $address == fe80:* ]]; then
+        return 0
+    fi
+    # 检查IPv6地址是否以fc00或fd00开头（唯一本地地址）
+    if [[ $address == fc00:* || $address == fd00:* ]]; then
+        return 0
+    fi
+    # 检查IPv6地址是否以2001:db8开头（文档前缀）
+    if [[ $address == 2001:db8* ]]; then
+        return 0
+    fi
+    # 检查IPv6地址是否以::1开头（环回地址）
+    if [[ $address == ::1 ]]; then
+        return 0
+    fi
+    # 检查IPv6地址是否以::ffff:开头（IPv4映射地址）
+    if [[ $address == ::ffff:* ]]; then
+        return 0
+    fi
+    # 检查IPv6地址是否以2002:开头（6to4隧道地址）
+    if [[ $address == 2002:* ]]; then
+        return 0
+    fi
+    # 检查IPv6地址是否以2001:开头（Teredo隧道地址）
+    if [[ $address == 2001:* ]]; then
+        return 0
+    fi
+    # 其他情况为公网地址
+    return 1
+}
+
+check_ipv6(){
+    IPV6=$(ip -6 addr show | grep global | awk '{print $2}' | cut -d '/' -f1 | head -n 1)
+    local response
+    if is_private_ipv6 "$IPV6"; then # 由于是内网IPV4地址，需要通过API获取外网地址
+        IPV6=""
+        local API_NET=("ipv6.ip.sb" "https://ipget.net" "ipv6.ping0.cc" "https://api.my-ip.io/ip" "https://ipv6.icanhazip.com")
+        for p in "${API_NET[@]}"; do
+            response=$(curl -sLk6m8 "$p" | tr -d '[:space:]')
+            sleep 1
+            if [ $? -eq 0 ] && ! echo "$response" | grep -q "error"; then
+                IPV6="$response"
+                break
+            fi
+        done
+    fi
+    echo $IPV6 > /usr/local/bin/pve_check_ipv6
 }
 
 check_cdn() {
@@ -619,6 +660,9 @@ check_interface(){
 
 ########## 前置环境检测和组件安装
 
+# 更改网络优先级为IPV4优先
+sed -i 's/.*precedence ::ffff:0:0\/96.*/precedence ::ffff:0:0\/96  100/g' /etc/gai.conf && systemctl restart networking
+
 # ChinaIP检测
 check_china
 
@@ -710,8 +754,25 @@ check_haveged
 _yellow "Detecting system information, will probably stay on the page for up to 1~2 minutes"
 _yellow "正在检测系统信息，大概会停留在该页面最多1~2分钟"
 
+# 检测主IPV4相关信息
+if [ ! -f /usr/local/bin/pve_main_ipv4 ]; then
+    main_ipv4=$(ip -4 addr show | grep global | awk '{print $2}' | cut -d '/' -f1 | head -n 1)
+    echo "$main_ipv4" > /usr/local/bin/pve_main_ipv4
+fi
+if [ ! -f /usr/local/bin/pve_ipv4_address ]; then
+    ipv4_address=$(ip addr show | awk '/inet .*global/ && !/inet6/ {print $2}' | sed -n '1p')
+    echo "$ipv4_address" > /usr/local/bin/pve_ipv4_address
+fi
+if [ ! -f /usr/local/bin/pve_ipv4_gateway ]; then
+    ipv4_gateway=$(ip route | awk '/default/ {print $3}' | sed -n '1p')
+    echo "$ipv4_gateway" > /usr/local/bin/pve_ipv4_gateway
+fi
 # 检测主IPV4地址
-main_ipv4=$(ip -4 addr show | grep global | awk '{print $2}' | cut -d '/' -f1 | head -n 1)
+main_ipv4=$(cat /usr/local/bin/pve_main_ipv4)
+# 提取IPV4地址 含子网长度
+ipv4_address=$(cat /usr/local/bin/pve_ipv4_address)
+# 提取IPV4网关
+ipv4_gateway=$(cat /usr/local/bin/pve_ipv4_gateway)
 
 # 检测物理接口和MAC地址
 interface_1=$(lshw -C network | awk '/logical name:/{print $3}' | sed -n '1p')
@@ -720,6 +781,22 @@ check_interface
 # if [ "$system_arch" = "arch" ]; then
 #     mac_address=$(ip -o link show dev ${interface} | awk '{print $17}')
 # fi
+
+# 检测IPV6相关的信息
+if [ ! -f /usr/local/bin/pve_check_ipv6 ]; then
+    check_ipv6
+fi
+if [ ! -f /usr/local/bin/pve_ipv6_prefixlen ]; then
+    ipv6_prefixlen=$(ifconfig ${interface} | grep -oP 'prefixlen \K\d+' | head -n 1)
+    echo "$ipv6_prefixlen" > /usr/local/bin/pve_ipv6_prefixlen
+fi
+if [ ! -f /usr/local/bin/pve_ipv6_gateway ]; then
+    ipv6_gateway=$(ip -6 route show | awk '/default via/{print $3}')
+    echo "$ipv6_gateway" > /usr/local/bin/pve_ipv6_gateway
+fi
+ipv6_address=$(cat /usr/local/bin/pve_check_ipv6)
+ipv6_prefixlen=$(cat /usr/local/bin/pve_ipv6_prefixlen)
+ipv6_gateway=$(cat /usr/local/bin/pve_ipv6_gateway)
 
 # 检查50-cloud-init是否存在特定配置
 if [ -f "/etc/network/interfaces.d/50-cloud-init" ]; then
@@ -734,18 +811,14 @@ fi
 # 特殊化处理各虚拟化
 if [ ! -f "/etc/network/interfaces" ]; then
     touch "/etc/network/interfaces"
-    gateway=$(ip route | awk '/default/ {print $3}')
-    interface_info=$(ip -o -4 addr show dev $interface | awk '{print $4}')
-    ipv4=$(echo $interface_info | cut -d'/' -f1)
-    subnet=$(echo $interface_info | cut -d'/' -f2)
-    subnet=$(ipcalc -n "$ipv4/$subnet" | grep -oP 'Netmask:\s+\K.*' | awk '{print $1}')
+    subnet=$(ipcalc -n "$ipv4_address" | grep -oP 'Netmask:\s+\K.*' | awk '{print $1}')
     chattr -i /etc/network/interfaces
     echo "auto lo" >> /etc/network/interfaces
     echo "iface lo inet loopback" >> /etc/network/interfaces
     echo "iface $interface inet static" >> /etc/network/interfaces
-    echo "    address $ipv4" >> /etc/network/interfaces
+    echo "    address $ipv4_address" >> /etc/network/interfaces
     echo "    netmask $subnet" >> /etc/network/interfaces
-    echo "    gateway $gateway" >> /etc/network/interfaces
+    echo "    gateway $ipv4_gateway" >> /etc/network/interfaces
     if [[ -z "${CN}" || "${CN}" != true ]]; then
         echo "    dns-nameservers 8.8.8.8 8.8.4.4" >> /etc/network/interfaces
     else
@@ -810,9 +883,6 @@ fi
 if [[ "${CN}" == true ]]; then
     echo "nameserver 223.5.5.5" >> /etc/resolv.conf
 fi
-
-# 更改网络优先级为IPV4优先
-sed -i 's/.*precedence ::ffff:0:0\/96.*/precedence ::ffff:0:0\/96  100/g' /etc/gai.conf && systemctl restart networking
 
 # cloud-init文件修改
 rebuild_cloud_init
@@ -1020,6 +1090,53 @@ fi
 # 修复网卡可能存在的auto类型
 rebuild_interfaces
 fix_interfaces_ipv6_auto_type
+
+# 配置vmbr0
+chattr -i /etc/network/interfaces
+if grep -q "vmbr0" "/etc/network/interfaces"; then
+    _blue "vmbr0 already exists in /etc/network/interfaces"
+    _blue "vmbr0 已存在在 /etc/network/interfaces"
+else
+    if [ -z "$ipv6_address" ] || [ -z "$ipv6_prefixlen" ] || [ -z "$ipv6_gateway" ]; then
+cat << EOF | sudo tee -a /etc/network/interfaces
+auto vmbr0
+iface vmbr0 inet static
+    address $ipv4_address
+    gateway $ipv4_gateway
+    bridge_ports $interface
+    bridge_stp off
+    bridge_fd 0
+EOF
+    elif [ -f "/usr/local/bin/iface_auto.txt" ]; then
+cat << EOF | sudo tee -a /etc/network/interfaces
+auto vmbr0
+iface vmbr0 inet static
+    address $ipv4_address
+    gateway $ipv4_gateway
+    bridge_ports $interface
+    bridge_stp off
+    bridge_fd 0
+
+iface vmbr0 inet6 auto
+    bridge_ports $interface
+EOF
+    else
+cat << EOF | sudo tee -a /etc/network/interfaces
+auto vmbr0
+iface vmbr0 inet static
+    address $ipv4_address
+    gateway $ipv4_gateway
+    bridge_ports $interface
+    bridge_stp off
+    bridge_fd 0
+
+iface vmbr0 inet6 static
+        address ${ipv6_address}/${ipv6_prefixlen}
+        gateway ${ipv6_gateway}
+EOF
+    fi
+fi
+chattr +i /etc/network/interfaces
 
 # 特殊处理Hetzner和Azure的情况
 if [[ $dmidecode_output == *"Hetzner_vServer"* ]] || [[ $dmidecode_output == *"Microsoft Corporation"* ]]; then
