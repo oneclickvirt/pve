@@ -4,6 +4,8 @@
 # 2023.07.31
 
 
+########## 预设部分输出和部分中间变量
+
 cd /root >/dev/null 2>&1
 _red() { echo -e "\033[31m\033[01m$@\033[0m"; }
 _green() { echo -e "\033[32m\033[01m$@\033[0m"; }
@@ -22,7 +24,35 @@ else
 fi
 temp_file_apt_fix="/tmp/apt_fix.txt"
 
-########## 定义部分需要使用的函数和组件预安装
+########## 备份配置文件
+
+if [ -f /etc/network/interfaces ]; then
+    if [ ! -f /etc/network/interfaces.bak ]; then
+        cp /etc/network/interfaces /etc/network/interfaces.bak
+    fi
+fi
+if [ -f /etc/network/interfaces.new ]; then
+    if [ ! -f /etc/network/interfaces.new.bak ]; then
+        cp /etc/network/interfaces.new /etc/network/interfaces.new.bak
+    fi
+fi
+if [ -f "/etc/cloud/cloud.cfg" ]; then
+    if [ ! -f /etc/cloud/cloud.cfg.bak ]; then
+        cp /etc/cloud/cloud.cfg /etc/cloud/cloud.cfg.bak
+    fi
+fi
+if [ -f "/etc/hosts" ]; then
+    if [ ! -f /etc/hosts.bak ]; then
+        cp /etc/hosts /etc/hosts.bak
+    fi
+fi
+if [ -f "/etc/apt/sources.list" ]; then
+    if [ ! -f /etc/apt/sources.list.bak ]; then
+        cp /etc/apt/sources.list /etc/apt/sources.list.bak
+    fi
+fi
+
+########## 定义部分需要使用的函数
 
 remove_duplicate_lines() {
     chattr -i "$1"
@@ -514,8 +544,6 @@ check_china(){
 }
 
 change_debian_apt_sources() {
-  cp /etc/apt/sources.list /etc/apt/sources.list.bak
-  yellow "backup the current /etc/apt/sources.list to /etc/apt/sources.list.bak"
   DEBIAN_VERSION=$(lsb_release -sr)
   if [[ -z "${CN}" || "${CN}" != true ]]; then
     URL="http://deb.debian.org/debian"
@@ -544,6 +572,52 @@ deb-src ${URL} ${DEBIAN_RELEASE}-updates main contrib non-free
 deb-src ${URL} ${DEBIAN_RELEASE}-backports main contrib non-free
 EOF
 }
+
+check_interface(){
+    if [ -z "$interface_2" ]; then
+        interface=${interface_1}
+        return
+    elif [ -n "$interface_1" ] && [ -n "$interface_2" ]; then
+        if ! grep -q "$interface_1" "/etc/network/interfaces" && ! grep -q "$interface_2" "/etc/network/interfaces" && [ -f "/etc/network/interfaces.d/50-cloud-init" ]; then
+            if grep -q "$interface_1" "/etc/network/interfaces.d/50-cloud-init" || grep -q "$interface_2" "/etc/network/interfaces.d/50-cloud-init"; then
+                if ! grep -q "$interface_1" "/etc/network/interfaces.d/50-cloud-init" && grep -q "$interface_2" "/etc/network/interfaces.d/50-cloud-init"; then
+                    interface=${interface_2}
+                    return
+                elif ! grep -q "$interface_2" "/etc/network/interfaces.d/50-cloud-init" && grep -q "$interface_1" "/etc/network/interfaces.d/50-cloud-init"; then
+                    interface=${interface_1}
+                    return
+                fi
+            fi
+        fi
+        if grep -q "$interface_1" "/etc/network/interfaces"; then
+            interface=${interface_1}
+            return
+        elif grep -q "$interface_2" "/etc/network/interfaces"; then
+            interface=${interface_2}
+            return
+        else
+            interfaces_list=$(ip addr show | awk '/^[0-9]+: [^lo]/ {print $2}' | cut -d ':' -f 1)
+            interface=""
+            for iface in $interfaces_list; do
+                if [[ "$iface" = "$interface_1" || "$iface" = "$interface_2" ]]; then
+                    interface="$iface"
+                fi
+            done
+            if [ -z "$interface" ]; then
+                interface="eth0"
+            fi
+            return
+        fi
+    else
+        interface="eth0"
+        return
+    fi
+    _red "Physical interface not found, exit execution"
+    _red "找不到物理接口，退出执行"
+    exit 1
+}
+
+########## 前置环境检测和组件安装
 
 # ChinaIP检测
 check_china
@@ -626,55 +700,9 @@ install_package dnsutils
 install_package ethtool
 ethtool_path=$(which ethtool)
 check_haveged
-
 # 检测系统信息
 _yellow "Detecting system information, will probably stay on the page for up to 1~2 minutes"
 _yellow "正在检测系统信息，大概会停留在该页面最多1~2分钟"
-
-check_interface(){
-    if [ -z "$interface_2" ]; then
-        interface=${interface_1}
-        return
-    elif [ -n "$interface_1" ] && [ -n "$interface_2" ]; then
-        if ! grep -q "$interface_1" "/etc/network/interfaces" && ! grep -q "$interface_2" "/etc/network/interfaces" && [ -f "/etc/network/interfaces.d/50-cloud-init" ]; then
-            if grep -q "$interface_1" "/etc/network/interfaces.d/50-cloud-init" || grep -q "$interface_2" "/etc/network/interfaces.d/50-cloud-init"; then
-                if ! grep -q "$interface_1" "/etc/network/interfaces.d/50-cloud-init" && grep -q "$interface_2" "/etc/network/interfaces.d/50-cloud-init"; then
-                    interface=${interface_2}
-                    return
-                elif ! grep -q "$interface_2" "/etc/network/interfaces.d/50-cloud-init" && grep -q "$interface_1" "/etc/network/interfaces.d/50-cloud-init"; then
-                    interface=${interface_1}
-                    return
-                fi
-            fi
-        fi
-        if grep -q "$interface_1" "/etc/network/interfaces"; then
-            interface=${interface_1}
-            return
-        elif grep -q "$interface_2" "/etc/network/interfaces"; then
-            interface=${interface_2}
-            return
-        else
-            interfaces_list=$(ip addr show | awk '/^[0-9]+: [^lo]/ {print $2}' | cut -d ':' -f 1)
-            interface=""
-            for iface in $interfaces_list; do
-                if [[ "$iface" = "$interface_1" || "$iface" = "$interface_2" ]]; then
-                    interface="$iface"
-                fi
-            done
-            if [ -z "$interface" ]; then
-                interface="eth0"
-            fi
-            return
-        fi
-    else
-        interface="eth0"
-        return
-    fi
-    _red "Physical interface not found, exit execution"
-    _red "找不到物理接口，退出执行"
-    exit 1
-}
-
 # 检测主IPV4地址
 main_ipv4=$(ip -4 addr show | grep global | awk '{print $2}' | cut -d '/' -f1 | head -n 1)
 # 检测物理接口和MAC地址
@@ -761,7 +789,7 @@ if [ ! -f "/usr/local/bin/reboot_pve.txt" ]; then
     exit 1
 fi
 
-########## 正式开始安装
+########## 正式开始PVE相关配置文件修改
 
 # 如果是CN的IP则增加DNS先
 if [[ "${CN}" == true ]]; then
@@ -947,17 +975,8 @@ elif [ "$system_arch" = "arch" ]; then
         curl https://mirrors.apqa.cn/proxmox/debian/pveport.gpg -o /etc/apt/trusted.gpg.d/pveport.gpg
     fi
 fi
-
-# 备份网络设置
-if [ -f /etc/network/interfaces ]; then
-    cp /etc/network/interfaces /etc/network/interfaces.bak
-fi
-if [ -f /etc/network/interfaces.new ]; then
-    cp /etc/network/interfaces.new /etc/network/interfaces.new.bak
-fi
 rebuild_interfaces
 
-# 下载pve
 # 确保apt没有问题
 apt-get update -y && apt-get full-upgrade -y
 if [ $? -ne 0 ]; then
@@ -982,9 +1001,11 @@ if echo $output | grep -q "NO_PUBKEY"; then
     _yellow "try sudo apt-key adv --keyserver keyserver.ubuntu.com --recvrebuild_interface-keys missing key"
     exit 1
 fi
+
 # 修复网卡可能存在的auto类型
 rebuild_interfaces
 fix_interfaces_ipv6_auto_type
+
 # 特殊处理Hetzner和Azure的情况
 if [[ $dmidecode_output == *"Hetzner_vServer"* ]] || [[ $dmidecode_output == *"Microsoft Corporation"* ]]; then
     auto_interface=$(grep '^auto ' /etc/network/interfaces | grep -v '^auto lo' | awk '{print $2}' | head -n 1)
@@ -994,9 +1015,11 @@ if [[ $dmidecode_output == *"Hetzner_vServer"* ]] || [[ $dmidecode_output == *"M
         chattr +i /etc/network/interfaces
     fi
 fi
+
 # 部分机器中途service丢失了，尝试修复
 install_package service
-# 正式安装
+
+# 正式安装PVE
 install_package proxmox-ve
 install_package postfix
 install_package open-iscsi
@@ -1040,6 +1063,8 @@ install_package cloud-init
 rebuild_cloud_init
 # install_package isc-dhcp-server
 chattr +i /etc/network/interfaces
+
+# 确保DNS有效
 if [ ! -s "/etc/resolv.conf" ]
 then
     cp /etc/resolv.conf /etc/resolv.conf.bak
@@ -1049,13 +1074,19 @@ then
         echo -e "nameserver 8.8.8.8\nnameserver 8.8.4.4\nnameserver 2001:4860:4860::8888\nnameserver 2001:4860:4860::8844" > /etc/resolv.conf
     fi
 fi
+
 # 清除防火墙
 install_package ufw
 ufw disable
+
+########## 打印安装成功的信息
+
 # 查询公网IPV4
 check_ipv4
+
 # 打印安装后的信息
 url="https://${IPV4}:8006/"
+
 # 打印内核
 running_kernel=$(uname -r)
 _green "Running kernel: $(pveversion)"
@@ -1064,6 +1095,7 @@ if [ ${#installed_kernels[@]} -gt 0 ]; then
     latest_kernel=${installed_kernels[-1]}
     _green "PVE latest kernel: $latest_kernel"
 fi
+
 _green "Installation complete, please open HTTPS web page $url"
 _green "The username and password are the username and password used by the server (e.g. root and root user's password)"
 _green "If the login is correct please do not rush to reboot the system, go to execute the commands of the pre-configured environment and then reboot the system"
