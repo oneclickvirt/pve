@@ -140,11 +140,11 @@ if [ "$system_arch" = "x86" ]; then
         done
         if [[ "centos8-stream" == "$system" ]]; then
             url="https://git.ilolicon.dev/Ella-Alinda/images/raw/branch/main/centos8-stream.qcow2"
-            curl -L -o "$file_path" "$url"
+            curl -Lk -o "$file_path" "$url"
         else
             if [[ -n "$ver" ]]; then
                 url="${cdn_success_url}https://github.com/oneclickvirt/kvm_images/releases/download/${ver}/${system}.qcow2"
-                curl -L -o "$file_path" "$url"
+                curl -Lk -o "$file_path" "$url"
             else
                 _red "Unable to install corresponding system, please check https://github.com/oneclickvirt/kvm_images/ for supported system images "
                 _red "无法安装对应系统，请查看 https://github.com/oneclickvirt/kvm_images/ 支持的系统镜像 "
