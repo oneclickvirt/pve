@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/spiritLHLS/pve
-# 2023.08.02
+# 2023.08.03
 # 手动指定要绑定的IPV4地址
 
 
@@ -133,6 +133,7 @@ if [ "$system_arch" = "x86" ]; then
         "alpinelinux_edge"
         "alpinelinux_stable"
         "rockylinux8"
+        "centos8-stream"
         )
     for sys in ${systems[@]}; do
         if [[ "$system" == "$sys" ]]; then
@@ -162,13 +163,18 @@ if [ "$system_arch" = "x86" ]; then
                 break
             fi
         done
-        if [[ -n "$ver" ]]; then
-            url="${cdn_success_url}https://github.com/oneclickvirt/kvm_images/releases/download/${ver}/${system}.qcow2"
+        if [[ "centos8-stream" == "$system" ]]; then
+            url="https://git.ilolicon.dev/Ella-Alinda/images/raw/branch/main/centos8-stream.qcow2"
             curl -L -o "$file_path" "$url"
         else
-            _red "Unable to install corresponding system, please check https://github.com/oneclickvirt/kvm_images/ for supported system images "
-            _red "无法安装对应系统，请查看 https://github.com/oneclickvirt/kvm_images/ 支持的系统镜像 "
-            exit 1
+            if [[ -n "$ver" ]]; then
+                url="${cdn_success_url}https://github.com/oneclickvirt/kvm_images/releases/download/${ver}/${system}.qcow2"
+                curl -L -o "$file_path" "$url"
+            else
+                _red "Unable to install corresponding system, please check https://github.com/oneclickvirt/kvm_images/ for supported system images "
+                _red "无法安装对应系统，请查看 https://github.com/oneclickvirt/kvm_images/ 支持的系统镜像 "
+                exit 1
+            fi
         fi
     fi
 elif [ "$system_arch" = "arch" ]; then
