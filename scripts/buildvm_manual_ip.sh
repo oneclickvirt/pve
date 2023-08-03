@@ -163,7 +163,7 @@ if [ "$system_arch" = "x86" ]; then
                 break
             fi
         done
-        if [[ "centos8-stream" == "$system" ]]; then
+        if [[ "$system" == "centos8-stream" ]]; then
             url="https://git.ilolicon.dev/Ella-Alinda/images/raw/branch/main/centos8-stream.qcow2"
             curl -Lk -o "$file_path" "$url"
         else
@@ -271,12 +271,15 @@ _green "当前虚拟机将绑定的IP为：${user_ip}"
 qm create $vm_num --agent 1 --scsihw virtio-scsi-single --serial0 socket --cores $core --sockets 1 --cpu host --net0 virtio,bridge=vmbr0,firewall=0
 if [ "$system_arch" = "x86" ]; then
     qm importdisk $vm_num /root/qcow/${system}.qcow2 ${storage}
-    sleep 3
-    qm set $vm_num --scsihw virtio-scsi-pci --scsi0 ${storage}:${vm_num}/vm-${vm_num}-disk-0.raw
 else
     qm set $vm_num --bios ovmf
     qm importdisk $vm_num /root/qcow/${system}.img ${storage}
-    sleep 3
+fi
+sleep 3
+raw_name=$(ls /var/lib/vz/images/${vm_num}/*.raw | xargs -n1 basename | tail -n 1)
+if [ -n "$raw_name" ]; then
+    qm set $vm_num --scsihw virtio-scsi-pci --scsi0 ${storage}:${vm_num}/${raw_name}
+else
     qm set $vm_num --scsihw virtio-scsi-pci --scsi0 ${storage}:${vm_num}/vm-${vm_num}-disk-0.raw
 fi
 qm set $vm_num --bootdisk scsi0
