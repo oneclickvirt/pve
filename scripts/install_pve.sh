@@ -1,7 +1,7 @@
 #!/bin/bash
 # from 
 # https://github.com/spiritLHLS/pve
-# 2023.07.31
+# 2023.08.03
 
 
 ########## 预设部分输出和部分中间变量
@@ -621,9 +621,11 @@ check_interface(){
 
 # ChinaIP检测
 check_china
+
 # cdn检测
 cdn_urls=("https://cdn.spiritlhl.workers.dev/" "https://cdn3.spiritlhl.net/" "https://cdn1.spiritlhl.net/" "https://ghproxy.com/" "https://cdn2.spiritlhl.net/")
 check_cdn_file
+
 # 前置环境安装与配置
 if [ "$(id -u)" != "0" ]; then
    _red "This script must be run as root"
@@ -647,6 +649,7 @@ if [ ! -f "/usr/local/bin/check-dns.sh" ]; then
     systemctl enable check-dns.service
     systemctl start check-dns.service
 fi
+
 # 确保apt没有问题
 apt-get update -y
 apt-get full-upgrade -y
@@ -673,6 +676,7 @@ if [ $? -ne 0 ]; then
     apt-get update -y
 fi
 systemctl daemon-reload
+
 # 检测路径
 target_paths="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 for path in $(echo $target_paths | tr ':' ' '); do
@@ -685,6 +689,7 @@ if [ ! -d /usr/local/bin ]; then
     # 如果目录不存在，则创建它
     mkdir -p /usr/local/bin
 fi
+
 # 部分安装包提前安装
 install_package wget
 install_package curl
@@ -700,11 +705,14 @@ install_package dnsutils
 install_package ethtool
 ethtool_path=$(which ethtool)
 check_haveged
+
 # 检测系统信息
 _yellow "Detecting system information, will probably stay on the page for up to 1~2 minutes"
 _yellow "正在检测系统信息，大概会停留在该页面最多1~2分钟"
+
 # 检测主IPV4地址
 main_ipv4=$(ip -4 addr show | grep global | awk '{print $2}' | cut -d '/' -f1 | head -n 1)
+
 # 检测物理接口和MAC地址
 interface_1=$(lshw -C network | awk '/logical name:/{print $3}' | sed -n '1p')
 interface_2=$(lshw -C network | awk '/logical name:/{print $3}' | sed -n '2p')
@@ -712,7 +720,8 @@ check_interface
 # if [ "$system_arch" = "arch" ]; then
 #     mac_address=$(ip -o link show dev ${interface} | awk '{print $17}')
 # fi
-# 检查是否存在特定配置
+
+# 检查50-cloud-init是否存在特定配置
 if [ -f "/etc/network/interfaces.d/50-cloud-init" ]; then
     if grep -Fxq "# /etc/cloud/cloud.cfg.d/99-disable-network-config.cfg with the following:" /etc/network/interfaces.d/50-cloud-init && grep -Fxq "# network: {config: disabled}" /etc/network/interfaces.d/50-cloud-init; then
         if [ ! -f "/etc/cloud/cloud.cfg.d/99-disable-network-config.cfg" ]; then
@@ -721,6 +730,7 @@ if [ -f "/etc/network/interfaces.d/50-cloud-init" ]; then
         fi
     fi
 fi
+
 # 特殊化处理各虚拟化
 if [ ! -f "/etc/network/interfaces" ]; then
     touch "/etc/network/interfaces"
@@ -743,9 +753,11 @@ if [ ! -f "/etc/network/interfaces" ]; then
     fi
     chattr +i /etc/network/interfaces
 fi
+
 # 网络配置修改
 dmidecode_output=$(dmidecode -t system)
 rebuild_interfaces
+
 # 当v6是共存的类型时删除v6
 if grep -q "iface ${interface} inet6 manual" /etc/network/interfaces && grep -q "try_dhcp 1" /etc/network/interfaces; then
     chattr -i /etc/network/interfaces
@@ -754,11 +766,14 @@ if grep -q "iface ${interface} inet6 manual" /etc/network/interfaces && grep -q 
     sed -i '/try_dhcp 1/d' /etc/network/interfaces
     chattr +i /etc/network/interfaces
 fi
+
 # cloudinit 重构
 rebuild_cloud_init
 fix_interfaces_ipv6_auto_type
+
 # 统计运行次数
 statistics_of_run-times
+
 # 检测是否已重启过
 if [ ! -f "/usr/local/bin/reboot_pve.txt" ]; then
     # 确保时间没问题
