@@ -212,6 +212,9 @@ if ! grep -q "iface lo inet loopback" "/etc/network/interfaces"; then
     chattr +i /etc/network/interfaces
     _blue "Can not find 'iface lo inet loopback' in /etc/network/interfaces, add it"
 fi
+chattr -i /etc/network/interfaces
+echo " " >> /etc/network/interfaces
+chattr +i /etc/network/interfaces
 # 合并文件
 if [ -d "/etc/network/interfaces.d/" ]; then
     if [ ! -f "/etc/network/interfaces" ]; then
@@ -337,6 +340,26 @@ if ! grep -q "auto ${interface}" /etc/network/interfaces; then
     chattr -i /etc/network/interfaces
     echo "auto ${interface}" >> /etc/network/interfaces
     chattr +i /etc/network/interfaces
+fi
+# 删除可能的多个dns-nameservers的行只保留一行
+dns_lines=$(grep -c "dns-nameservers" /etc/network/interfaces)
+if [ $dns_lines -gt 1 ]; then
+    rm -rf /tmp/interfaces.tmp
+    original_lines=$(wc -l < /etc/network/interfaces)
+    current_dns_lines=0
+    while read -r line; do
+    if echo "$line" | grep -q "dns-nameservers"; then
+        current_dns_lines=$((current_dns_lines + 1))
+        if [ $current_dns_lines -lt $dns_lines ]; then
+        continue
+        fi
+    fi
+    echo "$line" >> /tmp/interfaces.tmp
+    done < /etc/network/interfaces
+    chattr -i /etc/network/interfaces
+    mv /tmp/interfaces.tmp /etc/network/interfaces
+    chattr +i /etc/network/interfaces
+    rm -rf /tmp/interfaces.tmp
 fi
 # 反加载
 if [[ -f "/etc/network/interfaces.new" && -f "/etc/network/interfaces" ]]; then
