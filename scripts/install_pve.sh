@@ -424,7 +424,7 @@ is_private_ipv6() {
 check_ipv6(){
     IPV6=$(ip -6 addr show | grep global | awk '{print $2}' | cut -d '/' -f1 | head -n 1)
     local response
-    if is_private_ipv6 "$IPV6"; then # 由于是内网IPV4地址，需要通过API获取外网地址
+    if is_private_ipv6 "$IPV6"; then # 由于是内网IPV6地址，需要通过API获取外网地址
         IPV6=""
         local API_NET=("ipv6.ip.sb" "https://ipget.net" "ipv6.ping0.cc" "https://api.my-ip.io/ip" "https://ipv6.icanhazip.com")
         for p in "${API_NET[@]}"; do
@@ -793,7 +793,10 @@ if [ ! -f /usr/local/bin/pve_ipv6_prefixlen ]; then
 fi
 if [ ! -f /usr/local/bin/pve_ipv6_gateway ]; then
     ipv6_gateway=$(ip -6 route show | awk '/default via/{print $3}' | head -n 1)
-    echo "$ipv6_gateway" > /usr/local/bin/pve_ipv6_gateway
+    if is_private_ipv6 "$ipv6_gateway"; then # 由于是内网IPV6地址，不设置V6地址
+        ipv6_gateway=""
+        echo "$ipv6_gateway" > /usr/local/bin/pve_ipv6_gateway
+    fi
 fi
 ipv6_address=$(cat /usr/local/bin/pve_check_ipv6)
 ipv6_prefixlen=$(cat /usr/local/bin/pve_ipv6_prefixlen)
