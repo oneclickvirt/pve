@@ -226,7 +226,7 @@ qm set $vm_num --memory $memory
 qm set $vm_num --ide2 ${storage}:cloudinit
 qm set $vm_num --nameserver 8.8.8.8
 qm set $vm_num --searchdomain 8.8.4.4
-qm set $vm_num --ipconfig0 ip=${ipv6_address}/${ipv6_prefixlen},gw=${ipv6_gateway}
+qm set $vm_num --ipconfig1 ip=${ipv6_address}/${ipv6_prefixlen},gw=${ipv6_gateway}
 qm set $vm_num --cipassword $password --ciuser $user
 sleep 5
 qm resize $vm_num scsi0 ${disk}G

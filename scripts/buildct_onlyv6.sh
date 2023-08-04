@@ -73,7 +73,6 @@ storage="${7:-local}"
 rm -rf "ct$name"
 en_system=$(echo "$system_ori" | sed 's/[0-9]*//g')
 num_system=$(echo "$system_ori" | sed 's/[a-zA-Z]*//g')
-system="$en_system-$num_system"
 if [ "$system_arch" = "arch" ]; then
     if [ "$en_system" = "ubuntu" ]; then
         case "$system_ori" in
@@ -142,10 +141,11 @@ if [ "$system_arch" = "arch" ]; then
         curl -o "/var/lib/vz/template/cache/${en_system}-arm64-${version}-cloud.tar.xz" "${latest_folder_url}/rootfs.tar.xz"
     fi
 else
+    system="${en_system}-${num_system}"
     system_name=$(pveam available --section system | grep "$system" | awk '{print $2}' | head -n1)
     if ! pveam available --section system | grep "$system" > /dev/null; then
         _red "No such system"
-        exit
+        exit 1
     else
         _green "Use $system_name"
     fi
@@ -208,7 +208,7 @@ pct set $CTID --hostname $CTID
 pct set $CTID --net0 name=eth0,ip=${ipv6_address}/${ipv6_prefixlen},bridge=vmbr0,gw=${ipv6_gateway}
 pct set $CTID --nameserver 8.8.8.8 --nameserver 8.8.4.4
 sleep 3
-if echo "$system" | grep -qiE "centos|almalinux|rockylinux"; then
+if echo "$system" | grep -qiE "centos|almalinux|rockylinux" >/dev/null 2>&1; then
     pct exec $CTID -- yum update -y
     pct exec $CTID -- yum update
     pct exec $CTID -- yum install -y dos2unix curl
