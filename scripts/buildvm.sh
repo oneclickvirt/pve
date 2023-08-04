@@ -1,7 +1,7 @@
 #!/bin/bash
 # from 
 # https://github.com/spiritLHLS/pve
-# 2023.08.03
+# 2023.08.04
 
 
 # ./buildvm.sh VMID 用户名 密码 CPU核数 内存 硬盘 SSH端口 80端口 443端口 外网端口起 外网端口止 系统 存储盘
@@ -192,7 +192,27 @@ elif [ "$system_arch" = "arch" ]; then
         curl -L -o "$file_path" "$url"
     fi
 fi
-
+# 检测IPV6相关的信息
+if [ -f /usr/local/bin/pve_check_ipv6 ]; then
+    ipv6_address=$(cat /usr/local/bin/pve_check_ipv6)
+    IFS="/" read -ra parts <<< "$ipv6_address"
+    part_1="${parts[0]}"
+    part_2="${parts[1]}"
+    IFS=":" read -ra part_1_parts <<< "$part_1"
+    part_1_last="${part_1_parts[-1]}"
+    if [ "$part_1_last" = "$vm_num" ]; then
+        ipv6_address=""
+    else
+        part_1_head=$(echo "$part_1" | awk -F':' 'BEGIN {OFS=":"} {last=""; for (i=1; i<NF; i++) {last=last $i ":"}; print last}')
+        ipv6_address="${part_1_head}${vm_num}"
+    fi
+fi
+if [ -f /usr/local/bin/pve_ipv6_prefixlen ]; then
+    ipv6_prefixlen=$(cat /usr/local/bin/pve_ipv6_prefixlen)
+fi
+if [ -f /usr/local/bin/pve_ipv6_gateway ]; then
+    ipv6_gateway=$(cat /usr/local/bin/pve_ipv6_gateway)
+fi
 first_digit=${vm_num:0:1}
 second_digit=${vm_num:1:1}
 third_digit=${vm_num:2:1}
@@ -205,7 +225,6 @@ if [ $first_digit -le 2 ]; then
 else
     num=$((first_digit - 2))$second_digit$third_digit
 fi
-
 qm create $vm_num --agent 1 --scsihw virtio-scsi-single --serial0 socket --cores $core --sockets 1 --cpu host --net0 virtio,bridge=vmbr1,firewall=0
 if [ "$system_arch" = "x86" ]; then
     qm importdisk $vm_num /root/qcow/${system}.qcow2 ${storage}
@@ -229,8 +248,12 @@ qm set $vm_num --nameserver 8.8.8.8
 qm set $vm_num --searchdomain 8.8.4.4
 user_ip="172.16.1.${num}"
 qm set $vm_num --ipconfig0 ip=${user_ip}/24,gw=172.16.1.1
+# if [ -z "$ipv6_address" ] || [ -z "$ipv6_prefixlen" ] || [ -z "$ipv6_gateway" ] || [ "$ipv6_prefixlen" -gt 112 ]; then
+#     qm set $vm_num --ipconfig0 ip=${user_ip}/24,gw=172.16.1.1
+# else
+#     :
+# fi
 qm set $vm_num --cipassword $password --ciuser $user
-# qm set $vm_num --agent 1
 sleep 5
 qm resize $vm_num scsi0 ${disk}G
 if [ $? -ne 0 ]; then
@@ -252,9 +275,15 @@ if [ ! -f "/etc/iptables/rules.v4" ]; then
 fi
 iptables-save > /etc/iptables/rules.v4
 service netfilter-persistent restart
-echo "$vm_num $user $password $core $memory $disk $sshn $web1_port $web2_port $port_first $port_last $system $storage" >> "vm${vm_num}"
+
 # 虚拟机的相关信息将会存储到对应的虚拟机的NOTE中，可在WEB端查看
-data=$(echo " VMID 用户名-username 密码-password CPU核数-CPU 内存-memory 硬盘-disk SSH端口 80端口 443端口 外网端口起-port-start 外网端口止-port-end 系统-system 存储盘-storage")
+if [ -z "$ipv6_address" ] || [ -z "$ipv6_prefixlen" ] || [ -z "$ipv6_gateway" ] || [ "$ipv6_prefixlen" -gt 112 ]; then
+    echo "$vm_num $user $password $core $memory $disk $sshn $web1_port $web2_port $port_first $port_last $system $storage" >> "vm${vm_num}"
+    data=$(echo " VMID 用户名-username 密码-password CPU核数-CPU 内存-memory 硬盘-disk SSH端口 80端口 443端口 外网端口起-port-start 外网端口止-port-end 系统-system 存储盘-storage")
+else
+    echo "$vm_num $user $password $core $memory $disk $sshn $web1_port $web2_port $port_first $port_last $system $storage $ipv6_address" >> "vm${vm_num}"
+    data=$(echo " VMID 用户名-username 密码-password CPU核数-CPU 内存-memory 硬盘-disk SSH端口 80端口 443端口 外网端口起-port-start 外网端口止-port-end 系统-system 存储盘-storage 外网IPV6-ipv6")
+fi
 values=$(cat "vm${vm_num}")
 IFS=' ' read -ra data_array <<< "$data"
 IFS=' ' read -ra values_array <<< "$values"

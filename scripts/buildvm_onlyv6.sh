@@ -1,16 +1,14 @@
 #!/bin/bash
-# from
+# from 
 # https://github.com/spiritLHLS/pve
 # 2023.08.04
-# 手动指定要绑定的IPV4地址
-
-
-# ./buildvm_manual_ip.sh VMID 用户名 密码 CPU核数 内存 硬盘 系统 存储盘 IPV4地址
-# ./buildvm_manual_ip.sh 152 test1 1234567 1 512 5 debian11 local a.b.c.d/24
+# 自动选择要绑定的IPV6地址
+# ./buildvm_onlyv6.sh VMID 用户名 密码 CPU核数 内存 硬盘 系统 存储盘
+# ./buildvm_onlyv6.sh 152 test1 1234567 1 512 5 debian11 local
 
 cd /root >/dev/null 2>&1
-# 创建独立IPV4地址的虚拟机
-vm_num="${1:-152}"
+# 创建NAT的虚拟机
+vm_num="${1:-102}"
 user="${2:-test}"
 password="${3:-123456}"
 core="${4:-1}"
@@ -18,11 +16,7 @@ memory="${5:-512}"
 disk="${6:-5}"
 system="${7:-ubuntu22}"
 storage="${8:-local}"
-extra_ip="${9}"
 rm -rf "vm$name"
-user_ip=""
-user_ip_range=""
-gateway=""
 
 _red() { echo -e "\033[31m\033[01m$@\033[0m"; }
 _green() { echo -e "\033[32m\033[01m$@\033[0m"; }
@@ -58,43 +52,16 @@ get_system_arch() {
     esac
 }
 
-is_ipv4() {
-    local ip=$1
-    local regex="^([0-9]{1,3}\.){3}[0-9]{1,3}$"
-    if [[ $ip =~ $regex ]]; then
-        return 0  # 符合IPv4格式
-    else
-        return 1  # 不符合IPv4格式
-    fi
-}
-
-if [[ -z "$extra_ip" ]]; then
-    _yellow "No IPV4 address is manually assigned"
-    _yellow "IPV4地址未手动指定"
-    exit 1
-else
-    user_ip=$(echo "$extra_ip" | cut -d'/' -f1)
-    user_ip_range=$(echo "$extra_ip" | cut -d'/' -f2)
-    if is_ipv4 "$user_ip"; then
-        _green "This IPV4 address will be used: ${user_ip}"
-        _green "将使用此IPV4地址: ${user_ip}"
-    else
-        _yellow "IPV4 addresses do not conform to the rules"
-        _yellow "IPV4地址不符合规则"
-        exit 1
-    fi
-fi
-
 check_cdn() {
-  local o_url=$1
-  for cdn_url in "${cdn_urls[@]}"; do
-    if curl -sL -k "$cdn_url$o_url" --max-time 6 | grep -q "success" > /dev/null 2>&1; then
-      export cdn_success_url="$cdn_url"
-      return
-    fi
-    sleep 0.5
-  done
-  export cdn_success_url=""
+    local o_url=$1
+    for cdn_url in "${cdn_urls[@]}"; do
+        if curl -sL -k "$cdn_url$o_url" --max-time 6 | grep -q "success" > /dev/null 2>&1; then
+            export cdn_success_url="$cdn_url"
+            return
+        fi
+        sleep 0.5
+    done
+    export cdn_success_url=""
 }
 
 check_cdn_file() {
@@ -108,7 +75,7 @@ check_cdn_file() {
 
 cdn_urls=("https://cdn.spiritlhl.workers.dev/" "https://cdn3.spiritlhl.net/" "https://cdn1.spiritlhl.net/" "https://ghproxy.com/" "https://cdn2.spiritlhl.net/")
 if [ ! -d "qcow" ]; then
-  mkdir qcow
+    mkdir qcow
 fi
 get_system_arch
 if [ -z "${system_arch}" ] || [ ! -v system_arch ]; then
@@ -217,42 +184,6 @@ elif [ "$system_arch" = "arch" ]; then
         curl -L -o "$file_path" "$url"
     fi
 fi
-# 查询信息
-if ! command -v lshw > /dev/null 2>&1; then
-    apt-get install -y lshw
-fi
-if ! command -v ping > /dev/null 2>&1; then
-    apt-get install -y iputils-ping
-    apt-get install -y ping
-fi
-interface=$(lshw -C network | awk '/logical name:/{print $3}' | head -1)
-user_main_ip_range=$(grep -A 1 "iface ${interface}" /etc/network/interfaces | grep "address" | awk '{print $2}' | head -n 1)
-if [ -z "$user_main_ip_range" ]; then
-    _red "Host available IP interval query failed"
-    _red "宿主机可用IP区间查询失败"
-    exit 1
-fi
-# 宿主机的网关
-gateway=$(grep -E "iface $interface" -A 3 "/etc/network/interfaces" | grep "gateway" | awk '{print $2}' | head -n 1)
-if [ -z "$gateway" ]; then
-    _red "Host gateway query failed"
-    _red "宿主机网关查询失败"
-    exit 1
-fi
-# echo "ip=${user_ip}/${user_ip_range},gw=${gateway}"
-# 检查变量是否为空并执行相应操作
-if [ -z "$user_ip" ]; then
-    _red "Available IP match failed"
-    _red "可使用的IP匹配失败"
-    exit 1
-fi
-if [ -z "$user_ip_range" ]; then
-    _red "Available subnet size match failed"
-    _red "可使用的子网大小匹配失败"
-    exit 1
-fi
-_green "The current IP to which the VM will be bound is: ${user_ip}"
-_green "当前虚拟机将绑定的IP为：${user_ip}"
 # 检测IPV6相关的信息
 if [ -f /usr/local/bin/pve_check_ipv6 ]; then
     ipv6_address=$(cat /usr/local/bin/pve_check_ipv6)
@@ -274,7 +205,6 @@ fi
 if [ -f /usr/local/bin/pve_ipv6_gateway ]; then
     ipv6_gateway=$(cat /usr/local/bin/pve_ipv6_gateway)
 fi
-
 qm create $vm_num --agent 1 --scsihw virtio-scsi-single --serial0 socket --cores $core --sockets 1 --cpu host --net0 virtio,bridge=vmbr0,firewall=0
 if [ "$system_arch" = "x86" ]; then
     qm importdisk $vm_num /root/qcow/${system}.qcow2 ${storage}
@@ -296,11 +226,7 @@ qm set $vm_num --memory $memory
 qm set $vm_num --ide2 ${storage}:cloudinit
 qm set $vm_num --nameserver 8.8.8.8
 qm set $vm_num --searchdomain 8.8.4.4
-if [ -z "$ipv6_address" ] || [ -z "$ipv6_prefixlen" ] || [ -z "$ipv6_gateway" ] || [ "$ipv6_prefixlen" -gt 112 ]; then
-    qm set $vm_num --ipconfig0 ip=${user_ip}/${user_ip_range},gw=${gateway}
-else
-    qm set $vm_num --ipconfig0 ip=${user_ip}/${user_ip_range},gw=${gateway} --ipconfig1 ip=${ipv6_address}/${ipv6_prefixlen},gw=${ipv6_gateway}
-fi
+qm set $vm_num --ipconfig0 ip=${ipv6_address}/${ipv6_prefixlen},gw=${ipv6_gateway}
 qm set $vm_num --cipassword $password --ciuser $user
 sleep 5
 qm resize $vm_num scsi0 ${disk}G
@@ -312,15 +238,9 @@ if [ $? -ne 0 ]; then
     fi
 fi
 qm start $vm_num
-
+echo "$vm_num $user $password $core $memory $disk $system $storage $ipv6_address" >> "vm${vm_num}"
 # 虚拟机的相关信息将会存储到对应的虚拟机的NOTE中，可在WEB端查看
-if [ -z "$ipv6_address" ] || [ -z "$ipv6_prefixlen" ] || [ -z "$ipv6_gateway" ] || [ "$ipv6_prefixlen" -gt 112 ]; then
-    echo "$vm_num $user $password $core $memory $disk $system $storage $user_ip" >> "vm${vm_num}"
-    data=$(echo " VMID 用户名-username 密码-password CPU核数-CPU 内存-memory 硬盘-disk 系统-system 存储盘-storage 外网IP地址-ipv4")
-else
-    echo "$vm_num $user $password $core $memory $disk $system $storage $user_ip $ipv6_address" >> "vm${vm_num}"
-    data=$(echo " VMID 用户名-username 密码-password CPU核数-CPU 内存-memory 硬盘-disk 系统-system 存储盘-storage 外网IPV4-ipv4 外网IPV6-ipv6")
-fi
+data=$(echo " VMID 用户名-username 密码-password CPU核数-CPU 内存-memory 硬盘-disk 系统-system 存储盘-storage 外网IPV6-ipv6")
 values=$(cat "vm${vm_num}")
 IFS=' ' read -ra data_array <<< "$data"
 IFS=' ' read -ra values_array <<< "$values"

@@ -120,3 +120,18 @@ check_interface(){
 interface_1=$(lshw -C network | awk '/logical name:/{print $3}' | sed -n '1p')
 interface_2=$(lshw -C network | awk '/logical name:/{print $3}' | sed -n '2p')
 check_interface
+
+first_digit=${CTID:0:1}
+second_digit=${CTID:1:1}
+third_digit=${CTID:2:1}
+if [ $first_digit -le 2 ]; then
+    if [ $second_digit -eq 0 ]; then
+        num=$third_digit
+    else
+        num=$second_digit$third_digit
+    fi
+else
+    num=$((first_digit - 2))$second_digit$third_digit
+fi
+
+user_ip="172.16.1.${num}"

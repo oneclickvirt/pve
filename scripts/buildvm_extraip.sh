@@ -1,10 +1,8 @@
 #!/bin/bash
 # from
 # https://github.com/spiritLHLS/pve
-# 2023.08.03
+# 2023.08.04
 # 自动选择要绑定的IPV4地址
-
-
 # ./buildvm_extraip.sh VMID 用户名 密码 CPU核数 内存 硬盘 系统 存储盘
 # ./buildvm_extraip.sh 152 test1 1234567 1 512 5 debian11 local
 
@@ -189,20 +187,27 @@ elif [ "$system_arch" = "arch" ]; then
         curl -L -o "$file_path" "$url"
     fi
 fi
-
-first_digit=${vm_num:0:1}
-second_digit=${vm_num:1:1}
-third_digit=${vm_num:2:1}
-if [ $first_digit -le 2 ]; then
-    if [ $second_digit -eq 0 ]; then
-        num=$third_digit
+# 检测IPV6相关的信息
+if [ -f /usr/local/bin/pve_check_ipv6 ]; then
+    ipv6_address=$(cat /usr/local/bin/pve_check_ipv6)
+    IFS="/" read -ra parts <<< "$ipv6_address"
+    part_1="${parts[0]}"
+    part_2="${parts[1]}"
+    IFS=":" read -ra part_1_parts <<< "$part_1"
+    part_1_last="${part_1_parts[-1]}"
+    if [ "$part_1_last" = "$vm_num" ]; then
+        ipv6_address=""
     else
-        num=$second_digit$third_digit
+        part_1_head=$(echo "$part_1" | awk -F':' 'BEGIN {OFS=":"} {last=""; for (i=1; i<NF; i++) {last=last $i ":"}; print last}')
+        ipv6_address="${part_1_head}${vm_num}"
     fi
-else
-    num=$((first_digit - 2))$second_digit$third_digit
 fi
-
+if [ -f /usr/local/bin/pve_ipv6_prefixlen ]; then
+    ipv6_prefixlen=$(cat /usr/local/bin/pve_ipv6_prefixlen)
+fi
+if [ -f /usr/local/bin/pve_ipv6_gateway ]; then
+    ipv6_gateway=$(cat /usr/local/bin/pve_ipv6_gateway)
+fi
 # 查询信息
 if ! command -v lshw > /dev/null 2>&1; then
     apt-get install -y lshw
@@ -286,10 +291,13 @@ qm set $vm_num --memory $memory
 qm set $vm_num --ide2 ${storage}:cloudinit
 qm set $vm_num --nameserver 8.8.8.8
 qm set $vm_num --searchdomain 8.8.4.4
-qm set $vm_num --ipconfig0 ip=${user_ip}/${user_ip_range},gw=${gateway}
+if [ -z "$ipv6_address" ] || [ -z "$ipv6_prefixlen" ] || [ -z "$ipv6_gateway" ] || [ "$ipv6_prefixlen" -gt 112 ]; then
+    qm set $vm_num --ipconfig0 ip=${user_ip}/${user_ip_range},gw=${gateway}
+else
+    qm set $vm_num --ipconfig0 ip=${user_ip}/${user_ip_range},gw=${gateway} --ipconfig1 ip=${ipv6_address}/${ipv6_prefixlen},gw=${ipv6_gateway}
+fi
 qm set $vm_num --cipassword $password --ciuser $user
 sleep 5
-# qm set $vm_num --agent 1
 qm resize $vm_num scsi0 ${disk}G
 if [ $? -ne 0 ]; then
     if [[ $disk =~ ^[0-9]+G$ ]]; then
@@ -300,9 +308,14 @@ if [ $? -ne 0 ]; then
 fi
 qm start $vm_num
 
-echo "$vm_num $user $password $core $memory $disk $system $storage $user_ip" >> "vm${vm_num}"
 # 虚拟机的相关信息将会存储到对应的虚拟机的NOTE中，可在WEB端查看
-data=$(echo " VMID 用户名-username 密码-password CPU核数-CPU 内存-memory 硬盘-disk 系统-system 存储盘-storage 外网IP地址-ipv4")
+if [ -z "$ipv6_address" ] || [ -z "$ipv6_prefixlen" ] || [ -z "$ipv6_gateway" ] || [ "$ipv6_prefixlen" -gt 112 ]; then
+    echo "$vm_num $user $password $core $memory $disk $system $storage $user_ip" >> "vm${vm_num}"
+    data=$(echo " VMID 用户名-username 密码-password CPU核数-CPU 内存-memory 硬盘-disk 系统-system 存储盘-storage 外网IP地址-ipv4")
+else
+    echo "$vm_num $user $password $core $memory $disk $system $storage $user_ip $ipv6_address" >> "vm${vm_num}"
+    data=$(echo " VMID 用户名-username 密码-password CPU核数-CPU 内存-memory 硬盘-disk 系统-system 存储盘-storage 外网IPV4-ipv4 外网IPV6-ipv6")
+fi
 values=$(cat "vm${vm_num}")
 IFS=' ' read -ra data_array <<< "$data"
 IFS=' ' read -ra values_array <<< "$values"
