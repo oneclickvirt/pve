@@ -341,36 +341,11 @@ if ! grep -q "auto ${interface}" /etc/network/interfaces; then
     echo "auto ${interface}" >> /etc/network/interfaces
     chattr +i /etc/network/interfaces
 fi
-# 删除可能的多个dns-nameservers的行只保留一行
-dns_lines=$(grep -c "dns-nameservers" /etc/network/interfaces)
-if [ $dns_lines -gt 1 ]; then
-    rm -rf /tmp/interfaces.tmp
-    original_lines=$(wc -l < /etc/network/interfaces)
-    current_dns_lines=0
-    while read -r line; do
-    if echo "$line" | grep -q "dns-nameservers"; then
-        current_dns_lines=$((current_dns_lines + 1))
-        if [ $current_dns_lines -lt $dns_lines ]; then
-        continue
-        fi
-    fi
-    echo "$line" >> /tmp/interfaces.tmp
-    done < /etc/network/interfaces
-    chattr -i /etc/network/interfaces
-    mv /tmp/interfaces.tmp /etc/network/interfaces
-    chattr +i /etc/network/interfaces
-    rm -rf /tmp/interfaces.tmp
-fi
 # 反加载
 if [[ -f "/etc/network/interfaces.new" && -f "/etc/network/interfaces" ]]; then
     chattr -i /etc/network/interfaces.new
     cp -f /etc/network/interfaces /etc/network/interfaces.new
     chattr +i /etc/network/interfaces.new
-fi
-# 去除空行之外的重复行
-remove_duplicate_lines "/etc/network/interfaces"
-if [ -f "/etc/network/interfaces.new" ]; then
-    remove_duplicate_lines "/etc/network/interfaces.new"
 fi
 }
 
@@ -856,6 +831,31 @@ fi
 # 网络配置修改
 dmidecode_output=$(dmidecode -t system)
 rebuild_interfaces
+# 去除空行之外的重复行
+remove_duplicate_lines "/etc/network/interfaces"
+if [ -f "/etc/network/interfaces.new" ]; then
+    remove_duplicate_lines "/etc/network/interfaces.new"
+fi
+# 删除可能的多个dns-nameservers的行只保留一行
+dns_lines=$(grep -c "dns-nameservers" /etc/network/interfaces)
+if [ $dns_lines -gt 1 ]; then
+    rm -rf /tmp/interfaces.tmp
+    original_lines=$(wc -l < /etc/network/interfaces)
+    current_dns_lines=0
+    while read -r line; do
+    if echo "$line" | grep -q "dns-nameservers"; then
+        current_dns_lines=$((current_dns_lines + 1))
+        if [ $current_dns_lines -lt $dns_lines ]; then
+        continue
+        fi
+    fi
+    echo "$line" >> /tmp/interfaces.tmp
+    done < /etc/network/interfaces
+    chattr -i /etc/network/interfaces
+    mv /tmp/interfaces.tmp /etc/network/interfaces
+    chattr +i /etc/network/interfaces
+    rm -rf /tmp/interfaces.tmp
+fi
 
 # 当v6是共存的类型时删除v6
 if grep -q "iface ${interface} inet6 manual" /etc/network/interfaces && grep -q "try_dhcp 1" /etc/network/interfaces; then
@@ -1117,6 +1117,25 @@ fi
 rebuild_interfaces
 fix_interfaces_ipv6_auto_type
 
+# 特殊处理Hetzner和Azure的情况
+if [[ $dmidecode_output == *"Hetzner_vServer"* ]] || [[ $dmidecode_output == *"Microsoft Corporation"* ]]; then
+    auto_interface=$(grep '^auto ' /etc/network/interfaces | grep -v '^auto lo' | awk '{print $2}' | head -n 1)
+    if ! grep -q "^post-up ${ethtool_path}" /etc/network/interfaces; then
+        chattr -i /etc/network/interfaces
+        echo "post-up ${ethtool_path} -K $auto_interface tx off rx off" >> /etc/network/interfaces
+        chattr +i /etc/network/interfaces
+    fi
+fi
+
+# 部分机器中途service丢失了，尝试修复
+install_package service
+
+# 正式安装PVE
+install_package proxmox-ve
+install_package postfix
+install_package open-iscsi
+rebuild_interfaces
+
 # 配置vmbr0
 chattr -i /etc/network/interfaces
 if grep -q "vmbr0" "/etc/network/interfaces"; then
@@ -1163,25 +1182,6 @@ EOF
     fi
 fi
 chattr +i /etc/network/interfaces
-
-# 特殊处理Hetzner和Azure的情况
-if [[ $dmidecode_output == *"Hetzner_vServer"* ]] || [[ $dmidecode_output == *"Microsoft Corporation"* ]]; then
-    auto_interface=$(grep '^auto ' /etc/network/interfaces | grep -v '^auto lo' | awk '{print $2}' | head -n 1)
-    if ! grep -q "^post-up ${ethtool_path}" /etc/network/interfaces; then
-        chattr -i /etc/network/interfaces
-        echo "post-up ${ethtool_path} -K $auto_interface tx off rx off" >> /etc/network/interfaces
-        chattr +i /etc/network/interfaces
-    fi
-fi
-
-# 部分机器中途service丢失了，尝试修复
-install_package service
-
-# 正式安装PVE
-install_package proxmox-ve
-install_package postfix
-install_package open-iscsi
-rebuild_interfaces
 
 # 如果是国内服务器则替换CT源为国内镜像源
 if [ "$system_arch" = "x86" ]; then
