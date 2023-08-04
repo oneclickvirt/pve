@@ -184,11 +184,11 @@ if [ -f /usr/local/bin/pve_check_ipv6 ]; then
     part_2="${parts[1]}"
     IFS=":" read -ra part_1_parts <<< "$part_1"
     part_1_last="${part_1_parts[-1]}"
-    if [ "$part_1_last" = "$vm_num" ]; then
+    if [ "$part_1_last" = "$CTID" ]; then
         ipv6_address=""
     else
         part_1_head=$(echo "$part_1" | awk -F':' 'BEGIN {OFS=":"} {last=""; for (i=1; i<NF; i++) {last=last $i ":"}; print last}')
-        ipv6_address="${part_1_head}${vm_num}"
+        ipv6_address="${part_1_head}${CTID}"
     fi
 fi
 if [ -f /usr/local/bin/pve_ipv6_prefixlen ]; then
@@ -205,7 +205,7 @@ else
 fi
 pct start $CTID
 pct set $CTID --hostname $CTID
-pct set $CTID --net0 name=eth0,ip=${ipv6_address}/${ipv6_prefixlen},bridge=vmbr0,gw=${ipv6_gateway}
+pct set $CTID --net1 name=eth0,ip=${ipv6_address}/${ipv6_prefixlen},bridge=vmbr0,gw=${ipv6_gateway}
 pct set $CTID --nameserver 8.8.8.8 --nameserver 8.8.4.4
 sleep 3
 if echo "$system" | grep -qiE "centos|almalinux|rockylinux" >/dev/null 2>&1; then

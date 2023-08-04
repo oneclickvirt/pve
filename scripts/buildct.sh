@@ -203,11 +203,11 @@ if [ -f /usr/local/bin/pve_check_ipv6 ]; then
     part_2="${parts[1]}"
     IFS=":" read -ra part_1_parts <<< "$part_1"
     part_1_last="${part_1_parts[-1]}"
-    if [ "$part_1_last" = "$vm_num" ]; then
+    if [ "$part_1_last" = "$CTID" ]; then
         ipv6_address=""
     else
         part_1_head=$(echo "$part_1" | awk -F':' 'BEGIN {OFS=":"} {last=""; for (i=1; i<NF; i++) {last=last $i ":"}; print last}')
-        ipv6_address="${part_1_head}${vm_num}"
+        ipv6_address="${part_1_head}${CTID}"
     fi
 fi
 if [ -f /usr/local/bin/pve_ipv6_prefixlen ]; then
