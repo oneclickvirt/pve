@@ -383,6 +383,10 @@ fix_interfaces_ipv6_auto_type(){
 
 is_private_ipv6() {
     local address=$1
+    # 输入不含:符号
+    if [[ $ip_address != *":"* ]]; then
+        return 0
+    fi
     # 输入为空
     if [[ -z $ip_address ]]; then
         return 0
