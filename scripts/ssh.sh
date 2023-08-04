@@ -130,7 +130,6 @@ install_required_modules() {
 }
 
 remove_duplicate_lines() {
-  # 去除重复行并跳过空行
   awk '!NF || !x[$0]++' "$1" > "$1.tmp" && mv -f "$1.tmp" "$1"
 }
 
@@ -181,4 +180,5 @@ service ssh restart
 service sshd restart
 systemctl restart sshd
 systemctl restart ssh
+sed -i 's/.*precedence ::ffff:0:0\/96.*/precedence ::ffff:0:0\/96  100/g' /etc/gai.conf && systemctl restart networking
 rm -rf "$0"
