@@ -141,7 +141,7 @@ if command -v lshw > /dev/null 2>&1 ; then
         echo "$ipv6_prefixlen" > /usr/local/bin/pve_ipv6_prefixlen
     fi
     if [ ! -f /usr/local/bin/pve_ipv6_gateway ]; then
-        ipv6_gateway=$(ip -6 route show | awk '/default via/{print $3}')
+        ipv6_gateway=$(ip -6 route show | awk '/default via/{print $3}' | head -n1)
         echo "$ipv6_gateway" > /usr/local/bin/pve_ipv6_gateway
     fi
     ipv6_address=$(cat /usr/local/bin/pve_check_ipv6)
