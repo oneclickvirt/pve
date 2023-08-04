@@ -5,8 +5,8 @@
 # 手动指定要绑定的IPV4地址
 
 
-# ./buildvm_manual_ip.sh VMID 用户名 密码 CPU核数 内存 硬盘 系统 存储盘 IPV4地址
-# ./buildvm_manual_ip.sh 152 test1 1234567 1 512 5 debian11 local a.b.c.d/24
+# ./buildvm_manual_ip.sh VMID 用户名 密码 CPU核数 内存 硬盘 系统 存储盘 IPV4地址 是否附加IPV6(默认为N)
+# ./buildvm_manual_ip.sh 152 test1 1234567 1 512 5 debian11 local a.b.c.d/24 N
 
 cd /root >/dev/null 2>&1
 # 创建独立IPV4地址的虚拟机
@@ -19,6 +19,7 @@ disk="${6:-5}"
 system="${7:-ubuntu22}"
 storage="${8:-local}"
 extra_ip="${9}"
+open_ipv6="${10:-N}"
 rm -rf "vm$name"
 user_ip=""
 user_ip_range=""
@@ -296,7 +297,7 @@ qm set $vm_num --memory $memory
 qm set $vm_num --ide2 ${storage}:cloudinit
 qm set $vm_num --nameserver 8.8.8.8,2001:4860:4860::8888
 qm set $vm_num --searchdomain 8.8.4.4,2001:4860:4860::8844
-if [ -z "$ipv6_address" ] || [ -z "$ipv6_prefixlen" ] || [ -z "$ipv6_gateway" ] || [ "$ipv6_prefixlen" -gt 112 ]; then
+if [ -z "$ipv6_address" ] || [ -z "$ipv6_prefixlen" ] || [ -z "$ipv6_gateway" ] || [ "$ipv6_prefixlen" -gt 112 ] || [ "$open_ipv6" = "N" ]; then
     qm set $vm_num --ipconfig0 ip=${user_ip}/${user_ip_range},gw=${gateway}
 else
     qm set $vm_num --ipconfig0 ip=${user_ip}/${user_ip_range},gw=${gateway},ip6=${ipv6_address}/${ipv6_prefixlen},gw6=${ipv6_gateway}

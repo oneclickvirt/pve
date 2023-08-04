@@ -4,8 +4,8 @@
 # 2023.08.04
 
 
-# ./buildct.sh CTID 密码 CPU核数 内存 硬盘 SSH端口 80端口 443端口 外网端口起 外网端口止 系统 存储盘
-# ./buildct.sh 102 1234567 1 512 5 20001 20002 20003 30000 30025 debian11 local
+# ./buildct.sh CTID 密码 CPU核数 内存 硬盘 SSH端口 80端口 443端口 外网端口起 外网端口止 系统 存储盘 是否附加IPV6(默认为N)
+# ./buildct.sh 102 1234567 1 512 5 20001 20002 20003 30000 30025 debian11 local N
 
 # 用颜色输出信息
 _red() { echo -e "\033[31m\033[01m$@\033[0m"; }
@@ -77,6 +77,7 @@ port_first="${9:-29975}"
 port_last="${10:-30000}"
 system_ori="${11:-debian11}"
 storage="${12:-local}"
+open_ipv6="${13:-N}"
 rm -rf "ct$name"
 en_system=$(echo "$system_ori" | sed 's/[0-9]*//g')
 num_system=$(echo "$system_ori" | sed 's/[a-zA-Z]*//g')

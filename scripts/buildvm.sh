@@ -4,8 +4,8 @@
 # 2023.08.04
 
 
-# ./buildvm.sh VMID 用户名 密码 CPU核数 内存 硬盘 SSH端口 80端口 443端口 外网端口起 外网端口止 系统 存储盘
-# ./buildvm.sh 102 test1 1234567 1 512 5 40001 40002 40003 50000 50025 debian11 local
+# ./buildvm.sh VMID 用户名 密码 CPU核数 内存 硬盘 SSH端口 80端口 443端口 外网端口起 外网端口止 系统 存储盘 是否附加IPV6(默认为N)
+# ./buildvm.sh 102 test1 1234567 1 512 5 40001 40002 40003 50000 50025 debian11 local N
 
 cd /root >/dev/null 2>&1
 # 创建NAT的虚拟机
@@ -22,8 +22,9 @@ port_first="${10:-49975}"
 port_last="${11:-50000}"
 system="${12:-ubuntu22}"
 storage="${13:-local}"
-# in="${12:-300}"
-# out="${13:-300}"
+open_ipv6="${14:-N}"
+# in="${15:-300}"
+# out="${16:-300}"
 rm -rf "vm$name"
 
 _red() { echo -e "\033[31m\033[01m$@\033[0m"; }
@@ -277,7 +278,7 @@ iptables-save > /etc/iptables/rules.v4
 service netfilter-persistent restart
 
 # 虚拟机的相关信息将会存储到对应的虚拟机的NOTE中，可在WEB端查看
-if [ -z "$ipv6_address" ] || [ -z "$ipv6_prefixlen" ] || [ -z "$ipv6_gateway" ] || [ "$ipv6_prefixlen" -gt 112 ]; then
+if [ -z "$ipv6_address" ] || [ -z "$ipv6_prefixlen" ] || [ -z "$ipv6_gateway" ] || [ "$ipv6_prefixlen" -gt 112 ]|| [ "$open_ipv6" = "N" ]; then
     echo "$vm_num $user $password $core $memory $disk $sshn $web1_port $web2_port $port_first $port_last $system $storage" >> "vm${vm_num}"
     data=$(echo " VMID 用户名-username 密码-password CPU核数-CPU 内存-memory 硬盘-disk SSH端口 80端口 443端口 外网端口起-port-start 外网端口止-port-end 系统-system 存储盘-storage")
 else
