@@ -231,7 +231,7 @@ pct set $CTID --net0 name=eth0,ip=${user_ip}/24,bridge=vmbr1,gw=172.16.1.1
 # else
 #     :
 # fi
-pct set $CTID --nameserver 8.8.8.8 --nameserver 8.8.4.4
+pct set $CTID --nameserver 8.8.8.8,2001:4860:4860::8888 --nameserver 8.8.4.4,2001:4860:4860::8844
 sleep 3
 if echo "$system" | grep -qiE "centos|almalinux|rockylinux"; then
     pct exec $CTID -- yum update -y

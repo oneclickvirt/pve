@@ -205,8 +205,8 @@ else
 fi
 pct start $CTID
 pct set $CTID --hostname $CTID
-pct set $CTID --net1 name=eth0,ip=${ipv6_address}/${ipv6_prefixlen},bridge=vmbr0,gw=${ipv6_gateway}
-pct set $CTID --nameserver 8.8.8.8 --nameserver 8.8.4.4
+pct set $CTID --net0 name=eth0,ip6=${ipv6_address}/${ipv6_prefixlen},bridge=vmbr0,gw6=${ipv6_gateway}
+pct set $CTID --nameserver 8.8.8.8,2001:4860:4860::8888 --nameserver 8.8.4.4,2001:4860:4860::8844
 sleep 3
 if echo "$system" | grep -qiE "centos|almalinux|rockylinux" >/dev/null 2>&1; then
     pct exec $CTID -- yum update -y
