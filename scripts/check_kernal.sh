@@ -113,61 +113,26 @@ check_ipv6(){
     echo $IPV6 > /usr/local/bin/pve_check_ipv6
 }
 
-check_interface(){
-    if [ -z "$interface_2" ]; then
-        interface=${interface_1}
-        return
-    elif [ -n "$interface_1" ] && [ -n "$interface_2" ]; then
-        if ! grep -q "$interface_1" "/etc/network/interfaces" && ! grep -q "$interface_2" "/etc/network/interfaces" && [ -f "/etc/network/interfaces.d/50-cloud-init" ]; then
-            if grep -q "$interface_1" "/etc/network/interfaces.d/50-cloud-init" || grep -q "$interface_2" "/etc/network/interfaces.d/50-cloud-init"; then
-                if ! grep -q "$interface_1" "/etc/network/interfaces.d/50-cloud-init" && grep -q "$interface_2" "/etc/network/interfaces.d/50-cloud-init"; then
-                    interface=${interface_2}
-                    return
-                elif ! grep -q "$interface_2" "/etc/network/interfaces.d/50-cloud-init" && grep -q "$interface_1" "/etc/network/interfaces.d/50-cloud-init"; then
-                    interface=${interface_1}
-                    return
-                fi
-            fi
-        fi
-        if grep -q "$interface_1" "/etc/network/interfaces"; then
-            interface=${interface_1}
-            return
-        elif grep -q "$interface_2" "/etc/network/interfaces"; then
-            interface=${interface_2}
-            return
-        else
-            interfaces_list=$(ip addr show | awk '/^[0-9]+: [^lo]/ {print $2}' | cut -d ':' -f 1)
-            interface=""
-            for iface in $interfaces_list; do
-                if [[ "$iface" = "$interface_1" || "$iface" = "$interface_2" ]]; then
-                    interface="$iface"
-                fi
-            done
-            if [ -z "$interface" ]; then
-                interface="eth0"
-            fi
-            return
-        fi
-    else
-        interface="eth0"
-        return
-    fi
-}
-
-
-check_config
-apt-get install lshw -y
+# 检测IPV6网络
+if ! command -v lshw > /dev/null 2>&1 ; then
+    apt-get install lshw -y
+fi
 if command -v lshw > /dev/null 2>&1 ; then
     # 检测物理接口
     interface_1=$(lshw -C network | awk '/logical name:/{print $3}' | sed -n '1p')
     interface_2=$(lshw -C network | awk '/logical name:/{print $3}' | sed -n '2p')
-    check_interface
     # 检测IPV6相关的信息
     if [ ! -f /usr/local/bin/pve_check_ipv6 ]; then
         check_ipv6
     fi
     if [ ! -f /usr/local/bin/pve_ipv6_prefixlen ]; then
-        ipv6_prefixlen=$(ifconfig ${interface} | grep -oP 'prefixlen \K\d+' | head -n 1)
+        ipv6_prefixlen=$(ifconfig ${interface_1} | grep -oP 'prefixlen \K\d+' | head -n 1)
+        if [ -z "$ipv6_prefixlen" ]; then
+            ipv6_prefixlen=$(ifconfig ${interface_2} | grep -oP 'prefixlen \K\d+' | head -n 1)
+        fi
+        if [ -z "$ipv6_prefixlen" ]; then
+            ipv6_prefixlen=$(ifconfig eth0 | grep -oP 'prefixlen \K\d+' | head -n 1)
+        fi
         echo "$ipv6_prefixlen" > /usr/local/bin/pve_ipv6_prefixlen
     fi
     if [ ! -f /usr/local/bin/pve_ipv6_gateway ]; then
@@ -187,6 +152,9 @@ if command -v lshw > /dev/null 2>&1 ; then
         _green "ipv6_gateway: ${ipv6_gateway}"
     fi
 fi
+
+# 检测硬件配置
+check_config
 
 # 检查CPU是否支持硬件虚拟化
 if [ "$(egrep -c '(vmx|svm)' /proc/cpuinfo)" -eq 0 ]; then
