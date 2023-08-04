@@ -3,7 +3,6 @@
 # https://github.com/spiritLHLS/pve
 # 2023.08.04
 
-
 # 用颜色输出信息
 _red() { echo -e "\033[31m\033[01m$@\033[0m"; }
 _green() { echo -e "\033[32m\033[01m$@\033[0m"; }
@@ -113,7 +112,7 @@ check_ipv6(){
     echo $IPV6 > /usr/local/bin/pve_check_ipv6
 }
 
-# 检测IPV6网络
+# 检测IPV6网络配置
 if ! command -v lshw > /dev/null 2>&1 ; then
     apt-get install lshw -y
 fi
