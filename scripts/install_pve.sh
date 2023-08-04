@@ -1,7 +1,7 @@
 #!/bin/bash
 # from 
 # https://github.com/spiritLHLS/pve
-# 2023.08.03
+# 2023.08.04
 
 
 ########## 预设部分输出和部分中间变量
@@ -790,7 +790,7 @@ if [ ! -f /usr/local/bin/pve_ipv6_prefixlen ]; then
     echo "$ipv6_prefixlen" > /usr/local/bin/pve_ipv6_prefixlen
 fi
 if [ ! -f /usr/local/bin/pve_ipv6_gateway ]; then
-    ipv6_gateway=$(ip -6 route show | awk '/default via/{print $3}')
+    ipv6_gateway=$(ip -6 route show | awk '/default via/{print $3}' | head -n 1)
     echo "$ipv6_gateway" > /usr/local/bin/pve_ipv6_gateway
 fi
 ipv6_address=$(cat /usr/local/bin/pve_check_ipv6)
