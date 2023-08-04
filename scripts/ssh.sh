@@ -1,7 +1,7 @@
 #!/bin/bash
 # from 
 # https://github.com/spiritLHLS/pve
-# 2023.07.31
+# 2023.08.04
 
 if [ -f "/etc/resolv.conf" ]
 then
@@ -146,7 +146,6 @@ if [ -f "/etc/motd" ]; then
     echo 'Related repo https://github.com/spiritLHLS/pve' >> /etc/motd
     echo '--by https://t.me/spiritlhl' >> /etc/motd
 fi
-sshport=22
 service iptables stop 2> /dev/null ; chkconfig iptables off 2> /dev/null ;
 if [ -f "/etc/sysconfig/selinux" ]; then
     sed -i.bak '/^SELINUX=/cSELINUX=disabled' /etc/sysconfig/selinux
@@ -156,7 +155,7 @@ if [ -f "/etc/selinux/config" ]; then
 fi
 setenforce 0;
 if [ -f /etc/ssh/sshd_config ]; then
-    sed -i 's/^#\?Port.*/Port $sshport/g' /etc/ssh/sshd_config
+    sed -i 's/^#\?Port.*/Port 22/g' /etc/ssh/sshd_config
     sed -i 's/^#\?PermitRootLogin.*/PermitRootLogin yes/g' /etc/ssh/sshd_config
     sed -i 's/^#\?PasswordAuthentication.*/PasswordAuthentication yes/g' /etc/ssh/sshd_config
     sed -i 's/#ListenAddress 0.0.0.0/ListenAddress 0.0.0.0/' /etc/ssh/sshd_config
@@ -167,7 +166,7 @@ if [ -f /etc/ssh/sshd_config ]; then
     sed -i '/^AuthorizedKeysFile/s/^/#/' /etc/ssh/sshd_config
 fi
 if [ -f /etc/ssh/sshd_config.d/50-cloud-init.conf ]; then
-    sed -i "s/^#\?Port.*/Port $sshport/g" /etc/ssh/sshd_config.d/50-cloud-init.conf
+    sed -i "s/^#\?Port.*/Port 22/g" /etc/ssh/sshd_config.d/50-cloud-init.conf
     sed -i "s/^#\?PermitRootLogin.*/PermitRootLogin yes/g" /etc/ssh/sshd_config.d/50-cloud-init.conf
     sed -i "s/^#\?PasswordAuthentication.*/PasswordAuthentication yes/g" /etc/ssh/sshd_config.d/50-cloud-init.conf
     sed -i 's/#ListenAddress 0.0.0.0/ListenAddress 0.0.0.0/' /etc/ssh/sshd_config.d/50-cloud-init.conf
