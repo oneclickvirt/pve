@@ -175,7 +175,18 @@ check_cdn_file() {
 
 cdn_urls=("https://cdn.spiritlhl.workers.dev/" "https://cdn3.spiritlhl.net/" "https://cdn1.spiritlhl.net/" "https://cdn2.spiritlhl.net/")
 check_cdn_file
-
+first_digit=${CTID:0:1}
+second_digit=${CTID:1:1}
+third_digit=${CTID:2:1}
+if [ $first_digit -le 2 ]; then
+    if [ $second_digit -eq 0 ]; then
+        num=$third_digit
+    else
+        num=$second_digit$third_digit
+    fi
+else
+    num=$((first_digit - 2))$second_digit$third_digit
+fi
 # 检测IPV6相关的信息
 if [ -f /usr/local/bin/pve_check_ipv6 ]; then
     ipv6_address=$(cat /usr/local/bin/pve_check_ipv6)
@@ -205,7 +216,9 @@ else
 fi
 pct start $CTID
 pct set $CTID --hostname $CTID
+user_ip="172.16.1.${num}"
 pct set $CTID --net0 name=eth0,ip6=${ipv6_address}/${ipv6_prefixlen},bridge=vmbr0,gw6=${ipv6_gateway}
+pct set $CTID --net1 name=eth1,ip=${user_ip}/24,bridge=vmbr1,gw=172.16.1.1
 pct set $CTID --nameserver 8.8.8.8,2001:4860:4860::8888 --nameserver 8.8.4.4,2001:4860:4860::8844
 sleep 3
 if echo "$system" | grep -qiE "centos|almalinux|rockylinux" >/dev/null 2>&1; then

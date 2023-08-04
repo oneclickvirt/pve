@@ -248,11 +248,11 @@ qm set $vm_num --nameserver 8.8.8.8,2001:4860:4860::8888
 qm set $vm_num --searchdomain 8.8.4.4,2001:4860:4860::8844
 user_ip="172.16.1.${num}"
 qm set $vm_num --ipconfig0 ip=${user_ip}/24,gw=172.16.1.1
-# if [ -z "$ipv6_address" ] || [ -z "$ipv6_prefixlen" ] || [ -z "$ipv6_gateway" ] || [ "$ipv6_prefixlen" -gt 112 ]; then
-#     qm set $vm_num --ipconfig0 ip=${user_ip}/24,gw=172.16.1.1
-# else
-#     :
-# fi
+if [ -z "$ipv6_address" ] || [ -z "$ipv6_prefixlen" ] || [ -z "$ipv6_gateway" ] || [ "$ipv6_prefixlen" -gt 112 ]; then
+    qm set $vm_num --ipconfig0 ip=${user_ip}/24,gw=172.16.1.1
+else
+    qm set $vm_num --ipconfig0 ip=${user_ip}/24,gw=172.16.1.1,ip6=${ipv6_address}/${ipv6_prefixlen},gw6=${ipv6_gateway}
+fi
 qm set $vm_num --cipassword $password --ciuser $user
 sleep 5
 qm resize $vm_num scsi0 ${disk}G

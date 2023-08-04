@@ -184,6 +184,18 @@ elif [ "$system_arch" = "arch" ]; then
         curl -L -o "$file_path" "$url"
     fi
 fi
+first_digit=${vm_num:0:1}
+second_digit=${vm_num:1:1}
+third_digit=${vm_num:2:1}
+if [ $first_digit -le 2 ]; then
+    if [ $second_digit -eq 0 ]; then
+        num=$third_digit
+    else
+        num=$second_digit$third_digit
+    fi
+else
+    num=$((first_digit - 2))$second_digit$third_digit
+fi
 # 检测IPV6相关的信息
 if [ -f /usr/local/bin/pve_check_ipv6 ]; then
     ipv6_address=$(cat /usr/local/bin/pve_check_ipv6)
@@ -205,7 +217,7 @@ fi
 if [ -f /usr/local/bin/pve_ipv6_gateway ]; then
     ipv6_gateway=$(cat /usr/local/bin/pve_ipv6_gateway)
 fi
-qm create $vm_num --agent 1 --scsihw virtio-scsi-single --serial0 socket --cores $core --sockets 1 --cpu host --net0 virtio,bridge=vmbr0,firewall=0
+qm create $vm_num --agent 1 --scsihw virtio-scsi-single --serial0 socket --cores $core --sockets 1 --cpu host --net0 virtio,bridge=vmbr0,firewall=0 --net1 virtio,bridge=vmbr1,firewall=0
 if [ "$system_arch" = "x86" ]; then
     qm importdisk $vm_num /root/qcow/${system}.qcow2 ${storage}
 else
@@ -226,7 +238,9 @@ qm set $vm_num --memory $memory
 qm set $vm_num --ide2 ${storage}:cloudinit
 qm set $vm_num --nameserver 8.8.8.8,2001:4860:4860::8888
 qm set $vm_num --searchdomain 8.8.4.4,2001:4860:4860::8844
+user_ip="172.16.1.${num}"
 qm set $vm_num --ipconfig0 ip6=${ipv6_address}/${ipv6_prefixlen},gw6=${ipv6_gateway}
+qm set $vm_num --ipconfig1 ip=${user_ip}/24,gw=172.16.1.1
 qm set $vm_num --cipassword $password --ciuser $user
 sleep 5
 qm resize $vm_num scsi0 ${disk}G

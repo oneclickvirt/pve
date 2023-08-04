@@ -197,7 +197,7 @@ else
 fi
 # 检测IPV6相关的信息
 if [ -f /usr/local/bin/pve_check_ipv6 ]; then
-    ipv6_address=$(cat /usr/local/bin/pve_check_ipv6)
+    ipv6_address="2001:db8:1::2"
     IFS="/" read -ra parts <<< "$ipv6_address"
     part_1="${parts[0]}"
     part_2="${parts[1]}"
@@ -211,10 +211,10 @@ if [ -f /usr/local/bin/pve_check_ipv6 ]; then
     fi
 fi
 if [ -f /usr/local/bin/pve_ipv6_prefixlen ]; then
-    ipv6_prefixlen=$(cat /usr/local/bin/pve_ipv6_prefixlen)
+    ipv6_prefixlen="64"
 fi
 if [ -f /usr/local/bin/pve_ipv6_gateway ]; then
-    ipv6_gateway=$(cat /usr/local/bin/pve_ipv6_gateway)
+    ipv6_gateway="2001:db8:1::"
 fi
 user_ip="172.16.1.${num}"
 if [ "$system_arch" = "x86" ]; then
@@ -225,12 +225,11 @@ else
 fi
 pct start $CTID
 pct set $CTID --hostname $CTID
-pct set $CTID --net0 name=eth0,ip=${user_ip}/24,bridge=vmbr1,gw=172.16.1.1
-# if [ -z "$ipv6_address" ] || [ -z "$ipv6_prefixlen" ] || [ -z "$ipv6_gateway" ] || [ "$ipv6_prefixlen" -gt 112 ]; then
-#     pct set $CTID --net0 name=eth0,ip=${user_ip}/24,bridge=vmbr1,gw=172.16.1.1
-# else
-#     :
-# fi
+if [ -z "$ipv6_address" ] || [ -z "$ipv6_prefixlen" ] || [ -z "$ipv6_gateway" ] || [ "$ipv6_prefixlen" -gt 112 ]; then
+    pct set $CTID --net0 name=eth0,ip=${user_ip}/24,bridge=vmbr1,gw=172.16.1.1
+else
+    pct set $CTID --net0 name=eth0,ip=${user_ip}/24,bridge=vmbr1,gw=172.16.1.1,ip6=${ipv6_address}/${ipv6_prefixlen},gw6=${ipv6_gateway}
+fi
 pct set $CTID --nameserver 8.8.8.8,2001:4860:4860::8888 --nameserver 8.8.4.4,2001:4860:4860::8844
 sleep 3
 if echo "$system" | grep -qiE "centos|almalinux|rockylinux"; then
@@ -263,13 +262,8 @@ iptables-save > /etc/iptables/rules.v4
 service netfilter-persistent restart
 
 # 容器的相关信息将会存储到对应的容器的NOTE中，可在WEB端查看
-if [ -z "$ipv6_address" ] || [ -z "$ipv6_prefixlen" ] || [ -z "$ipv6_gateway" ] || [ "$ipv6_prefixlen" -gt 112 ]; then
-    echo "$CTID $password $core $memory $disk $sshn $web1_port $web2_port $port_first $port_last $system_ori $storage" >> "ct${CTID}"
-    data=$(echo " CTID root密码-password CPU核数-CPU 内存-memory 硬盘-disk SSH端口 80端口 443端口 外网端口起-port-start 外网端口止-port-end 系统-system 存储盘-storage")
-else
-    echo "$CTID $password $core $memory $disk $sshn $web1_port $web2_port $port_first $port_last $system_ori $storage $ipv6_address" >> "ct${CTID}"
-    data=$(echo " CTID root密码-password CPU核数-CPU 内存-memory 硬盘-disk SSH端口 80端口 443端口 外网端口起-port-start 外网端口止-port-end 系统-system 存储盘-storage 外网IPV6-ipv6")
-fi
+echo "$CTID $password $core $memory $disk $sshn $web1_port $web2_port $port_first $port_last $system_ori $storage" >> "ct${CTID}"
+data=$(echo " CTID root密码-password CPU核数-CPU 内存-memory 硬盘-disk SSH端口 80端口 443端口 外网端口起-port-start 外网端口止-port-end 系统-system 存储盘-storage")
 values=$(cat "ct${CTID}")
 IFS=' ' read -ra data_array <<< "$data"
 IFS=' ' read -ra values_array <<< "$values"
