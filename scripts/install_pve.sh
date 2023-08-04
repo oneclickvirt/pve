@@ -730,7 +730,6 @@ for path in $(echo $target_paths | tr ':' ' '); do
   fi
 done
 if [ ! -d /usr/local/bin ]; then
-    # 如果目录不存在，则创建它
     mkdir -p /usr/local/bin
 fi
 

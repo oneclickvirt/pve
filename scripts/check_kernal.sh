@@ -1,7 +1,7 @@
 #!/bin/bash
 # from 
 # https://github.com/spiritLHLS/pve
-# 2023.06.29
+# 2023.08.04
 
 
 # 用颜色输出信息
@@ -18,6 +18,9 @@ else
   export LANG="$utf8_locale"
   export LANGUAGE="$utf8_locale"
   echo "Locale set to $utf8_locale"
+fi
+if [ ! -d /usr/local/bin ]; then
+    mkdir -p /usr/local/bin
 fi
 
 check_config(){
@@ -53,7 +56,137 @@ check_config(){
         _red "本机内存配置无法安装PVE (未计算SWAP，如若SWAP的虚拟内存加上本机实际内存大于2G请忽略本提示)"
     fi
 }
+
+is_private_ipv6() {
+    local address=$1
+    # 输入为空
+    if [[ -z $ip_address ]]; then
+        return 0
+    fi
+    # 检查IPv6地址是否以fe80开头（链接本地地址）
+    if [[ $address == fe80:* ]]; then
+        return 0
+    fi
+    # 检查IPv6地址是否以fc00或fd00开头（唯一本地地址）
+    if [[ $address == fc00:* || $address == fd00:* ]]; then
+        return 0
+    fi
+    # 检查IPv6地址是否以2001:db8开头（文档前缀）
+    if [[ $address == 2001:db8* ]]; then
+        return 0
+    fi
+    # 检查IPv6地址是否以::1开头（环回地址）
+    if [[ $address == ::1 ]]; then
+        return 0
+    fi
+    # 检查IPv6地址是否以::ffff:开头（IPv4映射地址）
+    if [[ $address == ::ffff:* ]]; then
+        return 0
+    fi
+    # 检查IPv6地址是否以2002:开头（6to4隧道地址）
+    if [[ $address == 2002:* ]]; then
+        return 0
+    fi
+    # 检查IPv6地址是否以2001:开头（Teredo隧道地址）
+    if [[ $address == 2001:* ]]; then
+        return 0
+    fi
+    # 其他情况为公网地址
+    return 1
+}
+
+check_ipv6(){
+    IPV6=$(ip -6 addr show | grep global | awk '{print $2}' | cut -d '/' -f1 | head -n 1)
+    local response
+    if is_private_ipv6 "$IPV6"; then # 由于是内网IPV4地址，需要通过API获取外网地址
+        IPV6=""
+        local API_NET=("ipv6.ip.sb" "https://ipget.net" "ipv6.ping0.cc" "https://api.my-ip.io/ip" "https://ipv6.icanhazip.com")
+        for p in "${API_NET[@]}"; do
+            response=$(curl -sLk6m8 "$p" | tr -d '[:space:]')
+            sleep 1
+            if [ $? -eq 0 ] && ! echo "$response" | grep -q "error"; then
+                IPV6="$response"
+                break
+            fi
+        done
+    fi
+    echo $IPV6 > /usr/local/bin/pve_check_ipv6
+}
+
+check_interface(){
+    if [ -z "$interface_2" ]; then
+        interface=${interface_1}
+        return
+    elif [ -n "$interface_1" ] && [ -n "$interface_2" ]; then
+        if ! grep -q "$interface_1" "/etc/network/interfaces" && ! grep -q "$interface_2" "/etc/network/interfaces" && [ -f "/etc/network/interfaces.d/50-cloud-init" ]; then
+            if grep -q "$interface_1" "/etc/network/interfaces.d/50-cloud-init" || grep -q "$interface_2" "/etc/network/interfaces.d/50-cloud-init"; then
+                if ! grep -q "$interface_1" "/etc/network/interfaces.d/50-cloud-init" && grep -q "$interface_2" "/etc/network/interfaces.d/50-cloud-init"; then
+                    interface=${interface_2}
+                    return
+                elif ! grep -q "$interface_2" "/etc/network/interfaces.d/50-cloud-init" && grep -q "$interface_1" "/etc/network/interfaces.d/50-cloud-init"; then
+                    interface=${interface_1}
+                    return
+                fi
+            fi
+        fi
+        if grep -q "$interface_1" "/etc/network/interfaces"; then
+            interface=${interface_1}
+            return
+        elif grep -q "$interface_2" "/etc/network/interfaces"; then
+            interface=${interface_2}
+            return
+        else
+            interfaces_list=$(ip addr show | awk '/^[0-9]+: [^lo]/ {print $2}' | cut -d ':' -f 1)
+            interface=""
+            for iface in $interfaces_list; do
+                if [[ "$iface" = "$interface_1" || "$iface" = "$interface_2" ]]; then
+                    interface="$iface"
+                fi
+            done
+            if [ -z "$interface" ]; then
+                interface="eth0"
+            fi
+            return
+        fi
+    else
+        interface="eth0"
+        return
+    fi
+}
+
+
 check_config
+apt-get install lshw -y
+if command -v lshw > /dev/null 2>&1 ; then
+    # 检测物理接口
+    interface_1=$(lshw -C network | awk '/logical name:/{print $3}' | sed -n '1p')
+    interface_2=$(lshw -C network | awk '/logical name:/{print $3}' | sed -n '2p')
+    check_interface
+    # 检测IPV6相关的信息
+    if [ ! -f /usr/local/bin/pve_check_ipv6 ]; then
+        check_ipv6
+    fi
+    if [ ! -f /usr/local/bin/pve_ipv6_prefixlen ]; then
+        ipv6_prefixlen=$(ifconfig ${interface} | grep -oP 'prefixlen \K\d+' | head -n 1)
+        echo "$ipv6_prefixlen" > /usr/local/bin/pve_ipv6_prefixlen
+    fi
+    if [ ! -f /usr/local/bin/pve_ipv6_gateway ]; then
+        ipv6_gateway=$(ip -6 route show | awk '/default via/{print $3}')
+        echo "$ipv6_gateway" > /usr/local/bin/pve_ipv6_gateway
+    fi
+    ipv6_address=$(cat /usr/local/bin/pve_check_ipv6)
+    ipv6_prefixlen=$(cat /usr/local/bin/pve_ipv6_prefixlen)
+    ipv6_gateway=$(cat /usr/local/bin/pve_ipv6_gateway)
+    if [ -z "$ipv6_address" ] || [ -z "$ipv6_prefixlen" ] || [ -z "$ipv6_gateway" ]; then
+        :
+    else
+        _green "The following IPV6 information is detected for this machine:"
+        _green "检测到本机的IPV6信息如下："
+        _green "ipv6_address: ${ipv6_address}"
+        _green "ipv6_prefixlen: ${ipv6_prefixlen}"
+        _green "ipv6_gateway: ${ipv6_gateway}"
+    fi
+fi
 
 # 检查CPU是否支持硬件虚拟化
 if [ "$(egrep -c '(vmx|svm)' /proc/cpuinfo)" -eq 0 ]; then
