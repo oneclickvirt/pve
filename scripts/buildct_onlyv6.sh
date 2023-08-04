@@ -173,7 +173,7 @@ check_cdn_file() {
     fi
 }
 
-cdn_urls=("https://cdn.spiritlhl.workers.dev/" "https://cdn3.spiritlhl.net/" "https://cdn1.spiritlhl.net/" "https://ghproxy.com/" "https://cdn2.spiritlhl.net/")
+cdn_urls=("https://cdn.spiritlhl.workers.dev/" "https://cdn3.spiritlhl.net/" "https://cdn1.spiritlhl.net/" "https://cdn2.spiritlhl.net/")
 check_cdn_file
 
 # 检测IPV6相关的信息
