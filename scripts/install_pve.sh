@@ -888,7 +888,7 @@ if [ ! -f "/usr/local/bin/reboot_pve.txt" ]; then
         #     prebuild_ifupdown2
         # fi
     fi
-    if [[ $dmidecode_output == *"Hetzner_vServer"* ]]; then
+    if [[ $dmidecode_output == *"Hetzner_vServer"* ]] || [ $dmidecode_output == *"Exoscale Compute Platform"* ]; then
         # 特殊处理Hetzner
         prebuild_ifupdown2
     fi
@@ -1118,7 +1118,7 @@ rebuild_interfaces
 fix_interfaces_ipv6_auto_type
 
 # 特殊处理Hetzner和Azure的情况
-if [[ $dmidecode_output == *"Hetzner_vServer"* ]] || [[ $dmidecode_output == *"Microsoft Corporation"* ]]; then
+if [[ $dmidecode_output == *"Hetzner_vServer"* ]] || [[ $dmidecode_output == *"Microsoft Corporation"* ]] || [ $dmidecode_output == *"Exoscale Compute Platform"* ]; then
     auto_interface=$(grep '^auto ' /etc/network/interfaces | grep -v '^auto lo' | awk '{print $2}' | head -n 1)
     if ! grep -q "^post-up ${ethtool_path}" /etc/network/interfaces; then
         chattr -i /etc/network/interfaces
