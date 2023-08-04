@@ -18,6 +18,7 @@
 - 开设独立IPV4地址的虚拟机时，尝试增加自动附加IPV6地址的功能
 - 增加一键开设纯IPV6虚拟机、纯IPV6容器的脚本
 - 修复可能的dns-nameservers存在多行导致网络异常的问题
+- 特殊处理没有ifupdown的宿主机
 
 [更新日志](CHANGELOG.md)
 
