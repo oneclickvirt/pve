@@ -133,6 +133,12 @@ if command -v lshw > /dev/null 2>&1 ; then
         if [ -z "$ipv6_prefixlen" ]; then
             ipv6_prefixlen=$(ifconfig eth0 | grep -oP 'prefixlen \K\d+' | head -n 1)
         fi
+        if [ -z "$ipv6_prefixlen" ]; then
+            ipv6_prefixlen=$(ifconfig vmbr0 | grep -oP 'prefixlen \K\d+' | head -n 1)
+        fi
+        if [ -z "$ipv6_prefixlen" ]; then
+            ipv6_prefixlen=$(ifconfig vmbr1 | grep -oP 'prefixlen \K\d+' | head -n 1)
+        fi
         echo "$ipv6_prefixlen" > /usr/local/bin/pve_ipv6_prefixlen
     fi
     if [ ! -f /usr/local/bin/pve_ipv6_gateway ]; then
