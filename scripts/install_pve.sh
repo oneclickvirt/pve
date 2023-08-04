@@ -888,7 +888,7 @@ if [ ! -f "/usr/local/bin/reboot_pve.txt" ]; then
         #     prebuild_ifupdown2
         # fi
     fi
-    if [[ $dmidecode_output == *"Hetzner_vServer"* ]] || [[ $dmidecode_output == *"Exoscale Compute Platform"* ]] || ! command -v ifupdown; then
+    if [[ $dmidecode_output == *"Hetzner_vServer"* ]] || [[ $dmidecode_output == *"Exoscale Compute Platform"* ]] || ! dpkg -S ifupdown; then
         prebuild_ifupdown2
     fi
     # # 特殊处理OVH
