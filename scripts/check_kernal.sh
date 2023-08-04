@@ -102,11 +102,11 @@ check_ipv6(){
         local API_NET=("ipv6.ip.sb" "https://ipget.net" "ipv6.ping0.cc" "https://api.my-ip.io/ip" "https://ipv6.icanhazip.com")
         for p in "${API_NET[@]}"; do
             response=$(curl -sLk6m8 "$p" | tr -d '[:space:]')
-            sleep 1
             if [ $? -eq 0 ] && ! echo "$response" | grep -q "error"; then
                 IPV6="$response"
                 break
             fi
+            sleep 1
         done
     fi
     echo $IPV6 > /usr/local/bin/pve_check_ipv6
