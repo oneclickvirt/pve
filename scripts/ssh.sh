@@ -1,7 +1,7 @@
 #!/bin/bash
 # from 
 # https://github.com/spiritLHLS/pve
-# 2023.08.04
+# 2023.08.09
 
 if [ -f "/etc/resolv.conf" ]
 then
@@ -180,5 +180,5 @@ service ssh restart
 service sshd restart
 systemctl restart sshd
 systemctl restart ssh
-sed -i 's/.*precedence ::ffff:0:0\/96.*/precedence ::ffff:0:0\/96  100/g' /etc/gai.conf && systemctl restart networking
+sed -i 's/.*precedence ::ffff:0:0\/96.*/precedence ::ffff:0:0\/96  100/g' /etc/gai.conf
 rm -rf "$0"
