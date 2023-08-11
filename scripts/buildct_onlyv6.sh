@@ -238,13 +238,15 @@ pct exec $CTID -- bash ssh.sh
 # pct exec $CTID -- curl -L ${cdn_success_url}https://raw.githubusercontent.com/spiritLHLS/lxc/main/config.sh -o config.sh
 # pct exec $CTID -- chmod +x config.sh
 # pct exec $CTID -- bash config.sh
-if [ -z "$ipv6_address" ] || [ -z "$ipv6_prefixlen" ] || [ -z "$ipv6_gateway" ] || [ "$ipv6_prefixlen" -gt 112 ]; then
-    :
-else
-    sleep 3
-    pct exec $CTID -- systemctl restart networking
-    pct reboot $CTID
-fi
+
+# if [ -z "$ipv6_address" ] || [ -z "$ipv6_prefixlen" ] || [ -z "$ipv6_gateway" ] || [ "$ipv6_prefixlen" -gt 112 ]; then
+#     :
+# else
+#     sleep 3
+#     pct exec $CTID -- systemctl restart networking
+#     pct reboot $CTID
+# fi
+
 echo "$CTID $password $core $memory $disk $system_ori $storage $ipv6_address" >> "ct${CTID}"
 # 容器的相关信息将会存储到对应的容器的NOTE中，可在WEB端查看
 data=$(echo " CTID root密码-password CPU核数-CPU 内存-memory 硬盘-disk 系统-system 存储盘-storage 外网IPV6-ipv6")

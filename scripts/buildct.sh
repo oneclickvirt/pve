@@ -251,13 +251,14 @@ pct exec $CTID -- bash ssh.sh
 # pct exec $CTID -- curl -L ${cdn_success_url}https://raw.githubusercontent.com/spiritLHLS/lxc/main/config.sh -o config.sh
 # pct exec $CTID -- chmod +x config.sh
 # pct exec $CTID -- bash config.sh
-if [ -z "$ipv6_address" ] || [ -z "$ipv6_prefixlen" ] || [ -z "$ipv6_gateway" ] || [ "$ipv6_prefixlen" -gt 112 ]; then
-    :
-else
-    sleep 3
-    pct exec $CTID -- systemctl restart networking
-    pct reboot $CTID
-fi
+
+# if [ -z "$ipv6_address" ] || [ -z "$ipv6_prefixlen" ] || [ -z "$ipv6_gateway" ] || [ "$ipv6_prefixlen" -gt 112 ]; then
+#     :
+# else
+#     sleep 3
+#     pct exec $CTID -- systemctl restart networking
+#     pct reboot $CTID
+# fi
 
 iptables -t nat -A PREROUTING -p tcp --dport ${sshn} -j DNAT --to-destination ${user_ip}:22
 iptables -t nat -A PREROUTING -p tcp -m tcp --dport ${web1_port} -j DNAT --to-destination ${user_ip}:80
