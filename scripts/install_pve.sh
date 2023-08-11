@@ -1233,6 +1233,7 @@ then
             echo -e "nameserver 8.8.8.8\nnameserver 223.5.5.5\n" > /etc/resolv.conf
         else
             echo -e "nameserver 8.8.8.8\nnameserver 223.5.5.5\nnameserver 2001:4860:4860::8888\nnameserver 2001:4860:4860::8844" > /etc/resolv.conf
+        fi
     else
         if [ -z "$ipv6_address" ] || [ -z "$ipv6_prefixlen" ] || [ -z "$ipv6_gateway" ]; then
             echo -e "nameserver 8.8.8.8\nnameserver 8.8.4.4\n" > /etc/resolv.conf
