@@ -254,8 +254,9 @@ pct exec $CTID -- bash ssh.sh
 if [ -z "$ipv6_address" ] || [ -z "$ipv6_prefixlen" ] || [ -z "$ipv6_gateway" ] || [ "$ipv6_prefixlen" -gt 112 ]; then
     :
 else
+    sleep 3
     pct exec $CTID -- systemctl restart networking
-    pct exec $CTID -- reboot
+    pct reboot $CTID
 fi
 
 iptables -t nat -A PREROUTING -p tcp --dport ${sshn} -j DNAT --to-destination ${user_ip}:22

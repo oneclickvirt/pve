@@ -241,8 +241,9 @@ pct exec $CTID -- bash ssh.sh
 if [ -z "$ipv6_address" ] || [ -z "$ipv6_prefixlen" ] || [ -z "$ipv6_gateway" ] || [ "$ipv6_prefixlen" -gt 112 ]; then
     :
 else
+    sleep 3
     pct exec $CTID -- systemctl restart networking
-    pct exec $CTID -- reboot
+    pct reboot $CTID
 fi
 echo "$CTID $password $core $memory $disk $system_ori $storage $ipv6_address" >> "ct${CTID}"
 # 容器的相关信息将会存储到对应的容器的NOTE中，可在WEB端查看
