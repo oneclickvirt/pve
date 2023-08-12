@@ -195,7 +195,7 @@ if [ -f /usr/local/bin/pve_check_ipv6 ]; then
     part_1="${parts[0]}"
     part_2="${parts[1]}"
     IFS=":" read -ra part_1_parts <<< "$part_1"
-    if [ ! -z "${part_1_parts[@]}" ]; then
+    if [ ! -z "${part_1_parts[*]}" ]; then
         part_1_last="${part_1_parts[-1]}"
         if [ "$part_1_last" = "$vm_num" ]; then
             ipv6_address=""
