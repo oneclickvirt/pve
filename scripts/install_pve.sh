@@ -1,7 +1,7 @@
 #!/bin/bash
 # from 
 # https://github.com/spiritLHLS/pve
-# 2023.08.09
+# 2023.08.13
 
 
 ########## 预设部分输出和部分中间变量
@@ -284,20 +284,19 @@ remove_source_input
 # 检查/etc/network/interfaces文件中是否有iface xxxx inet auto行
 if [ -f "/etc/network/interfaces" ]; then
     if grep -q "iface $interface inet auto" /etc/network/interfaces; then
-        subnet=$(ipcalc -n "$ipv4_address" | grep -oP 'Netmask:\s+\K.*' | awk '{print $1}')
         chattr -i /etc/network/interfaces
         if [[ -z "${CN}" || "${CN}" != true ]]; then
             sed -i "/iface $interface inet auto/c\
                 iface $interface inet static\n\
                 address $ipv4_address\n\
-                netmask $subnet\n\
+                netmask $ipv4_subnet\n\
                 gateway $ipv4_gateway\n\
                 dns-nameservers 8.8.8.8 8.8.4.4" /etc/network/interfaces
         else
             sed -i "/iface $interface inet auto/c\
                 iface $interface inet static\n\
                 address $ipv4_address\n\
-                netmask $subnet\n\
+                netmask $ipv4_subnet\n\
                 gateway $ipv4_gateway\n\
                 dns-nameservers 8.8.8.8 223.5.5.5" /etc/network/interfaces
         fi
@@ -313,21 +312,19 @@ if [[ $dmidecode_output == *"Hetzner_vServer"* ]] || [[ $dmidecode_output == *"M
             inet_dhcp=false
         fi
         if grep -q "iface $interface inet dhcp" /etc/network/interfaces; then
-            # 获取ipv4、subnet、gateway信息
-            subnet=$(ipcalc -n "$ipv4_address" | grep -oP 'Netmask:\s+\K.*' | awk '{print $1}')
             chattr -i /etc/network/interfaces
             if [[ -z "${CN}" || "${CN}" != true ]]; then
                 sed -i "/iface $interface inet dhcp/c\
                     iface $interface inet static\n\
                     address $ipv4_address\n\
-                    netmask $subnet\n\
+                    netmask $ipv4_subnet\n\
                     gateway $ipv4_gateway\n\
                     dns-nameservers 8.8.8.8 8.8.4.4" /etc/network/interfaces
             else
                 sed -i "/iface $interface inet dhcp/c\
                     iface $interface inet static\n\
                     address $ipv4_address\n\
-                    netmask $subnet\n\
+                    netmask $ipv4_subnet\n\
                     gateway $ipv4_gateway\n\
                     dns-nameservers 8.8.8.8 223.5.5.5" /etc/network/interfaces
             fi
@@ -760,20 +757,26 @@ if [ ! -f /usr/local/bin/pve_main_ipv4 ]; then
     main_ipv4=$(ip -4 addr show | grep global | awk '{print $2}' | cut -d '/' -f1 | head -n 1)
     echo "$main_ipv4" > /usr/local/bin/pve_main_ipv4
 fi
+# 提取主IPV4地址
+main_ipv4=$(cat /usr/local/bin/pve_main_ipv4)
 if [ ! -f /usr/local/bin/pve_ipv4_address ]; then
     ipv4_address=$(ip addr show | awk '/inet .*global/ && !/inet6/ {print $2}' | sed -n '1p')
     echo "$ipv4_address" > /usr/local/bin/pve_ipv4_address
 fi
+# 提取IPV4地址 含子网长度
+ipv4_address=$(cat /usr/local/bin/pve_ipv4_address)
 if [ ! -f /usr/local/bin/pve_ipv4_gateway ]; then
     ipv4_gateway=$(ip route | awk '/default/ {print $3}' | sed -n '1p')
     echo "$ipv4_gateway" > /usr/local/bin/pve_ipv4_gateway
 fi
-# 检测主IPV4地址
-main_ipv4=$(cat /usr/local/bin/pve_main_ipv4)
-# 提取IPV4地址 含子网长度
-ipv4_address=$(cat /usr/local/bin/pve_ipv4_address)
 # 提取IPV4网关
 ipv4_gateway=$(cat /usr/local/bin/pve_ipv4_gateway)
+if [ ! -f /usr/local/bin/pve_ipv4_subnet ]; then
+    ipv4_subnet=$(ipcalc -n "$ipv4_address" | grep -oP 'Netmask:\s+\K.*' | awk '{print $1}')
+    echo "$ipv4_subnet" > /usr/local/bin/pve_ipv4_subnet
+fi
+# 提取Netmask
+ipv4_subnet=$(cat /usr/local/bin/pve_ipv4_subnet)
 
 # 检测物理接口和MAC地址
 interface_1=$(lshw -C network | awk '/logical name:/{print $3}' | sed -n '1p')
@@ -815,13 +818,12 @@ fi
 # 特殊化处理各虚拟化
 if [ ! -f "/etc/network/interfaces" ]; then
     touch "/etc/network/interfaces"
-    subnet=$(ipcalc -n "$ipv4_address" | grep -oP 'Netmask:\s+\K.*' | awk '{print $1}')
     chattr -i /etc/network/interfaces
     echo "auto lo" >> /etc/network/interfaces
     echo "iface lo inet loopback" >> /etc/network/interfaces
     echo "iface $interface inet static" >> /etc/network/interfaces
     echo "    address $ipv4_address" >> /etc/network/interfaces
-    echo "    netmask $subnet" >> /etc/network/interfaces
+    echo "    netmask $ipv4_subnet" >> /etc/network/interfaces
     echo "    gateway $ipv4_gateway" >> /etc/network/interfaces
     if [[ -z "${CN}" || "${CN}" != true ]]; then
         echo "    dns-nameservers 8.8.8.8 8.8.4.4" >> /etc/network/interfaces
