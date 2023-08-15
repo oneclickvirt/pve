@@ -252,9 +252,7 @@ if ! command -v docker-compose > /dev/null 2>&1; then
 fi
 
 # Dockerfile_x86_64_7
-# Dockerfile_CN_x86_64_7
 # Dockerfile_aarch64_7
-# Dockerfile_CN_aarch64_7
 tag="x86_64_7"
 docker_file_name="Dockerfile_x86_64_7"
 curl -Lk "${cdn_success_url}https://raw.githubusercontent.com/spiritLHLS/pve/main/dockerfiles/${docker_file_name}" -o /root/Dockerfile
