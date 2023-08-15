@@ -14,7 +14,7 @@ apt-get install wget systemctl nano vim curl gnupg  ca-certificates -y
 #add proxmox repo
 #use jiangcuo_proxmox_arm64 https://github.com/jiangcuo/Proxmox-Arm64
 RUN echo "deb https://mirrors.apqa.cn/proxmox/ pvearm  main">/etc/apt/sources.list.d/foxi.list && \
-    wget https://global.mirrors.apqa.cn/proxmox/gpg.key -O /etc/apt/trusted.gpg.d/gpg.key && \
+    wget --no-check-certificate https://global.mirrors.apqa.cn/proxmox/gpg.key -O /etc/apt/trusted.gpg.d/gpg.key && \
     chmod +r /etc/apt/trusted.gpg.d/gpg.key
 
 #intall proxmox-ve without recommends. 

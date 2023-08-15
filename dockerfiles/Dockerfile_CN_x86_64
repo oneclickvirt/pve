@@ -13,7 +13,7 @@ RUN apt-get update && \
 
 #add proxmox repo
 RUN echo "deb http://mirrors.ustc.edu.cn/proxmox/debian/ bullseye pve-no-subscription" >>/etc/apt/sources.list && \
-    wget https://mirrors.ustc.edu.cn/proxmox/debian/proxmox-release-bullseye.gpg -O /etc/apt/trusted.gpg.d/proxmox-release-bullseye.gpg && \
+    wget --no-check-certificate https://mirrors.ustc.edu.cn/proxmox/debian/proxmox-release-bullseye.gpg -O /etc/apt/trusted.gpg.d/proxmox-release-bullseye.gpg && \
     chmod +r /etc/apt/trusted.gpg.d/proxmox-release-bullseye.gpg
 
 #repacked proxmox-ve
