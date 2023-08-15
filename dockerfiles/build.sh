@@ -233,16 +233,13 @@ check_china(){
 # 更改网络优先级为IPV4优先
 sed -i 's/.*precedence ::ffff:0:0\/96.*/precedence ::ffff:0:0\/96  100/g' /etc/gai.conf && systemctl restart networking
 
+install_package curl
+install_package sudo
+
 # cdn检测
 cdn_urls=("https://cdn.spiritlhl.workers.dev/" "https://cdn3.spiritlhl.net/" "https://cdn1.spiritlhl.net/" "https://ghproxy.com/" "https://cdn2.spiritlhl.net/")
 check_cdn_file
 
-check_time_zone
-check_haveged
-install_package curl
-install_package sudo
-install_package jq
-install_package openssl
 if ! command -v docker > /dev/null 2>&1; then
     _yellow "Installing docker"
     curl -sSL https://get.docker.com/ | sh
@@ -254,63 +251,11 @@ if ! command -v docker-compose > /dev/null 2>&1; then
     docker-compose --version
 fi
 
-# ChinaIP检测
-check_china
-
-# 前置环境安装与配置
-if [ "$(id -u)" != "0" ]; then
-   _red "This script must be run as root"
-   exit 1
-fi
-get_system_arch
-if [ -z "${system_arch}" ] || [ ! -v system_arch ]; then
-   _red "This script can only run on machines under x86_64 or arm architecture."
-   exit 1
-fi
-
-# if [ "$system_arch" = "x86" ]; then
-#     if [[ -z "${CN}" || "${CN}" != true ]]; then
-#         docker_file_name="Dockerfile_x86_64"
-#     else
-#         docker_file_name="Dockerfile_aarch64"
-#     fi
-# elif [ "$system_arch" = "arch" ]; then
-#     if [[ -z "${CN}" || "${CN}" != true ]]; then
-#         docker_file_name="Dockerfile_CN_x86_64"
-#     else
-#         docker_file_name="Dockerfile_CN_aarch64"
-#     fi
-# fi
+# Dockerfile_x86_64
+# Dockerfile_CN_x86_64
+#
+#
 tag="x86_64"
 docker_file_name="Dockerfile_x86_64"
 curl -Lk "${cdn_success_url}https://raw.githubusercontent.com/spiritLHLS/pve/main/dockerfiles/${docker_file_name}" -o /root/Dockerfile
 docker build -t "spiritlhl/proxmoxve:${tag}" -f /root/Dockerfile .
-
-# # 统计运行次数
-# statistics_of_run-times
-
-# # 清除防火墙
-# install_package ufw
-# ufw disable
-
-# ########## 打印安装成功的信息
-
-# # 查询公网IPV4
-# check_ipv4
-
-# # 打印安装后的信息
-# url="https://${IPV4}:8006/"
-
-# # 打印内核
-# running_kernel=$(uname -r)
-# _green "Running kernel: $(pveversion)"
-# installed_kernels=($(dpkg -l 'pve-kernel-*' | awk '/^ii/ {print $2}' | cut -d'-' -f3- | sort -V))
-# if [ ${#installed_kernels[@]} -gt 0 ]; then
-#     latest_kernel=${installed_kernels[-1]}
-#     _green "PVE latest kernel: $latest_kernel"
-# fi
-
-# _green "Installation complete, please open HTTPS web page $url"
-# _green "The username and password are both root"
-# _green "安装完毕，请打开HTTPS网页 $url"
-# _green "用户名、密码都是 root"
