@@ -15,7 +15,7 @@
 
 2023.08.15
 
-- 尝试增加Docker安装PVE的方法以适配宿主机不是Debian的情况
+- 尝试增加Docker安装PVE的方法以适配宿主机不是Debian的情况，实测支持Ubuntu了，其他支持Docker的宿主机系统应该也没问题
 
 [更新日志](CHANGELOG.md)
 
