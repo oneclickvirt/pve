@@ -1,7 +1,7 @@
 #!/bin/bash
 # from 
 # https://github.com/spiritLHLS/pve
-# 2023.08.13
+# 2023.08.15
 
 
 ########## 预设部分输出和部分中间变量
@@ -253,8 +253,8 @@ fi
 
 # Dockerfile_x86_64
 # Dockerfile_CN_x86_64
-#
-#
+# Dockerfile_aarch64
+# Dockerfile_CN_aarch64
 tag="x86_64"
 docker_file_name="Dockerfile_x86_64"
 curl -Lk "${cdn_success_url}https://raw.githubusercontent.com/spiritLHLS/pve/main/dockerfiles/${docker_file_name}" -o /root/Dockerfile
