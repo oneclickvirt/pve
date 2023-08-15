@@ -16,36 +16,36 @@ RUN echo "deb http://mirrors.ustc.edu.cn/proxmox/debian/ bullseye pve-no-subscri
     wget --no-check-certificate https://mirrors.ustc.edu.cn/proxmox/debian/proxmox-release-bullseye.gpg -O /etc/apt/trusted.gpg.d/proxmox-release-bullseye.gpg && \
     chmod +r /etc/apt/trusted.gpg.d/proxmox-release-bullseye.gpg
 
-# Repack Proxmox-VE package
-RUN wget https://download.proxmox.com/debian/dists/bullseye/pve-no-subscription/binary-amd64/proxmox-ve_7.2-1_all.deb && \
+#repacked proxmox-ve
+RUN wget https://mirrors.ustc.edu.cn/proxmox/debian/dists/bullseye/pve-no-subscription/binary-amd64/proxmox-ve_7.2-1_all.deb && \
     mkdir /tmp/pve && \
     dpkg -X proxmox-ve_7.2-1_all.deb /tmp/pve/ && \
     dpkg -e proxmox-ve_7.2-1_all.deb /tmp/pve/DEBIAN && \
     sed -i "s/pve-kernel-helper,//g" /tmp/pve/DEBIAN/control && \
     sed -i "s/pve-kernel-5.15,//g" /tmp/pve/DEBIAN/control && \
-    dpkg-deb -Zxz -b /tmp/pve/ /tmp/
+    dpkg-deb -Zxz  -b /tmp/pve/ /tmp/
 
-# Repack pve-manager package
-RUN wget https://download.proxmox.com/debian/dists/bullseye/pve-no-subscription/binary-amd64/pve-manager_7.2-7_amd64.deb && \
+#repacked pve-manager
+RUN wget https://mirrors.ustc.edu.cn/proxmox/debian/dists/bullseye/pve-no-subscription/binary-amd64/pve-manager_7.2-7_amd64.deb && \
     mkdir /tmp/pve-manager && \
-    dpkg -X pve-manager_7.2-7_amd64.deb /tmp/pve-manager/ && \
+    dpkg -X pve-manager_7.2-7_amd64.deb  /tmp/pve-manager/ && \
     dpkg -e pve-manager_7.2-7_amd64.deb /tmp/pve-manager/DEBIAN && \
     sed -i "s/ifupdown2 (>= 2.0.1-1+pve8) | ifenslave (>= 2.6),//g" /tmp/pve-manager/DEBIAN/control && \
-    dpkg-deb -Zxz -b /tmp/pve-manager/ /tmp
+    dpkg-deb -Zxz  -b /tmp/pve-manager/ /tmp
 
-# Install Proxmox-VE without recommends. ifupdown2 will fail to install but that's okay.
+#intall proxmox-ve without recommends. ifupdown2 will install failed but ok
 RUN apt-get update && \
-    DEBIAN_FRONTEND=noninteractive apt-get -y --no-install-recommends install proxmox-ve || echo ok
+    DEBIAN_FRONTEND=noninteractiv apt-get -y --no-install-recommends  install  proxmox-ve || echo ok
 
-# Install again
+##install again
 RUN dpkg -i /tmp/*.deb || echo ok
 
-# Set password for root
-RUN echo "root:root" | chpasswd
+#set passwd for root
+RUN echo "root:root"|chpasswd
 
-# Clean
-RUN rm -rf /var/lib/apt/lists/* /*.deb
+#clean
+RUN rm -rf /var/lib/apt/lists/*  /*.deb
 
-# Use setup.sh to start Proxmox service
+#use setup.sh to start proxmox service
 STOPSIGNAL SIGINT
-CMD ["/lib/systemd/systemd", "log-level=info", "unit=sysinit.target"]
+CMD [ "/lib/systemd/systemd", "log-level=info", "unit=sysinit.target"]
