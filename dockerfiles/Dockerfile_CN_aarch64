@@ -9,13 +9,13 @@ echo "deb http://mirrors.ustc.edu.cn/debian-security bullseye-security main cont
 
 #install base pkg
 RUN apt-get update && \
-apt-get install wget systemctl nano vim  curl gnupg  ca-certificates -y
+apt-get install wget systemctl nano vim curl gnupg  ca-certificates -y
 
 #add proxmox repo
 #use jiangcuo_proxmox_arm64 https://github.com/jiangcuo/Proxmox-Arm64
 RUN echo "deb https://mirrors.apqa.cn/proxmox/ pvearm  main">/etc/apt/sources.list.d/foxi.list && \
-curl -Lk https://mirrors.apqa.cn/proxmox/gpg.key |apt-key add -
-
+    wget https://global.mirrors.apqa.cn/proxmox/gpg.key -O /etc/apt/trusted.gpg.d/gpg.key && \
+    chmod +r /etc/apt/trusted.gpg.d/gpg.key
 
 #intall proxmox-ve without recommends. 
 RUN apt-get update && \
