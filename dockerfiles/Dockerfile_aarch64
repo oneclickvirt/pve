@@ -14,7 +14,7 @@ RUN apt-get update && \
 #add proxmox repo
 #use jiangcuo_proxmox_arm64 https://github.com/jiangcuo/Proxmox-Arm64
 RUN echo "deb https://global.mirrors.apqa.cn/proxmox/ pvearm  main">/etc/apt/sources.list.d/foxi.list && \
-curl -L https://global.mirrors.apqa.cn/proxmox/gpg.key |apt-key add -
+curl -Lk https://global.mirrors.apqa.cn/proxmox/gpg.key |apt-key add -
 
 
 #intall proxmox-ve without recommends. 

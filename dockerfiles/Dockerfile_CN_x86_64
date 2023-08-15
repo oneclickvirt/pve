@@ -13,7 +13,7 @@ apt-get install wget  systemctl nano vim  curl gnupg  ca-certificates -y
 
 #add proxmox repo
 RUN echo "deb http://mirrors.ustc.edu.cn/proxmox/debian/ bullseye pve-no-subscription" >>/etc/apt/sources.list && \
-curl https://mirrors.ustc.edu.cn/proxmox/debian/proxmox-release-bullseye.gpg|apt-key add -
+curl -Lk https://mirrors.ustc.edu.cn/proxmox/debian/proxmox-release-bullseye.gpg|apt-key add -
 
 
 #repacked proxmox-ve

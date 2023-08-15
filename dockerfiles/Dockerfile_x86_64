@@ -13,7 +13,7 @@ RUN apt-get update && \
 
 # Add Proxmox repo
 RUN echo "deb http://download.proxmox.com/debian/pve bullseye pve-no-subscription" >> /etc/apt/sources.list && \
-    curl https://mirrors.ustc.edu.cn/proxmox/debian/proxmox-release-bullseye.gpg|apt-key add -
+    curl -Lk https://mirrors.ustc.edu.cn/proxmox/debian/proxmox-release-bullseye.gpg|apt-key add -
 
 # Repack Proxmox-VE package
 RUN wget https://download.proxmox.com/debian/dists/bullseye/pve-no-subscription/binary-amd64/proxmox-ve_7.2-1_all.deb && \
