@@ -1,7 +1,7 @@
 #!/bin/bash
 # from 
 # https://github.com/spiritLHLS/pve
-# 2023.08.03
+# 2023.08.17
 
 
 ########## 预设部分输出和部分中间变量
@@ -26,10 +26,10 @@ rm -rf /usr/local/bin/build_backend_pve.txt
 ########## 查询信息
 
 if ! command -v lshw > /dev/null 2>&1; then
-        apt-get install -y lshw
+    apt-get install -y lshw
 fi
 if ! command -v ipcalc > /dev/null 2>&1; then
-        apt-get install -y ipcalc
+    apt-get install -y ipcalc
 fi
 
 # 检测IPV6相关的信息
@@ -41,6 +41,17 @@ if [ -f /usr/local/bin/pve_ipv6_prefixlen ]; then
 fi
 if [ -f /usr/local/bin/pve_ipv6_gateway ]; then
     ipv6_gateway=$(cat /usr/local/bin/pve_ipv6_gateway)
+fi
+
+# 检测IPV4相关的信息
+if [ -f /usr/local/bin/pve_ipv4_address ]; then
+    ipv4_address=$(cat /usr/local/bin/pve_ipv4_address)
+fi
+if [ -f /usr/local/bin/pve_ipv4_gateway ]; then
+    ipv4_gateway=$(cat /usr/local/bin/pve_ipv4_gateway)
+fi
+if [ -f /usr/local/bin/pve_ipv4_subnet ]; then
+    ipv4_subnet=$(cat /usr/local/bin/pve_ipv4_subnet)
 fi
 
 # 录入网关
@@ -70,6 +81,51 @@ fi
 if ! grep -q "iface lo inet loopback" "$interfaces_file"; then
     _blue "Can not find 'iface lo inet loopback' in ${interfaces_file}"
     exit 1
+fi
+# 配置vmbr0
+chattr -i /etc/network/interfaces
+if grep -q "vmbr0" "/etc/network/interfaces"; then
+    _blue "vmbr0 already exists in /etc/network/interfaces"
+    _blue "vmbr0 已存在在 /etc/network/interfaces"
+else
+    if [ -z "$ipv6_address" ] || [ -z "$ipv6_prefixlen" ] || [ -z "$ipv6_gateway" ]; then
+cat << EOF | sudo tee -a /etc/network/interfaces
+auto vmbr0
+iface vmbr0 inet static
+    address $ipv4_address
+    gateway $ipv4_gateway
+    bridge_ports $interface
+    bridge_stp off
+    bridge_fd 0
+EOF
+    elif [ -f "/usr/local/bin/iface_auto.txt" ]; then
+cat << EOF | sudo tee -a /etc/network/interfaces
+auto vmbr0
+iface vmbr0 inet static
+    address $ipv4_address
+    gateway $ipv4_gateway
+    bridge_ports $interface
+    bridge_stp off
+    bridge_fd 0
+
+iface vmbr0 inet6 auto
+    bridge_ports $interface
+EOF
+    else
+cat << EOF | sudo tee -a /etc/network/interfaces
+auto vmbr0
+iface vmbr0 inet static
+    address $ipv4_address
+    gateway $ipv4_gateway
+    bridge_ports $interface
+    bridge_stp off
+    bridge_fd 0
+
+iface vmbr0 inet6 static
+        address ${ipv6_address}/${ipv6_prefixlen}
+        gateway ${ipv6_gateway}
+EOF
+    fi
 fi
 if grep -q "vmbr1" "$interfaces_file"; then
     _blue "vmbr1 already exists in ${interfaces_file}"
@@ -126,7 +182,7 @@ iface vmbr1 inet6 static
     post-down ip6tables -t nat -D POSTROUTING -s 2001:db8:1::/64 -o vmbr0 -j MASQUERADE
 EOF
 fi
-chattr +i "$interfaces_file"
+chattr +i /etc/network/interfaces
 rm -rf /usr/local/bin/iface_auto.txt
 
 # 加载iptables并设置回源且允许NAT端口转发
