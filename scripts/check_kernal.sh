@@ -1,7 +1,7 @@
 #!/bin/bash
 # from 
 # https://github.com/spiritLHLS/pve
-# 2023.08.17
+# 2023.08.18
 
 # 用颜色输出信息
 _red() { echo -e "\033[31m\033[01m$@\033[0m"; }
@@ -120,6 +120,9 @@ check_ipv6(){
 if ! command -v lshw > /dev/null 2>&1 ; then
     apt-get install lshw -y
 fi
+if ! command -v ifconfig > /dev/null 2>&1 ; then
+  apt-get install net-tools -y
+fi
 if command -v lshw > /dev/null 2>&1 ; then
     # 检测物理接口
     interface_1=$(lshw -C network | awk '/logical name:/{print $3}' | sed -n '1p')
@@ -199,7 +202,7 @@ fi
 if ! lsmod | grep -q kvm; then
     if [ "$CPU_TYPE" = "intel" ]; then
         _yellow "KVM module not loaded, can't use PVE virtualized KVM server, but can open LXC server (CT)"
-         _yellow "KVM模块未加载，不能使用PVE虚拟化KVM服务器，但可以开LXC服务器(CT)"
+        _yellow "KVM模块未加载，不能使用PVE虚拟化KVM服务器，但可以开LXC服务器(CT)"
     elif [ "$CPU_TYPE" = "amd" ]; then
         _yellow "KVM module not loaded, can't use PVE virtualized KVM server, but can open LXC server (CT)"
         _yellow "KVM模块未加载，不能使用PVE虚拟化KVM服务器，但可以开LXC服务器(CT)"
