@@ -1,7 +1,7 @@
 #!/bin/bash
 # from 
 # https://github.com/spiritLHLS/pve
-# 2023.08.17
+# 2023.08.19
 
 
 ########## 预设部分输出和部分中间变量
@@ -11,8 +11,11 @@ _green() { echo -e "\033[32m\033[01m$@\033[0m"; }
 _yellow() { echo -e "\033[33m\033[01m$@\033[0m"; }
 _blue() { echo -e "\033[36m\033[01m$@\033[0m"; }
 reading(){ read -rp "$(_green "$1")" "$2"; }
+
 export DEBIAN_FRONTEND=noninteractive
+
 utf8_locale=$(locale -a 2>/dev/null | grep -i -m 1 -E "UTF-8|utf8")
+
 if [[ -z "$utf8_locale" ]]; then
   echo "No UTF-8 locale found"
 else
@@ -21,6 +24,7 @@ else
   export LANGUAGE="$utf8_locale"
   echo "Locale set to $utf8_locale"
 fi
+
 rm -rf /usr/local/bin/build_backend_pve.txt
 
 ########## 查询信息
@@ -36,9 +40,11 @@ fi
 if [ -f /usr/local/bin/pve_check_ipv6 ]; then
     ipv6_address=$(cat /usr/local/bin/pve_check_ipv6)
 fi
+
 if [ -f /usr/local/bin/pve_ipv6_prefixlen ]; then
     ipv6_prefixlen=$(cat /usr/local/bin/pve_ipv6_prefixlen)
 fi
+
 if [ -f /usr/local/bin/pve_ipv6_gateway ]; then
     ipv6_gateway=$(cat /usr/local/bin/pve_ipv6_gateway)
 fi
@@ -47,9 +53,11 @@ fi
 if [ -f /usr/local/bin/pve_ipv4_address ]; then
     ipv4_address=$(cat /usr/local/bin/pve_ipv4_address)
 fi
+
 if [ -f /usr/local/bin/pve_ipv4_gateway ]; then
     ipv4_gateway=$(cat /usr/local/bin/pve_ipv4_gateway)
 fi
+
 if [ -f /usr/local/bin/pve_ipv4_subnet ]; then
     ipv4_subnet=$(cat /usr/local/bin/pve_ipv4_subnet)
 fi
@@ -58,6 +66,7 @@ fi
 if [ ! -f /etc/network/interfaces.bak ]; then
     cp /etc/network/interfaces /etc/network/interfaces.bak
 fi
+
 # 修正部分网络设置重复的错误
 if [[ -f "/etc/network/interfaces.d/50-cloud-init" && -f "/etc/network/interfaces" ]]; then
     if grep -q "auto lo" "/etc/network/interfaces.d/50-cloud-init" && grep -q "iface lo inet loopback" "/etc/network/interfaces.d/50-cloud-init" && grep -q "auto lo" "/etc/network/interfaces" && grep -q "iface lo inet loopback" "/etc/network/interfaces"; then
@@ -68,20 +77,24 @@ if [[ -f "/etc/network/interfaces.d/50-cloud-init" && -f "/etc/network/interface
         chattr +i /etc/network/interfaces.d/50-cloud-init
     fi
 fi
+
 if [ -f "/etc/network/interfaces.new" ];then
     chattr -i /etc/network/interfaces.new
     rm -rf /etc/network/interfaces.new
 fi
+
 interfaces_file="/etc/network/interfaces"
 chattr -i "$interfaces_file"
 if ! grep -q "auto lo" "$interfaces_file"; then
     _blue "Can not find 'auto lo' in ${interfaces_file}"
     exit 1
 fi
+
 if ! grep -q "iface lo inet loopback" "$interfaces_file"; then
     _blue "Can not find 'iface lo inet loopback' in ${interfaces_file}"
     exit 1
 fi
+
 # 配置vmbr0
 chattr -i /etc/network/interfaces
 if grep -q "vmbr0" "/etc/network/interfaces"; then
@@ -110,6 +123,7 @@ iface vmbr0 inet static
 
 iface vmbr0 inet6 auto
     bridge_ports $interface
+    pre-up echo 2 > /proc/sys/net/ipv6/conf/vmbr0/accept_ra
 EOF
     else
 cat << EOF | sudo tee -a /etc/network/interfaces
@@ -127,6 +141,7 @@ iface vmbr0 inet6 static
 EOF
     fi
 fi
+
 if grep -q "vmbr1" "$interfaces_file"; then
     _blue "vmbr1 already exists in ${interfaces_file}"
     _blue "vmbr1 已存在在 ${interfaces_file}"
@@ -140,11 +155,6 @@ iface vmbr1 inet static
     bridge_stp off
     bridge_fd 0
     post-up echo 1 > /proc/sys/net/ipv4/ip_forward
-    post-up echo 1 > /proc/sys/net/ipv4/conf/vmbr1/proxy_arp
-    post-up iptables -t nat -A POSTROUTING -s '172.16.1.0/24' -o vmbr0 -j MASQUERADE
-    post-down iptables -t nat -D POSTROUTING -s '172.16.1.0/24' -o vmbr0 -j MASQUERADE
-
-pre-up echo 2 > /proc/sys/net/ipv6/conf/vmbr0/accept_ra
 EOF
 elif [ -z "$ipv6_address" ] || [ -z "$ipv6_prefixlen" ] || [ -z "$ipv6_gateway" ]; then
 cat << EOF | sudo tee -a "$interfaces_file"
@@ -156,9 +166,6 @@ iface vmbr1 inet static
     bridge_stp off
     bridge_fd 0
     post-up echo 1 > /proc/sys/net/ipv4/ip_forward
-    post-up echo 1 > /proc/sys/net/ipv4/conf/vmbr1/proxy_arp
-    post-up iptables -t nat -A POSTROUTING -s '172.16.1.0/24' -o vmbr0 -j MASQUERADE
-    post-down iptables -t nat -D POSTROUTING -s '172.16.1.0/24' -o vmbr0 -j MASQUERADE
 EOF
 else
 cat << EOF | sudo tee -a "$interfaces_file"
@@ -170,45 +177,33 @@ iface vmbr1 inet static
     bridge_stp off
     bridge_fd 0
     post-up echo 1 > /proc/sys/net/ipv4/ip_forward
-    post-up echo 1 > /proc/sys/net/ipv4/conf/vmbr1/proxy_arp
-    post-up iptables -t nat -A POSTROUTING -s '172.16.1.0/24' -o vmbr0 -j MASQUERADE
-    post-down iptables -t nat -D POSTROUTING -s '172.16.1.0/24' -o vmbr0 -j MASQUERADE
 
 iface vmbr1 inet6 static
     address 2001:db8:1::1/64
     post-up sysctl -w net.ipv6.conf.all.forwarding=1
-    post-up ip6tables -t nat -A POSTROUTING -s 2001:db8:1::/64 -o vmbr0 -j MASQUERADE
-    post-down sysctl -w net.ipv6.conf.all.forwarding=0
-    post-down ip6tables -t nat -D POSTROUTING -s 2001:db8:1::/64 -o vmbr0 -j MASQUERADE
 EOF
 fi
+
 chattr +i /etc/network/interfaces
 rm -rf /usr/local/bin/iface_auto.txt
 
 # 加载iptables并设置回源且允许NAT端口转发
 apt-get install -y iptables iptables-persistent
-iptables -t nat -A POSTROUTING -j MASQUERADE
-sysctl net.ipv4.ip_forward=1
-sysctl_path=$(which sysctl)
-if grep -q "^net.ipv4.ip_forward=1" /etc/sysctl.conf; then
-  if grep -q "^#net.ipv4.ip_forward=1" /etc/sysctl.conf; then
-    sed -i 's/^#net.ipv4.ip_forward=1/net.ipv4.ip_forward=1/' /etc/sysctl.conf
-  fi
-else
-    echo "net.ipv4.ip_forward=1" >> /etc/sysctl.conf
-fi
-${sysctl_path} -p
+iptables -t nat -A POSTROUTING -s 172.16.1.0/24 -o vmbr0 -j MASQUERADE
+ip6tables -t nat -A POSTROUTING -s 2001:db8:1::/64 -o vmbr0 -j MASQUERADE
+iptables-save > /etc/iptables/rules.v4
+ip6tables-save > /etc/iptables/rules.v6
 
 # 重启配置
-service networking restart
-systemctl restart networking.service
 sleep 3
-ifreload -ad
+ifreload -a
+
 # 已加载网络，删除对应缓存文件
 if [ -f "/etc/network/interfaces.new" ];then
     chattr -i /etc/network/interfaces.new
     rm -rf /etc/network/interfaces.new
 fi
+
 systemctl start check-dns.service
 # _green "Although the gateway has been set automatically, I am not sure if it has been applied successfully, please check in Datacenter-->pve-->System-->Network in PVE"
 # _green "If vmbr0 and vmbr1 are displayed properly and the Apply Configuration button is grayed out, there is no need to reboot"
