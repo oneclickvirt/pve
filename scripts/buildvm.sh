@@ -1,7 +1,7 @@
 #!/bin/bash
 # from 
 # https://github.com/spiritLHLS/pve
-# 2023.08.04
+# 2023.08.19
 
 
 # ./buildvm.sh VMID 用户名 密码 CPU核数 内存 硬盘 SSH端口 80端口 443端口 外网端口起 外网端口止 系统 存储盘
@@ -278,6 +278,7 @@ iptables -t nat -A PREROUTING -p udp -m udp --dport ${port_first}:${port_last} -
 if [ ! -f "/etc/iptables/rules.v4" ]; then
     touch /etc/iptables/rules.v4
 fi
+iptables-save | awk '!seen[$0]++' | iptables-restore
 iptables-save > /etc/iptables/rules.v4
 service netfilter-persistent restart
 
