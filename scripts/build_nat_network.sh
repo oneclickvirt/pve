@@ -189,8 +189,8 @@ rm -rf /usr/local/bin/iface_auto.txt
 
 # 加载iptables并设置回源且允许NAT端口转发
 apt-get install -y iptables iptables-persistent
-iptables -t nat -A POSTROUTING -s 172.16.1.0/24 -o vmbr0 -j MASQUERADE
-ip6tables -t nat -A POSTROUTING -s 2001:db8:1::/64 -o vmbr0 -j MASQUERADE
+iptables -t nat -A POSTROUTING -s 172.16.1.0/24 -j MASQUERADE
+ip6tables -t nat -A POSTROUTING -s 2001:db8:1::/64 -j MASQUERADE
 iptables-save > /etc/iptables/rules.v4
 ip6tables-save > /etc/iptables/rules.v6
 
