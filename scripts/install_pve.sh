@@ -1,7 +1,7 @@
 #!/bin/bash
 # from 
 # https://github.com/spiritLHLS/pve
-# 2023.08.13
+# 2023.08.20
 
 
 ########## 预设部分输出和部分中间变量
@@ -199,16 +199,18 @@ if [[ -f "/etc/network/interfaces.new" && -f "/etc/network/interfaces" ]]; then
     cp -f /etc/network/interfaces.new /etc/network/interfaces
     chattr +i /etc/network/interfaces
 fi
-# 检测回环是否存在
+# 检测回环是否存在，不存在则插入文件的第一第二行
 if ! grep -q "auto lo" "/etc/network/interfaces"; then
     chattr -i /etc/network/interfaces
-    echo "auto lo" >> "/etc/network/interfaces"
+    # echo "auto lo" >> "/etc/network/interfaces"
+    sed -i '1s/^/auto lo\n/' "/etc/network/interfaces"
     chattr +i /etc/network/interfaces
     _blue "Can not find 'auto lo' in /etc/network/interfaces, add it"
 fi
 if ! grep -q "iface lo inet loopback" "/etc/network/interfaces"; then
     chattr -i /etc/network/interfaces
-    echo "iface lo inet loopback" >> "/etc/network/interfaces"
+    # echo "iface lo inet loopback" >> "/etc/network/interfaces"
+    sed -i '2s/^/iface lo inet loopback\n/' "/etc/network/interfaces"
     chattr +i /etc/network/interfaces
     _blue "Can not find 'iface lo inet loopback' in /etc/network/interfaces, add it"
 fi
