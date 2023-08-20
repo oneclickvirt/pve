@@ -200,26 +200,26 @@ fi
 ${sysctl_path} -p
 
 # 删除可能存在的原有的网卡配置
-cp /etc/network/interfaces /etc/network/interfaces_nat.bak
-chattr -i /etc/network/interfaces
-input_file="/etc/network/interfaces"
-output_file="/etc/network/interfaces.tmp"
-start_pattern="iface lo inet loopback"
-end_pattern="auto vmbr0"
-delete_lines=0
-while IFS= read -r line; do
-    if [[ $line == *"$start_pattern"* ]]; then
-        delete_lines=1
-    fi
-    if [ $delete_lines -eq 0 ]; then
-        echo "$line" >> "$output_file"
-    fi
-    if [[ $line == *"$end_pattern"* ]]; then
-        delete_lines=0
-    fi
-done < "$input_file"
-mv "$output_file" "$input_file"
-chattr +i /etc/network/interfaces
+# cp /etc/network/interfaces /etc/network/interfaces_nat.bak
+# chattr -i /etc/network/interfaces
+# input_file="/etc/network/interfaces"
+# output_file="/etc/network/interfaces.tmp"
+# start_pattern="iface lo inet loopback"
+# end_pattern="auto vmbr0"
+# delete_lines=0
+# while IFS= read -r line; do
+#     if [[ $line == *"$start_pattern"* ]]; then
+#         delete_lines=1
+#     fi
+#     if [ $delete_lines -eq 0 ]; then
+#         echo "$line" >> "$output_file"
+#     fi
+#     if [[ $line == *"$end_pattern"* ]]; then
+#         delete_lines=0
+#     fi
+# done < "$input_file"
+# mv "$output_file" "$input_file"
+# chattr +i /etc/network/interfaces
 
 # 重启配置
 service networking restart
