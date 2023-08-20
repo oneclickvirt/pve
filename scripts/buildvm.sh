@@ -278,7 +278,7 @@ iptables -t nat -A PREROUTING -p udp -m udp --dport ${port_first}:${port_last} -
 if [ ! -f "/etc/iptables/rules.v4" ]; then
     touch /etc/iptables/rules.v4
 fi
-iptables-save | awk '!seen[$0]++' | iptables-restore
+iptables-save | awk '{if($1=="COMMIT"){delete x}}$1=="-A"?!x[$0]++:1' | iptables-restore
 iptables-save > /etc/iptables/rules.v4
 service netfilter-persistent restart
 
