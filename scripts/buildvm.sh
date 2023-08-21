@@ -241,7 +241,11 @@ if [ $first_digit -le 2 ]; then
 else
     num=$((first_digit - 2))$second_digit$third_digit
 fi
-qm create $vm_num --agent 1 --scsihw virtio-scsi-single --serial0 socket --cores $core --sockets 1 --cpu host --net0 virtio,bridge=vmbr1,firewall=0
+if [ "$independent_ipv6" == "N" ]; then
+    qm create $vm_num --agent 1 --scsihw virtio-scsi-single --serial0 socket --cores $core --sockets 1 --cpu host --net0 virtio,bridge=vmbr1,firewall=0
+else
+    qm create $vm_num --agent 1 --scsihw virtio-scsi-single --serial0 socket --cores $core --sockets 1 --cpu host --net0 virtio,bridge=vmbr1,firewall=0 --net1 virtio,bridge=vmbr2,firewall=0
+fi
 if [ "$system_arch" = "x86" ]; then
     qm importdisk $vm_num /root/qcow/${system}.qcow2 ${storage}
 else
@@ -261,15 +265,34 @@ qm set $vm_num --memory $memory
 # --swap 256
 qm set $vm_num --ide2 ${storage}:cloudinit
 user_ip="172.16.1.${num}"
-qm set $vm_num --ipconfig0 ip=${user_ip}/24,gw=172.16.1.1
-if [ -z "$ipv6_address" ] || [ -z "$ipv6_prefixlen" ] || [ -z "$ipv6_gateway" ] || [ "$ipv6_prefixlen" -gt 112 ]; then
-    qm set $vm_num --ipconfig0 ip=${user_ip}/24,gw=172.16.1.1
-    qm set $vm_num --nameserver 8.8.8.8
-    qm set $vm_num --searchdomain 8.8.4.4
+if [ "$independent_ipv6" == "Y" ]; then
+    if [ "$ipv6_prefixlen" -le 64 ]; then
+        if [ ! -z "$ipv6_address" ] && [ ! -z "$ipv6_prefixlen" ] && [ ! -z "$ipv6_gateway" ] && [ ! -z "$ipv6_address_without_last_segment" ]; then
+            qm set $vm_num --ipconfig0 ip6=${ipv6_address_without_last_segment}${vm_num}/${ipv6_prefixlen},gw6=${ipv6_address_without_last_segment}2/${ipv6_prefixlen}
+            qm set $vm_num --ipconfig1 ip=${user_ip}/24,gw=172.16.1.1
+            qm set $vm_num --nameserver 8.8.8.8,2001:4860:4860::8888
+            qm set $vm_num --searchdomain 8.8.4.4,2001:4860:4860::8844
+            independent_ipv6_status="Y"
+        else
+            independent_ipv6_status="N"
+        fi
+    else
+        independent_ipv6_status="N"
+    fi
 else
-    qm set $vm_num --ipconfig0 ip=${user_ip}/24,gw=172.16.1.1,ip6=${ipv6_address}/${ipv6_prefixlen},gw6=${ipv6_gateway}
-    qm set $vm_num --nameserver 8.8.8.8,2001:4860:4860::8888
-    qm set $vm_num --searchdomain 8.8.4.4,2001:4860:4860::8844
+    independent_ipv6_status="N"
+fi
+if [ "$independent_ipv6_status" == "N" ]; then
+    qm set $vm_num --ipconfig0 ip=${user_ip}/24,gw=172.16.1.1
+    if [ -z "$ipv6_address" ] || [ -z "$ipv6_prefixlen" ] || [ -z "$ipv6_gateway" ] || [ "$ipv6_prefixlen" -gt 112 ]; then
+        qm set $vm_num --ipconfig0 ip=${user_ip}/24,gw=172.16.1.1
+        qm set $vm_num --nameserver 8.8.8.8
+        qm set $vm_num --searchdomain 8.8.4.4
+    else
+        qm set $vm_num --ipconfig0 ip=${user_ip}/24,gw=172.16.1.1,ip6=${ipv6_address}/${ipv6_prefixlen},gw6=${ipv6_gateway}
+        qm set $vm_num --nameserver 8.8.8.8,2001:4860:4860::8888
+        qm set $vm_num --searchdomain 8.8.4.4,2001:4860:4860::8844
+    fi
 fi
 qm set $vm_num --cipassword $password --ciuser $user
 sleep 5
@@ -296,8 +319,13 @@ iptables-save > /etc/iptables/rules.v4
 service netfilter-persistent restart
 
 # 虚拟机的相关信息将会存储到对应的虚拟机的NOTE中，可在WEB端查看
-echo "$vm_num $user $password $core $memory $disk $sshn $web1_port $web2_port $port_first $port_last $system $storage" >> "vm${vm_num}"
-data=$(echo " VMID 用户名-username 密码-password CPU核数-CPU 内存-memory 硬盘-disk SSH端口 80端口 443端口 外网端口起-port-start 外网端口止-port-end 系统-system 存储盘-storage")
+if [ "$independent_ipv6_status" == "Y" ]; then
+    echo "$vm_num $user $password $core $memory $disk $sshn $web1_port $web2_port $port_first $port_last $system $storage ${ipv6_address_without_last_segment}${vm_num}" >> "vm${vm_num}"
+    data=$(echo " VMID 用户名-username 密码-password CPU核数-CPU 内存-memory 硬盘-disk SSH端口 80端口 443端口 外网端口起-port-start 外网端口止-port-end 系统-system 存储盘-storage 独立IPV6地址-ipv6_address")
+else
+    echo "$vm_num $user $password $core $memory $disk $sshn $web1_port $web2_port $port_first $port_last $system $storage" >> "vm${vm_num}"
+    data=$(echo " VMID 用户名-username 密码-password CPU核数-CPU 内存-memory 硬盘-disk SSH端口 80端口 443端口 外网端口起-port-start 外网端口止-port-end 系统-system 存储盘-storage")
+fi
 values=$(cat "vm${vm_num}")
 IFS=' ' read -ra data_array <<< "$data"
 IFS=' ' read -ra values_array <<< "$values"
