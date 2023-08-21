@@ -217,24 +217,24 @@ iface vmbr1 inet6 static
     post-down ip6tables -t nat -D POSTROUTING -s 2001:db8:1::/64 -o vmbr0 -j MASQUERADE
 EOF
 fi
-if [ "$ipv6_prefixlen" -le 64 ]; then
-    if grep -q "vmbr2" "$interfaces_file"; then
-        _blue "vmbr2 already exists in ${interfaces_file}"
-        _blue "vmbr2 已存在在 ${interfaces_file}"
-    elif [ ! -z "$ipv6_address" ] && [ ! -z "$ipv6_prefixlen" ] && [ ! -z "$ipv6_gateway" ] && [ ! -z "$ipv6_address_without_last_segment" ]; then
-cat << EOF | sudo tee -a "$interfaces_file"
-auto vmbr2
-iface vmbr2 inet6 static
-    address ${ipv6_address_without_last_segment}2/${ipv6_prefixlen}
-EOF
-        if [ -f "/usr/local/bin/ndpresponder" ]; then
-            new_exec_start="ExecStart=/usr/local/bin/ndpresponder -i vmbr0 -n ${ipv6_address_without_last_segment}/${ipv6_prefixlen}"
-            file_path="/etc/systemd/system/ndpresponder.service"
-            line_number=6
-            sed -i "${line_number}s/.*/${new_exec_start}/" "$file_path"
-        fi
-    fi
-fi
+# if [ "$ipv6_prefixlen" -le 64 ]; then
+#     if grep -q "vmbr2" "$interfaces_file"; then
+#         _blue "vmbr2 already exists in ${interfaces_file}"
+#         _blue "vmbr2 已存在在 ${interfaces_file}"
+#     elif [ ! -z "$ipv6_address" ] && [ ! -z "$ipv6_prefixlen" ] && [ ! -z "$ipv6_gateway" ] && [ ! -z "$ipv6_address_without_last_segment" ]; then
+# cat << EOF | sudo tee -a "$interfaces_file"
+# auto vmbr2
+# iface vmbr2 inet6 static
+#     address ${ipv6_address_without_last_segment}2/${ipv6_prefixlen}
+# EOF
+#         if [ -f "/usr/local/bin/ndpresponder" ]; then
+#             new_exec_start="ExecStart=/usr/local/bin/ndpresponder -i vmbr0 -n ${ipv6_address_without_last_segment}/${ipv6_prefixlen}"
+#             file_path="/etc/systemd/system/ndpresponder.service"
+#             line_number=6
+#             sed -i "${line_number}s/.*/${new_exec_start}/" "$file_path"
+#         fi
+#     fi
+# fi
 chattr +i /etc/network/interfaces
 rm -rf /usr/local/bin/iface_auto.txt
 
