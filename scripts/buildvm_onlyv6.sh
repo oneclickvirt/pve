@@ -232,7 +232,7 @@ qm set $vm_num --ide2 ${storage}:cloudinit
 qm set $vm_num --nameserver 8.8.8.8,2001:4860:4860::8888
 qm set $vm_num --searchdomain 8.8.4.4,2001:4860:4860::8844
 user_ip="172.16.1.${num}"
-qm set $vm_num --ipconfig0 ip6=${ipv6_address_without_last_segment}${vm_num}/${ipv6_prefixlen},gw6=${ipv6_address_without_last_segment}2/${ipv6_prefixlen}
+qm set $vm_num --ipconfig0 ip6="${ipv6_address_without_last_segment}${vm_num}/128",gw6="${ipv6_address_without_last_segment}2"
 qm set $vm_num --ipconfig1 ip=${user_ip}/24,gw=172.16.1.1
 qm set $vm_num --cipassword $password --ciuser $user
 sleep 5
