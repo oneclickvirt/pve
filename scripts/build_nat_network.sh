@@ -264,6 +264,8 @@ iptables-save | awk '{if($1=="COMMIT"){delete x}}$1=="-A"?!x[$0]++:1' | iptables
 if [ -f "/usr/local/bin/ndpresponder" ]; then
     systemctl daemon-reload
     systemctl enable ndpresponder.service
+    systemctl start ndpresponder.service
+    systemctl status ndpresponder.service
 fi
 
 # 删除可能存在的原有的网卡配置
