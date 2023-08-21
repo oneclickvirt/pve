@@ -226,6 +226,9 @@ cat << EOF | sudo tee -a "$interfaces_file"
 auto vmbr2
 iface vmbr2 inet6 static
     address ${ipv6_address_without_last_segment}2/${ipv6_prefixlen}
+    bridge_ports none
+    bridge_stp off
+    bridge_fd 0
 EOF
       if [ -f "/usr/local/bin/ndpresponder" ]; then
           new_exec_start="ExecStart=/usr/local/bin/ndpresponder -i vmbr0 -n ${ipv6_address_without_last_segment}/${ipv6_prefixlen}"
