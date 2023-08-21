@@ -227,12 +227,12 @@ fi
 # iface vmbr2 inet6 static
 #     address ${ipv6_address_without_last_segment}2/${ipv6_prefixlen}
 # EOF
-#         if [ -f "/usr/local/bin/ndpresponder" ]; then
-#             new_exec_start="ExecStart=/usr/local/bin/ndpresponder -i vmbr0 -n ${ipv6_address_without_last_segment}/${ipv6_prefixlen}"
-#             file_path="/etc/systemd/system/ndpresponder.service"
-#             line_number=6
-#             sed -i "${line_number}s/.*/${new_exec_start}/" "$file_path"
-#         fi
+#       if [ -f "/usr/local/bin/ndpresponder" ]; then
+#           new_exec_start="ExecStart=/usr/local/bin/ndpresponder -i vmbr0 -n ${ipv6_address_without_last_segment}/${ipv6_prefixlen}"
+#           file_path="/etc/systemd/system/ndpresponder.service"
+#           line_number=6
+#           sed -i "${line_number}s|.*|${new_exec_start}|" "$file_path"
+#       fi
 #     fi
 # fi
 chattr +i /etc/network/interfaces
