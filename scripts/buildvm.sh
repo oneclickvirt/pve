@@ -1,11 +1,11 @@
 #!/bin/bash
 # from 
 # https://github.com/spiritLHLS/pve
-# 2023.08.19
+# 2023.08.21
 
 
-# ./buildvm.sh VMID 用户名 密码 CPU核数 内存 硬盘 SSH端口 80端口 443端口 外网端口起 外网端口止 系统 存储盘
-# ./buildvm.sh 102 test1 1234567 1 512 5 40001 40002 40003 50000 50025 debian11 local
+# ./buildvm.sh VMID 用户名 密码 CPU核数 内存 硬盘 SSH端口 80端口 443端口 外网端口起 外网端口止 系统 存储盘 独立IPV6
+# ./buildvm.sh 102 test1 1234567 1 512 5 40001 40002 40003 50000 50025 debian11 local N
 
 cd /root >/dev/null 2>&1
 # 创建NAT的虚拟机
@@ -22,7 +22,7 @@ port_first="${10:-49975}"
 port_last="${11:-50000}"
 system="${12:-ubuntu22}"
 storage="${13:-local}"
-# open_ipv6="${14:-N}"
+independent_ipv6="${14:-N}"
 # in="${15:-300}"
 # out="${16:-300}"
 rm -rf "vm$name"
@@ -194,27 +194,40 @@ elif [ "$system_arch" = "arch" ]; then
     fi
 fi
 # 检测IPV6相关的信息
-if [ -f /usr/local/bin/pve_check_ipv6 ]; then
-    ipv6_address=$(cat /usr/local/bin/pve_check_ipv6)
-    IFS="/" read -ra parts <<< "$ipv6_address"
-    part_1="${parts[0]}"
-    part_2="${parts[1]}"
-    IFS=":" read -ra part_1_parts <<< "$part_1"
-    if [ ! -z "${part_1_parts[*]}" ]; then
-        part_1_last="${part_1_parts[-1]}"
-        if [ "$part_1_last" = "$vm_num" ]; then
-            ipv6_address=""
-        else
-            part_1_head=$(echo "$part_1" | awk -F':' 'BEGIN {OFS=":"} {last=""; for (i=1; i<NF; i++) {last=last $i ":"}; print last}')
-            ipv6_address="${part_1_head}${vm_num}"
+if [ "$independent_ipv6" == "Y" ]; then
+    if [ -f /usr/local/bin/pve_check_ipv6 ]; then
+        ipv6_address=$(cat /usr/local/bin/pve_check_ipv6)
+        ipv6_address_without_last_segment="${ipv6_address%:*}:"
+    fi
+    if [ -f /usr/local/bin/pve_ipv6_prefixlen ]; then
+        ipv6_prefixlen=$(cat /usr/local/bin/pve_ipv6_prefixlen)
+    fi
+    if [ -f /usr/local/bin/pve_ipv6_gateway ]; then
+        ipv6_gateway=$(cat /usr/local/bin/pve_ipv6_gateway)
+    fi
+else
+    if [ -f /usr/local/bin/pve_check_ipv6 ]; then
+        ipv6_address=$(cat /usr/local/bin/pve_check_ipv6)
+        IFS="/" read -ra parts <<< "$ipv6_address"
+        part_1="${parts[0]}"
+        part_2="${parts[1]}"
+        IFS=":" read -ra part_1_parts <<< "$part_1"
+        if [ ! -z "${part_1_parts[*]}" ]; then
+            part_1_last="${part_1_parts[-1]}"
+            if [ "$part_1_last" = "$vm_num" ]; then
+                ipv6_address=""
+            else
+                part_1_head=$(echo "$part_1" | awk -F':' 'BEGIN {OFS=":"} {last=""; for (i=1; i<NF; i++) {last=last $i ":"}; print last}')
+                ipv6_address="${part_1_head}${vm_num}"
+            fi
         fi
     fi
-fi
-if [ -f /usr/local/bin/pve_ipv6_prefixlen ]; then
-    ipv6_prefixlen=$(cat /usr/local/bin/pve_ipv6_prefixlen)
-fi
-if [ -f /usr/local/bin/pve_ipv6_gateway ]; then
-    ipv6_gateway=$(cat /usr/local/bin/pve_ipv6_gateway)
+    if [ -f /usr/local/bin/pve_ipv6_prefixlen ]; then
+        ipv6_prefixlen=$(cat /usr/local/bin/pve_ipv6_prefixlen)
+    fi
+    if [ -f /usr/local/bin/pve_ipv6_gateway ]; then
+        ipv6_gateway=$(cat /usr/local/bin/pve_ipv6_gateway)
+    fi
 fi
 first_digit=${vm_num:0:1}
 second_digit=${vm_num:1:1}

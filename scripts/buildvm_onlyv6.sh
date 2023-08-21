@@ -1,7 +1,7 @@
 #!/bin/bash
 # from 
 # https://github.com/spiritLHLS/pve
-# 2023.08.04
+# 2023.08.21
 # 自动选择要绑定的IPV6地址
 # ./buildvm_onlyv6.sh VMID 用户名 密码 CPU核数 内存 硬盘 系统 存储盘
 # ./buildvm_onlyv6.sh 152 test1 1234567 1 512 5 debian11 local
@@ -31,6 +31,9 @@ else
     export LANG="$utf8_locale"
     export LANGUAGE="$utf8_locale"
     _green "Locale set to $utf8_locale"
+fi
+if [ ! -f /usr/local/bin/pve_check_ipv6 ]; then
+    _yellow "No ipv6 address exists to open a server with a standalone IPV6 address"
 fi
 
 get_system_arch() {
@@ -199,19 +202,7 @@ fi
 # 检测IPV6相关的信息
 if [ -f /usr/local/bin/pve_check_ipv6 ]; then
     ipv6_address=$(cat /usr/local/bin/pve_check_ipv6)
-    IFS="/" read -ra parts <<< "$ipv6_address"
-    part_1="${parts[0]}"
-    part_2="${parts[1]}"
-    IFS=":" read -ra part_1_parts <<< "$part_1"
-    if [ ! -z "${part_1_parts[*]}" ]; then
-        part_1_last="${part_1_parts[-1]}"
-        if [ "$part_1_last" = "$vm_num" ]; then
-            ipv6_address=""
-        else
-            part_1_head=$(echo "$part_1" | awk -F':' 'BEGIN {OFS=":"} {last=""; for (i=1; i<NF; i++) {last=last $i ":"}; print last}')
-            ipv6_address="${part_1_head}${vm_num}"
-        fi
-    fi
+    ipv6_address_without_last_segment="${ipv6_address%:*}:"
 fi
 if [ -f /usr/local/bin/pve_ipv6_prefixlen ]; then
     ipv6_prefixlen=$(cat /usr/local/bin/pve_ipv6_prefixlen)
@@ -241,7 +232,7 @@ qm set $vm_num --ide2 ${storage}:cloudinit
 qm set $vm_num --nameserver 8.8.8.8,2001:4860:4860::8888
 qm set $vm_num --searchdomain 8.8.4.4,2001:4860:4860::8844
 user_ip="172.16.1.${num}"
-qm set $vm_num --ipconfig0 ip6=${ipv6_address}/${ipv6_prefixlen},gw6=${ipv6_gateway}
+qm set $vm_num --ipconfig0 ip6=${ipv6_address_without_last_segment}${vm_num}/${ipv6_prefixlen},gw6=${ipv6_address_without_last_segment}2/${ipv6_prefixlen}
 qm set $vm_num --ipconfig1 ip=${user_ip}/24,gw=172.16.1.1
 qm set $vm_num --cipassword $password --ciuser $user
 sleep 5
@@ -254,7 +245,7 @@ if [ $? -ne 0 ]; then
     fi
 fi
 qm start $vm_num
-echo "$vm_num $user $password $core $memory $disk $system $storage $ipv6_address" >> "vm${vm_num}"
+echo "$vm_num $user $password $core $memory $disk $system $storage ${ipv6_address_without_last_segment}${vm_num}" >> "vm${vm_num}"
 # 虚拟机的相关信息将会存储到对应的虚拟机的NOTE中，可在WEB端查看
 data=$(echo " VMID 用户名-username 密码-password CPU核数-CPU 内存-memory 硬盘-disk 系统-system 存储盘-storage 外网IPV6-ipv6")
 values=$(cat "vm${vm_num}")

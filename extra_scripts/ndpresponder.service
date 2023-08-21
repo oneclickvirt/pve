@@ -1,0 +1,11 @@
+[Unit]
+Description=NDPPD Daemon
+After=network.target
+ 
+[Service]
+ExecStart=/usr/local/bin/ndpresponder -i vmbr0 -n [IPv6前缀]/[IPV6子网掩码]
+Restart=on-failure
+RestartSec=2
+ 
+[Install]
+WantedBy=multi-user.target

@@ -1,7 +1,7 @@
 #!/bin/bash
 # from 
 # https://github.com/spiritLHLS/pve
-# 2023.08.20
+# 2023.08.21
 
 
 ########## 预设部分输出和部分中间变量
@@ -23,6 +23,27 @@ else
 fi
 rm -rf /usr/local/bin/build_backend_pve.txt
 
+check_cdn() {
+  local o_url=$1
+  for cdn_url in "${cdn_urls[@]}"; do
+    if curl -sL -k "$cdn_url$o_url" --max-time 6 | grep -q "success" > /dev/null 2>&1; then
+      export cdn_success_url="$cdn_url"
+      return
+    fi
+    sleep 0.5
+  done
+  export cdn_success_url=""
+}
+
+check_cdn_file() {
+    check_cdn "https://raw.githubusercontent.com/spiritLHLS/ecs/main/back/test"
+    if [ -n "$cdn_success_url" ]; then
+        _yellow "CDN available, using CDN"
+    else
+        _yellow "No CDN available, no use CDN"
+    fi
+}
+
 ########## 查询信息
 
 if ! command -v lshw > /dev/null 2>&1; then
@@ -32,15 +53,29 @@ if ! command -v ipcalc > /dev/null 2>&1; then
     apt-get install -y ipcalc
 fi
 
+# cdn检测
+cdn_urls=("https://cdn.spiritlhl.workers.dev/" "https://cdn3.spiritlhl.net/" "https://cdn1.spiritlhl.net/" "https://ghproxy.com/" "https://cdn2.spiritlhl.net/")
+check_cdn_file
+
 # 检测IPV6相关的信息
 if [ -f /usr/local/bin/pve_check_ipv6 ]; then
     ipv6_address=$(cat /usr/local/bin/pve_check_ipv6)
+    ipv6_address_without_last_segment="${ipv6_address%:*}:"
 fi
 if [ -f /usr/local/bin/pve_ipv6_prefixlen ]; then
     ipv6_prefixlen=$(cat /usr/local/bin/pve_ipv6_prefixlen)
 fi
 if [ -f /usr/local/bin/pve_ipv6_gateway ]; then
     ipv6_gateway=$(cat /usr/local/bin/pve_ipv6_gateway)
+fi
+# 配置 ndpresponder 的守护进程
+if [ "$ipv6_prefixlen" -le 64 ]; then
+    if [ ! -z "$ipv6_address" ] && [ ! -z "$ipv6_prefixlen" ] && [ ! -z "$ipv6_gateway" ] && [ ! -z "$ipv6_address_without_last_segment" ]; then
+        wget ${cdn_success_url}https://github.com/spiritLHLS/pve/releases/download/ndpresponder_x86/ndpresponder -O /usr/local/bin/ndpresponder
+        wget ${cdn_success_url}https://raw.githubusercontent.com/spiritLHLS/pve/main/extra_scripts/ndpresponder.service -O /etc/systemd/system/ndpresponder.service
+        chmod 777 /usr/local/bin/ndpresponder
+        chmod 777 /etc/systemd/system/ndpresponder.service
+    fi
 fi
 
 # 检测IPV4相关的信息
@@ -182,6 +217,24 @@ iface vmbr1 inet6 static
     post-down ip6tables -t nat -D POSTROUTING -s 2001:db8:1::/64 -o vmbr0 -j MASQUERADE
 EOF
 fi
+if [ "$ipv6_prefixlen" -le 64 ]; then
+    if grep -q "vmbr2" "$interfaces_file"; then
+        _blue "vmbr2 already exists in ${interfaces_file}"
+        _blue "vmbr2 已存在在 ${interfaces_file}"
+    elif [ ! -z "$ipv6_address" ] && [ ! -z "$ipv6_prefixlen" ] && [ ! -z "$ipv6_gateway" ] && [ ! -z "$ipv6_address_without_last_segment" ]; then
+cat << EOF | sudo tee -a "$interfaces_file"
+auto vmbr2
+iface vmbr2 inet6 static
+    address ${ipv6_address_without_last_segment}2/${ipv6_prefixlen}
+EOF
+        if [ -f "/usr/local/bin/ndpresponder" ]; then
+            new_exec_start="ExecStart=/usr/local/bin/ndpresponder -i vmbr0 -n ${ipv6_address_without_last_segment}/${ipv6_prefixlen}"
+            file_path="/etc/systemd/system/ndpresponder.service"
+            line_number=6
+            sed -i "${line_number}s/.*/${new_exec_start}/" "$file_path"
+        fi
+    fi
+fi
 chattr +i /etc/network/interfaces
 rm -rf /usr/local/bin/iface_auto.txt
 
@@ -205,6 +258,10 @@ systemctl restart networking.service
 sleep 3
 ifreload -ad
 iptables-save | awk '{if($1=="COMMIT"){delete x}}$1=="-A"?!x[$0]++:1' | iptables-restore
+if [ -f "/usr/local/bin/ndpresponder" ]; then
+    systemctl daemon-reload
+    systemctl enable ndpresponder.service
+fi
 
 # 删除可能存在的原有的网卡配置
 cp /etc/network/interfaces /etc/network/interfaces_nat.bak

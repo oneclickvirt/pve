@@ -1,11 +1,11 @@
 #!/bin/bash
 # from
 # https://github.com/spiritLHLS/pve
-# 2023.08.19
+# 2023.08.21
 
 
-# ./buildct.sh CTID 密码 CPU核数 内存 硬盘 SSH端口 80端口 443端口 外网端口起 外网端口止 系统 存储盘
-# ./buildct.sh 102 1234567 1 512 5 20001 20002 20003 30000 30025 debian11 local
+# ./buildct.sh CTID 密码 CPU核数 内存 硬盘 SSH端口 80端口 443端口 外网端口起 外网端口止 系统 存储盘 独立IPV6
+# ./buildct.sh 102 1234567 1 512 5 20001 20002 20003 30000 30025 debian11 local N
 
 # 用颜色输出信息
 _red() { echo -e "\033[31m\033[01m$@\033[0m"; }
@@ -77,7 +77,7 @@ port_first="${9:-29975}"
 port_last="${10:-30000}"
 system_ori="${11:-debian11}"
 storage="${12:-local}"
-# open_ipv6="${13:-N}"
+independent_ipv6="${13:-N}"
 rm -rf "ct$name"
 en_system=$(echo "$system_ori" | sed 's/[0-9]*//g')
 num_system=$(echo "$system_ori" | sed 's/[a-zA-Z]*//g')
@@ -197,28 +197,42 @@ else
     num=$((first_digit - 2))$second_digit$third_digit
 fi
 # 检测IPV6相关的信息
-if [ -f /usr/local/bin/pve_check_ipv6 ]; then
-    ipv6_address="2001:db8:1::2"
-    IFS="/" read -ra parts <<< "$ipv6_address"
-    part_1="${parts[0]}"
-    part_2="${parts[1]}"
-    IFS=":" read -ra part_1_parts <<< "$part_1"
-    if [ ! -z "${part_1_parts[*]}" ]; then
-        part_1_last="${part_1_parts[-1]}"    
-        if [ "$part_1_last" = "$CTID" ]; then
-            ipv6_address=""
-        else
-            part_1_head=$(echo "$part_1" | awk -F':' 'BEGIN {OFS=":"} {last=""; for (i=1; i<NF; i++) {last=last $i ":"}; print last}')
-            ipv6_address="${part_1_head}${CTID}"
+if [ "$independent_ipv6" == "Y" ]; then
+    if [ -f /usr/local/bin/pve_check_ipv6 ]; then
+        ipv6_address=$(cat /usr/local/bin/pve_check_ipv6)
+        ipv6_address_without_last_segment="${ipv6_address%:*}:"
+    fi
+    if [ -f /usr/local/bin/pve_ipv6_prefixlen ]; then
+        ipv6_prefixlen=$(cat /usr/local/bin/pve_ipv6_prefixlen)
+    fi
+    if [ -f /usr/local/bin/pve_ipv6_gateway ]; then
+        ipv6_gateway=$(cat /usr/local/bin/pve_ipv6_gateway)
+    fi
+else
+    if [ -f /usr/local/bin/pve_check_ipv6 ]; then
+        ipv6_address="2001:db8:1::2"
+        IFS="/" read -ra parts <<< "$ipv6_address"
+        part_1="${parts[0]}"
+        part_2="${parts[1]}"
+        IFS=":" read -ra part_1_parts <<< "$part_1"
+        if [ ! -z "${part_1_parts[*]}" ]; then
+            part_1_last="${part_1_parts[-1]}"    
+            if [ "$part_1_last" = "$CTID" ]; then
+                ipv6_address=""
+            else
+                part_1_head=$(echo "$part_1" | awk -F':' 'BEGIN {OFS=":"} {last=""; for (i=1; i<NF; i++) {last=last $i ":"}; print last}')
+                ipv6_address="${part_1_head}${CTID}"
+            fi
         fi
     fi
+    if [ -f /usr/local/bin/pve_ipv6_prefixlen ]; then
+        ipv6_prefixlen="64"
+    fi
+    if [ -f /usr/local/bin/pve_ipv6_gateway ]; then
+        ipv6_gateway="2001:db8:1::"
+    fi
 fi
-if [ -f /usr/local/bin/pve_ipv6_prefixlen ]; then
-    ipv6_prefixlen="64"
-fi
-if [ -f /usr/local/bin/pve_ipv6_gateway ]; then
-    ipv6_gateway="2001:db8:1::"
-fi
+
 user_ip="172.16.1.${num}"
 if [ "$system_arch" = "x86" ]; then
     pct create $CTID ${storage}:vztmpl/$system_name -cores $core -cpuunits 1024 -memory $memory -swap 128 -rootfs ${storage}:${disk} -onboot 1 -password $password -features nesting=1
@@ -228,12 +242,30 @@ else
 fi
 pct start $CTID
 pct set $CTID --hostname $CTID
-if [ -z "$ipv6_address" ] || [ -z "$ipv6_prefixlen" ] || [ -z "$ipv6_gateway" ] || [ "$ipv6_prefixlen" -gt 112 ]; then
-    pct set $CTID --net0 name=eth0,ip=${user_ip}/24,bridge=vmbr1,gw=172.16.1.1
-    pct set $CTID --nameserver 8.8.8.8 --nameserver 8.8.4.4
+if [ "$independent_ipv6" == "Y" ]; then
+    if [ "$ipv6_prefixlen" -le 64 ]; then
+        if [ ! -z "$ipv6_address" ] && [ ! -z "$ipv6_prefixlen" ] && [ ! -z "$ipv6_gateway" ] && [ ! -z "$ipv6_address_without_last_segment" ]; then
+            pct set $CTID --net0 name=eth0,ip6=${ipv6_address_without_last_segment}${CTID}/${ipv6_prefixlen},bridge=vmbr2,gw6=${ipv6_address_without_last_segment}2/${ipv6_prefixlen}
+            pct set $CTID --net1 name=eth1,ip=${user_ip}/24,bridge=vmbr1,gw=172.16.1.1
+            pct set $CTID --nameserver 8.8.8.8,2001:4860:4860::8888 --nameserver 8.8.4.4,2001:4860:4860::8844
+            independent_ipv6_status="Y"
+        else
+            independent_ipv6_status="N"
+        fi
+    else
+        independent_ipv6_status="N"
+    fi
 else
-    pct set $CTID --net0 name=eth0,ip=${user_ip}/24,bridge=vmbr1,gw=172.16.1.1,ip6=${ipv6_address}/${ipv6_prefixlen},gw6=${ipv6_gateway}
-    pct set $CTID --nameserver 8.8.8.8,2001:4860:4860::8888 --nameserver 8.8.4.4,2001:4860:4860::8844
+    independent_ipv6_status="N"
+fi
+if [ "$independent_ipv6_status" == "N" ]; then
+    if [ -z "$ipv6_address" ] || [ -z "$ipv6_prefixlen" ] || [ -z "$ipv6_gateway" ] || [ "$ipv6_prefixlen" -gt 112 ]; then
+        pct set $CTID --net0 name=eth0,ip=${user_ip}/24,bridge=vmbr1,gw=172.16.1.1
+        pct set $CTID --nameserver 8.8.8.8 --nameserver 8.8.4.4
+    else
+        pct set $CTID --net0 name=eth0,ip=${user_ip}/24,bridge=vmbr1,gw=172.16.1.1,ip6=${ipv6_address}/${ipv6_prefixlen},gw6=${ipv6_gateway}
+        pct set $CTID --nameserver 8.8.8.8,2001:4860:4860::8888 --nameserver 8.8.4.4,2001:4860:4860::8844
+    fi
 fi
 sleep 3
 if echo "$system" | grep -qiE "centos|almalinux|rockylinux"; then
@@ -275,8 +307,13 @@ iptables-save > /etc/iptables/rules.v4
 service netfilter-persistent restart
 
 # 容器的相关信息将会存储到对应的容器的NOTE中，可在WEB端查看
-echo "$CTID $password $core $memory $disk $sshn $web1_port $web2_port $port_first $port_last $system_ori $storage" >> "ct${CTID}"
-data=$(echo " CTID root密码-password CPU核数-CPU 内存-memory 硬盘-disk SSH端口 80端口 443端口 外网端口起-port-start 外网端口止-port-end 系统-system 存储盘-storage")
+if [ "$independent_ipv6_status" == "Y" ]; then
+    echo "$CTID $password $core $memory $disk $sshn $web1_port $web2_port $port_first $port_last $system_ori $storage ${ipv6_address_without_last_segment}${CTID}" >> "ct${CTID}"
+    data=$(echo " CTID root密码-password CPU核数-CPU 内存-memory 硬盘-disk SSH端口 80端口 443端口 外网端口起-port-start 外网端口止-port-end 系统-system 存储盘-storage 独立IPV6地址-ipv6_address")
+else
+    echo "$CTID $password $core $memory $disk $sshn $web1_port $web2_port $port_first $port_last $system_ori $storage" >> "ct${CTID}"
+    data=$(echo " CTID root密码-password CPU核数-CPU 内存-memory 硬盘-disk SSH端口 80端口 443端口 外网端口起-port-start 外网端口止-port-end 系统-system 存储盘-storage")
+fi
 values=$(cat "ct${CTID}")
 IFS=' ' read -ra data_array <<< "$data"
 IFS=' ' read -ra values_array <<< "$values"
