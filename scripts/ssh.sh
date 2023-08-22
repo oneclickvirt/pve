@@ -1,14 +1,12 @@
 #!/bin/bash
 # from
 # https://github.com/spiritLHLS/pve
-# 2023.08.09
+# 2023.08.22
 
 if [ -f "/etc/resolv.conf" ]; then
     cp /etc/resolv.conf /etc/resolv.conf.bak
-    chattr -i /etc/resolv.conf
     echo "nameserver 8.8.8.8" | tee -a /etc/resolv.conf >/dev/null
     echo "nameserver 8.8.4.4" | tee -a /etc/resolv.conf >/dev/null
-    chattr +i /etc/resolv.conf
 fi
 
 temp_file_apt_fix="/tmp/apt_fix.txt"
