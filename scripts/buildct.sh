@@ -78,6 +78,7 @@ port_last="${10:-30000}"
 system_ori="${11:-debian11}"
 storage="${12:-local}"
 independent_ipv6="${13:-N}"
+independent_ipv6=$(echo "$independent_ipv6" | tr '[:upper:]' '[:lower:]')
 rm -rf "ct$name"
 en_system=$(echo "$system_ori" | sed 's/[0-9]*//g')
 num_system=$(echo "$system_ori" | sed 's/[a-zA-Z]*//g')
@@ -197,7 +198,7 @@ else
     num=$((first_digit - 2))$second_digit$third_digit
 fi
 # 检测IPV6相关的信息
-if [ "$independent_ipv6" == "Y" ]; then
+if [ "$independent_ipv6" == "y" ]; then
     if [ -f /usr/local/bin/pve_check_ipv6 ]; then
         ipv6_address=$(cat /usr/local/bin/pve_check_ipv6)
         ipv6_address_without_last_segment="${ipv6_address%:*}:"
@@ -242,13 +243,17 @@ else
 fi
 pct start $CTID
 pct set $CTID --hostname $CTID
-if [ "$independent_ipv6" == "Y" ]; then
+if [ "$independent_ipv6" == "y" ]; then
     if [ "$ipv6_prefixlen" -le 64 ]; then
         if [ ! -z "$ipv6_address" ] && [ ! -z "$ipv6_prefixlen" ] && [ ! -z "$ipv6_gateway" ] && [ ! -z "$ipv6_address_without_last_segment" ]; then
-            pct set $CTID --net0 name=eth0,ip6="${ipv6_address_without_last_segment}${CTID}/128",bridge=vmbr2,gw6="${ipv6_address_without_last_segment}1"
-            pct set $CTID --net1 name=eth1,ip=${user_ip}/24,bridge=vmbr1,gw=172.16.1.1
-            pct set $CTID --nameserver 8.8.8.8,2001:4860:4860::8888 --nameserver 8.8.4.4,2001:4860:4860::8844
-            independent_ipv6_status="Y"
+            if grep -q "vmbr2" /etc/network/interfaces; then
+                pct set $CTID --net0 name=eth0,ip6="${ipv6_address_without_last_segment}${CTID}/128",bridge=vmbr2,gw6="${ipv6_address_without_last_segment}1"
+                pct set $CTID --net1 name=eth1,ip=${user_ip}/24,bridge=vmbr1,gw=172.16.1.1
+                pct set $CTID --nameserver 8.8.8.8,2001:4860:4860::8888 --nameserver 8.8.4.4,2001:4860:4860::8844
+                independent_ipv6_status="Y"
+            else
+                independent_ipv6_status="N"
+            fi
         else
             independent_ipv6_status="N"
         fi

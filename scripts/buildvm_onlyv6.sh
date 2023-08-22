@@ -1,7 +1,7 @@
 #!/bin/bash
 # from 
 # https://github.com/spiritLHLS/pve
-# 2023.08.21
+# 2023.08.22
 # 自动选择要绑定的IPV6地址
 # ./buildvm_onlyv6.sh VMID 用户名 密码 CPU核数 内存 硬盘 系统 存储盘
 # ./buildvm_onlyv6.sh 152 test1 1234567 1 512 5 debian11 local
@@ -34,6 +34,9 @@ else
 fi
 if [ ! -f /usr/local/bin/pve_check_ipv6 ]; then
     _yellow "No ipv6 address exists to open a server with a standalone IPV6 address"
+fi
+if ! grep -q "vmbr2" /etc/network/interfaces; then
+    _yellow "No vmbr2 exists to open a server with a standalone IPV6 address"
 fi
 
 get_system_arch() {

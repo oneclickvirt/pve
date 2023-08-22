@@ -181,6 +181,17 @@ build_new_cts(){
         # 这块待增加系统列表查询
         break
     done
+    while true; do
+        _green "Need to attach a separate IPV6 address to each container?([N]/y)"
+        reading "是否附加独立的IPV6地址？([N]/y)" independent_ipv6
+        independent_ipv6=$(echo "$independent_ipv6" | tr '[:upper:]' '[:lower:]')
+        if [ "$independent_ipv6" = "y" ] || [ "$independent_ipv6" = "n" ]; then
+            break
+        else
+            _yellow "Invalid input, please enter y or n."
+            _yellow "输入无效，请输入Y或者N。"
+        fi
+    done
     for ((i=1; i<=$new_nums; i++)); do
         ct_num=$(($ct_num + 1))
         ori=$(date | md5sum)
@@ -190,7 +201,7 @@ build_new_cts(){
         web2_port=$(($web1_port + 1))
         port_start=$(($port_end + 1))
         port_end=$(($port_start + 25))
-        ./buildct.sh $ct_num $password $cpu_nums $memory_nums $disk_nums $ssh_port $web1_port $web2_port $port_start $port_end $system $storage
+        ./buildct.sh $ct_num $password $cpu_nums $memory_nums $disk_nums $ssh_port $web1_port $web2_port $port_start $port_end $system $storage $independent_ipv6
         cat "ct$ct_num" >> ctlog
         rm -rf "ct$ct_num"
         sleep 60

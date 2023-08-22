@@ -23,6 +23,7 @@ port_last="${11:-50000}"
 system="${12:-ubuntu22}"
 storage="${13:-local}"
 independent_ipv6="${14:-N}"
+independent_ipv6=$(echo "$independent_ipv6" | tr '[:upper:]' '[:lower:]')
 # in="${15:-300}"
 # out="${16:-300}"
 rm -rf "vm$name"
@@ -194,7 +195,7 @@ elif [ "$system_arch" = "arch" ]; then
     fi
 fi
 # 检测IPV6相关的信息
-if [ "$independent_ipv6" == "Y" ]; then
+if [ "$independent_ipv6" == "y" ]; then
     if [ -f /usr/local/bin/pve_check_ipv6 ]; then
         ipv6_address=$(cat /usr/local/bin/pve_check_ipv6)
         ipv6_address_without_last_segment="${ipv6_address%:*}:"
@@ -265,14 +266,18 @@ qm set $vm_num --memory $memory
 # --swap 256
 qm set $vm_num --ide2 ${storage}:cloudinit
 user_ip="172.16.1.${num}"
-if [ "$independent_ipv6" == "Y" ]; then
+if [ "$independent_ipv6" == "y" ]; then
     if [ "$ipv6_prefixlen" -le 64 ]; then
         if [ ! -z "$ipv6_address" ] && [ ! -z "$ipv6_prefixlen" ] && [ ! -z "$ipv6_gateway" ] && [ ! -z "$ipv6_address_without_last_segment" ]; then
-            qm set $vm_num --ipconfig0 ip6="${ipv6_address_without_last_segment}${vm_num}/128",gw6="${ipv6_address_without_last_segment}1"
-            qm set $vm_num --ipconfig1 ip=${user_ip}/24,gw=172.16.1.1
-            qm set $vm_num --nameserver 8.8.8.8,2001:4860:4860::8888
-            qm set $vm_num --searchdomain 8.8.4.4,2001:4860:4860::8844
-            independent_ipv6_status="Y"
+            if grep -q "vmbr2" /etc/network/interfaces; then
+                qm set $vm_num --ipconfig0 ip6="${ipv6_address_without_last_segment}${vm_num}/128",gw6="${ipv6_address_without_last_segment}1"
+                qm set $vm_num --ipconfig1 ip=${user_ip}/24,gw=172.16.1.1
+                qm set $vm_num --nameserver 8.8.8.8,2001:4860:4860::8888
+                qm set $vm_num --searchdomain 8.8.4.4,2001:4860:4860::8844
+                independent_ipv6_status="Y"
+            else
+                independent_ipv6_status="N"
+            fi
         else
             independent_ipv6_status="N"
         fi

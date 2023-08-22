@@ -16,7 +16,8 @@ memory="${5:-512}"
 disk="${6:-5}"
 system="${7:-ubuntu22}"
 storage="${8:-local}"
-open_ipv6="${9:-N}"
+independent_ipv6="${9:-N}"
+independent_ipv6=$(echo "$independent_ipv6" | tr '[:upper:]' '[:lower:]')
 rm -rf "vm$name"
 user_ip=""
 user_ip_range=""
@@ -189,27 +190,40 @@ elif [ "$system_arch" = "arch" ]; then
     fi
 fi
 # 检测IPV6相关的信息
-if [ -f /usr/local/bin/pve_check_ipv6 ]; then
-    ipv6_address=$(cat /usr/local/bin/pve_check_ipv6)
-    IFS="/" read -ra parts <<< "$ipv6_address"
-    part_1="${parts[0]}"
-    part_2="${parts[1]}"
-    IFS=":" read -ra part_1_parts <<< "$part_1"
-    if [ ! -z "${part_1_parts[*]}" ]; then
-        part_1_last="${part_1_parts[-1]}"
-        if [ "$part_1_last" = "$vm_num" ]; then
-            ipv6_address=""
-        else
-            part_1_head=$(echo "$part_1" | awk -F':' 'BEGIN {OFS=":"} {last=""; for (i=1; i<NF; i++) {last=last $i ":"}; print last}')
-            ipv6_address="${part_1_head}${vm_num}"
+if [ "$independent_ipv6" == "y" ]; then
+    if [ -f /usr/local/bin/pve_check_ipv6 ]; then
+        ipv6_address=$(cat /usr/local/bin/pve_check_ipv6)
+        ipv6_address_without_last_segment="${ipv6_address%:*}:"
+    fi
+    if [ -f /usr/local/bin/pve_ipv6_prefixlen ]; then
+        ipv6_prefixlen=$(cat /usr/local/bin/pve_ipv6_prefixlen)
+    fi
+    if [ -f /usr/local/bin/pve_ipv6_gateway ]; then
+        ipv6_gateway=$(cat /usr/local/bin/pve_ipv6_gateway)
+    fi
+else
+    if [ -f /usr/local/bin/pve_check_ipv6 ]; then
+        ipv6_address=$(cat /usr/local/bin/pve_check_ipv6)
+        IFS="/" read -ra parts <<< "$ipv6_address"
+        part_1="${parts[0]}"
+        part_2="${parts[1]}"
+        IFS=":" read -ra part_1_parts <<< "$part_1"
+        if [ ! -z "${part_1_parts[*]}" ]; then
+            part_1_last="${part_1_parts[-1]}"
+            if [ "$part_1_last" = "$vm_num" ]; then
+                ipv6_address=""
+            else
+                part_1_head=$(echo "$part_1" | awk -F':' 'BEGIN {OFS=":"} {last=""; for (i=1; i<NF; i++) {last=last $i ":"}; print last}')
+                ipv6_address="${part_1_head}${vm_num}"
+            fi
         fi
     fi
-fi
-if [ -f /usr/local/bin/pve_ipv6_prefixlen ]; then
-    ipv6_prefixlen=$(cat /usr/local/bin/pve_ipv6_prefixlen)
-fi
-if [ -f /usr/local/bin/pve_ipv6_gateway ]; then
-    ipv6_gateway=$(cat /usr/local/bin/pve_ipv6_gateway)
+    if [ -f /usr/local/bin/pve_ipv6_prefixlen ]; then
+        ipv6_prefixlen=$(cat /usr/local/bin/pve_ipv6_prefixlen)
+    fi
+    if [ -f /usr/local/bin/pve_ipv6_gateway ]; then
+        ipv6_gateway=$(cat /usr/local/bin/pve_ipv6_gateway)
+    fi
 fi
 # 查询信息
 if ! command -v lshw > /dev/null 2>&1; then
@@ -292,14 +306,37 @@ qm set $vm_num --boot order=scsi0
 qm set $vm_num --memory $memory
 # --swap 256
 qm set $vm_num --ide2 ${storage}:cloudinit
-if [ -z "$ipv6_address" ] || [ -z "$ipv6_prefixlen" ] || [ -z "$ipv6_gateway" ] || [ "$ipv6_prefixlen" -gt 112 ] || [ "$open_ipv6" = "N" ]; then
-    qm set $vm_num --ipconfig0 ip=${user_ip}/${user_ip_range},gw=${gateway}
-    qm set $vm_num --nameserver 8.8.8.8
-    qm set $vm_num --searchdomain 8.8.4.4
+if [ "$independent_ipv6" == "y" ]; then
+    if [ "$ipv6_prefixlen" -le 64 ]; then
+        if [ ! -z "$ipv6_address" ] && [ ! -z "$ipv6_prefixlen" ] && [ ! -z "$ipv6_gateway" ] && [ ! -z "$ipv6_address_without_last_segment" ]; then
+            if grep -q "vmbr2" /etc/network/interfaces; then
+                qm set $vm_num --ipconfig0 ip6="${ipv6_address_without_last_segment}${vm_num}/128",gw6="${ipv6_address_without_last_segment}1"
+                qm set $vm_num --ipconfig1 ip=${user_ip}/${user_ip_range},gw=${gateway}
+                qm set $vm_num --nameserver 8.8.8.8,2001:4860:4860::8888
+                qm set $vm_num --searchdomain 8.8.4.4,2001:4860:4860::8844
+                independent_ipv6_status="Y"
+            else
+                independent_ipv6_status="N"
+            fi
+        else
+            independent_ipv6_status="N"
+        fi
+    else
+        independent_ipv6_status="N"
+    fi
 else
-    qm set $vm_num --ipconfig0 ip=${user_ip}/${user_ip_range},gw=${gateway},ip6=${ipv6_address}/${ipv6_prefixlen},gw6=${ipv6_gateway}
-    qm set $vm_num --nameserver 8.8.8.8,2001:4860:4860::8888
-    qm set $vm_num --searchdomain 8.8.4.4,2001:4860:4860::8844
+    independent_ipv6_status="N"
+fi
+if [ "$independent_ipv6_status" == "N" ]; then
+    if [ -z "$ipv6_address" ] || [ -z "$ipv6_prefixlen" ] || [ -z "$ipv6_gateway" ] || [ "$ipv6_prefixlen" -gt 112 ]; then
+        qm set $vm_num --ipconfig0 ip=${user_ip}/${user_ip_range},gw=${gateway}
+        qm set $vm_num --nameserver 8.8.8.8
+        qm set $vm_num --searchdomain 8.8.4.4
+    else
+        qm set $vm_num --ipconfig0 ip=${user_ip}/${user_ip_range},gw=${gateway},ip6=${ipv6_address}/${ipv6_prefixlen},gw6=${ipv6_gateway}
+        qm set $vm_num --nameserver 8.8.8.8,2001:4860:4860::8888
+        qm set $vm_num --searchdomain 8.8.4.4,2001:4860:4860::8844
+    fi
 fi
 qm set $vm_num --cipassword $password --ciuser $user
 sleep 5
@@ -314,11 +351,11 @@ fi
 qm start $vm_num
 
 # 虚拟机的相关信息将会存储到对应的虚拟机的NOTE中，可在WEB端查看
-if [ -z "$ipv6_address" ] || [ -z "$ipv6_prefixlen" ] || [ -z "$ipv6_gateway" ] || [ "$ipv6_prefixlen" -gt 112 ]; then
+if [ "$independent_ipv6_status" == "Y" ]; then
     echo "$vm_num $user $password $core $memory $disk $system $storage $user_ip" >> "vm${vm_num}"
     data=$(echo " VMID 用户名-username 密码-password CPU核数-CPU 内存-memory 硬盘-disk 系统-system 存储盘-storage 外网IP地址-ipv4")
 else
-    echo "$vm_num $user $password $core $memory $disk $system $storage $user_ip $ipv6_address" >> "vm${vm_num}"
+    echo "$vm_num $user $password $core $memory $disk $system $storage $user_ip ${ipv6_address_without_last_segment}${vm_num}" >> "vm${vm_num}"
     data=$(echo " VMID 用户名-username 密码-password CPU核数-CPU 内存-memory 硬盘-disk 系统-system 存储盘-storage 外网IPV4-ipv4 外网IPV6-ipv6")
 fi
 values=$(cat "vm${vm_num}")

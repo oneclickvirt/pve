@@ -218,6 +218,17 @@ build_new_vms(){
           fi
       done
     fi
+    while true; do
+        _green "Need to attach a separate IPV6 address to each virtual machine?([N]/y)"
+        reading "是否附加独立的IPV6地址？([N]/y)" independent_ipv6
+        independent_ipv6=$(echo "$independent_ipv6" | tr '[:upper:]' '[:lower:]')
+        if [ "$independent_ipv6" = "y" ] || [ "$independent_ipv6" = "n" ]; then
+            break
+        else
+            _yellow "Invalid input, please enter y or n."
+            _yellow "输入无效，请输入Y或者N。"
+        fi
+    done
     for ((i=1; i<=$new_nums; i++)); do
         vm_num=$(($vm_num + 1))
         user=$(cat /dev/urandom | tr -dc 'a-zA-Z' | fold -w 4 | head -n 1)
@@ -228,7 +239,7 @@ build_new_vms(){
         web2_port=$(($web1_port + 1))
         port_start=$(($port_end + 1))
         port_end=$(($port_start + 25))
-        ./buildvm.sh $vm_num $user $password $cpu_nums $memory_nums $disk_nums $ssh_port $web1_port $web2_port $port_start $port_end $system $storage
+        ./buildvm.sh $vm_num $user $password $cpu_nums $memory_nums $disk_nums $ssh_port $web1_port $web2_port $port_start $port_end $system $storage $independent_ipv6
         cat "vm$vm_num" >> vmlog
         rm -rf "vm$vm_num"
         sleep 60
