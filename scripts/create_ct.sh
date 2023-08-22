@@ -9,15 +9,15 @@ _red() { echo -e "\033[31m\033[01m$@\033[0m"; }
 _green() { echo -e "\033[32m\033[01m$@\033[0m"; }
 _yellow() { echo -e "\033[33m\033[01m$@\033[0m"; }
 _blue() { echo -e "\033[36m\033[01m$@\033[0m"; }
-reading(){ read -rp "$(_green "$1")" "$2"; }
+reading() { read -rp "$(_green "$1")" "$2"; }
 utf8_locale=$(locale -a 2>/dev/null | grep -i -m 1 -E "UTF-8|utf8")
 if [[ -z "$utf8_locale" ]]; then
-  echo "No UTF-8 locale found"
+    echo "No UTF-8 locale found"
 else
-  export LC_ALL="$utf8_locale"
-  export LANG="$utf8_locale"
-  export LANGUAGE="$utf8_locale"
-  echo "Locale set to $utf8_locale"
+    export LC_ALL="$utf8_locale"
+    export LANG="$utf8_locale"
+    export LANGUAGE="$utf8_locale"
+    echo "Locale set to $utf8_locale"
 fi
 
 get_system_arch() {
@@ -27,28 +27,28 @@ get_system_arch() {
     fi
     # 根据架构信息设置系统位数并下载文件,其余 * 包括了 x86_64
     case "${sysarch}" in
-        "i386" | "i686" | "x86_64")
-            system_arch="x86"
-            ;;
-        "armv7l" | "armv8" | "armv8l" | "aarch64")
-            system_arch="arch"
-            ;;
-        *)
-            system_arch=""
-            ;;
+    "i386" | "i686" | "x86_64")
+        system_arch="x86"
+        ;;
+    "armv7l" | "armv8" | "armv8l" | "aarch64")
+        system_arch="arch"
+        ;;
+    *)
+        system_arch=""
+        ;;
     esac
 }
 
 check_cdn() {
-  local o_url=$1
-  for cdn_url in "${cdn_urls[@]}"; do
-    if curl -sL -k "$cdn_url$o_url" --max-time 6 | grep -q "success" > /dev/null 2>&1; then
-      export cdn_success_url="$cdn_url"
-      return
-    fi
-    sleep 0.5
-  done
-  export cdn_success_url=""
+    local o_url=$1
+    for cdn_url in "${cdn_urls[@]}"; do
+        if curl -sL -k "$cdn_url$o_url" --max-time 6 | grep -q "success" >/dev/null 2>&1; then
+            export cdn_success_url="$cdn_url"
+            return
+        fi
+        sleep 0.5
+    done
+    export cdn_success_url=""
 }
 
 check_cdn_file() {
@@ -63,19 +63,19 @@ check_cdn_file() {
 cdn_urls=("https://cdn.spiritlhl.workers.dev/" "https://cdn3.spiritlhl.net/" "https://cdn1.spiritlhl.net/" "https://ghproxy.com/" "https://cdn2.spiritlhl.net/")
 check_cdn_file
 
-pre_check(){
+pre_check() {
     home_dir=$(eval echo "~$(whoami)")
     if [ "$home_dir" != "/root" ]; then
         _red "The script will exit if the current path is not /root."
         _red "当前路径不是/root，脚本将退出。"
         exit 1
     fi
-    if ! command -v dos2unix > /dev/null 2>&1; then
+    if ! command -v dos2unix >/dev/null 2>&1; then
         apt-get install dos2unix -y
     fi
     if [ ! -f "buildct.sh" ]; then
-      curl -L ${cdn_success_url}https://raw.githubusercontent.com/spiritLHLS/pve/main/scripts/buildct.sh -o buildct.sh && chmod +x buildct.sh
-      dos2unix buildct.sh
+        curl -L ${cdn_success_url}https://raw.githubusercontent.com/spiritLHLS/pve/main/scripts/buildct.sh -o buildct.sh && chmod +x buildct.sh
+        dos2unix buildct.sh
     fi
 }
 
@@ -87,7 +87,7 @@ pre_check(){
 #   done
 # fi
 
-check_info(){
+check_info() {
     log_file="ctlog"
     if [ ! -f "ctlog" ]; then
         _yellow "ctrlog file does not exist in the current directory"
@@ -98,7 +98,7 @@ check_info(){
     else
         while read line; do
             last_line="$line"
-        done < "$log_file"
+        done <"$log_file"
         last_line_array=($last_line)
         ct_num="${last_line_array[0]}"
         password="${last_line_array[1]}"
@@ -123,7 +123,7 @@ check_info(){
     fi
 }
 
-build_new_cts(){
+build_new_cts() {
     while true; do
         _green "How many more NAT servers need to be generated? (Enter how many new NAT servers to add):"
         reading "还需要生成几个NAT服务器？(输入新增几个NAT服务器)：" new_nums
@@ -158,7 +158,7 @@ build_new_cts(){
         _green "On which storage drive are the containers opened? (Leave blank or enter 'local' if the container is to be opened on the system disk):"
         reading "容器们开设在哪个存储盘上？(若容器要开设在系统盘上，则留空或输入local)：" storage
         if [ -z "$storage" ]; then
-          storage="local"
+            storage="local"
         fi
         break
     done
@@ -192,17 +192,17 @@ build_new_cts(){
             _yellow "输入无效，请输入Y或者N。"
         fi
     done
-    for ((i=1; i<=$new_nums; i++)); do
+    for ((i = 1; i <= $new_nums; i++)); do
         ct_num=$(($ct_num + 1))
         ori=$(date | md5sum)
-        password=${ori: 2: 9}
+        password=${ori:2:9}
         ssh_port=$(($web2_port + 1))
-        web1_port=$(($web2_port + 2)) 
+        web1_port=$(($web2_port + 2))
         web2_port=$(($web1_port + 1))
         port_start=$(($port_end + 1))
         port_end=$(($port_start + 25))
         ./buildct.sh $ct_num $password $cpu_nums $memory_nums $disk_nums $ssh_port $web1_port $web2_port $port_start $port_end $system $storage $independent_ipv6
-        cat "ct$ct_num" >> ctlog
+        cat "ct$ct_num" >>ctlog
         rm -rf "ct$ct_num"
         sleep 60
     done

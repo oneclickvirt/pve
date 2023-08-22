@@ -1,5 +1,5 @@
 #!/bin/bash
-# from 
+# from
 # https://github.com/spiritLHLS/pve
 # 2023.08.18
 
@@ -8,35 +8,35 @@ _red() { echo -e "\033[31m\033[01m$@\033[0m"; }
 _green() { echo -e "\033[32m\033[01m$@\033[0m"; }
 _yellow() { echo -e "\033[33m\033[01m$@\033[0m"; }
 _blue() { echo -e "\033[36m\033[01m$@\033[0m"; }
-reading(){ read -rp "$(_green "$1")" "$2"; }
+reading() { read -rp "$(_green "$1")" "$2"; }
 utf8_locale=$(locale -a 2>/dev/null | grep -i -m 1 -E "UTF-8|utf8")
 if [[ -z "$utf8_locale" ]]; then
-  echo "No UTF-8 locale found"
+    echo "No UTF-8 locale found"
 else
-  export LC_ALL="$utf8_locale"
-  export LANG="$utf8_locale"
-  export LANGUAGE="$utf8_locale"
-  echo "Locale set to $utf8_locale"
+    export LC_ALL="$utf8_locale"
+    export LANG="$utf8_locale"
+    export LANGUAGE="$utf8_locale"
+    echo "Locale set to $utf8_locale"
 fi
 if [ ! -d /usr/local/bin ]; then
     mkdir -p /usr/local/bin
 fi
 
-check_config(){
+check_config() {
     _green "The machine configuration should meet the minimum requirements of at least 2 cores 2G RAM 20G hard drive"
     _green "本机配置应当满足至少2核2G内存20G硬盘的最低要求"
-    
+
     # 检查硬盘大小
     total_disk=$(df -h / | awk '/\//{print $2}')
     total_disk_num=$(echo $total_disk | sed -E 's/([0-9.]+)([GT])/\1 \2/')
-    total_disk_num=$(awk '{printf "%.0f", $1 * ($2 == "T" ? 1024 : 1)}' <<< "$total_disk_num")
+    total_disk_num=$(awk '{printf "%.0f", $1 * ($2 == "T" ? 1024 : 1)}' <<<"$total_disk_num")
     if [ "$total_disk_num" -lt 20 ]; then
         _red "The machine configuration does not meet the minimum requirements: at least 20G hard drive"
         _red "This machine's hard drive configuration does not allow for the installation of PVE"
         _red "本机配置不满足最低要求：至少20G硬盘"
         _red "本机硬盘配置无法安装PVE"
     fi
-    
+
     # 检查CPU核心数
     cpu_cores=$(grep -c ^processor /proc/cpuinfo)
     if [ "$cpu_cores" -lt 2 ]; then
@@ -45,7 +45,7 @@ check_config(){
         _red "本机配置不满足最低要求：至少2核CPU"
         _red "本机CPU数量配置无法安装PVE"
     fi
-    
+
     # 检查内存大小
     total_mem=$(free -m | awk '/^Mem:/{print $2}')
     if [ "$total_mem" -lt 2048 ]; then
@@ -98,7 +98,7 @@ is_private_ipv6() {
     return 1
 }
 
-check_ipv6(){
+check_ipv6() {
     IPV6=$(ip -6 addr show | grep global | awk '{print $2}' | cut -d '/' -f1 | head -n 1)
     local response
     if is_private_ipv6 "$IPV6"; then # 由于是内网IPV4地址，需要通过API获取外网地址
@@ -113,17 +113,17 @@ check_ipv6(){
             sleep 1
         done
     fi
-    echo $IPV6 > /usr/local/bin/pve_check_ipv6
+    echo $IPV6 >/usr/local/bin/pve_check_ipv6
 }
 
 # 检测IPV6网络配置
-if ! command -v lshw > /dev/null 2>&1 ; then
+if ! command -v lshw >/dev/null 2>&1; then
     apt-get install lshw -y
 fi
-if ! command -v ifconfig > /dev/null 2>&1 ; then
-  apt-get install net-tools -y
+if ! command -v ifconfig >/dev/null 2>&1; then
+    apt-get install net-tools -y
 fi
-if command -v lshw > /dev/null 2>&1 ; then
+if command -v lshw >/dev/null 2>&1; then
     # 检测物理接口
     interface_1=$(lshw -C network | awk '/logical name:/{print $3}' | sed -n '1p')
     interface_2=$(lshw -C network | awk '/logical name:/{print $3}' | sed -n '2p')
@@ -145,11 +145,11 @@ if command -v lshw > /dev/null 2>&1 ; then
         if [ -z "$ipv6_prefixlen" ]; then
             ipv6_prefixlen=$(ifconfig vmbr1 | grep -oP 'prefixlen \K\d+' | head -n 1)
         fi
-        echo "$ipv6_prefixlen" > /usr/local/bin/pve_ipv6_prefixlen
+        echo "$ipv6_prefixlen" >/usr/local/bin/pve_ipv6_prefixlen
     fi
     if [ ! -f /usr/local/bin/pve_ipv6_gateway ]; then
         ipv6_gateway=$(ip -6 route show | awk '/default via/{print $3}' | head -n1)
-        echo "$ipv6_gateway" > /usr/local/bin/pve_ipv6_gateway
+        echo "$ipv6_gateway" >/usr/local/bin/pve_ipv6_gateway
     fi
     ipv6_address=$(cat /usr/local/bin/pve_check_ipv6)
     ipv6_prefixlen=$(cat /usr/local/bin/pve_ipv6_prefixlen)
@@ -217,7 +217,7 @@ if ! lsmod | grep -q kvm; then
     _yellow "Trying to load KVM module ......"
     _yellow "尝试加载KVM模块……"
     modprobe kvm
-    echo "kvm" >> /etc/modules
+    echo "kvm" >>/etc/modules
     _green "KVM module has tried to load and add to /etc/modules, you can try to use PVE virtualized KVM server, you can also open LXC server (CT)"
     _green "KVM模块已尝试加载并添加到 /etc/modules，可以尝试使用PVE虚拟化KVM服务器，也可以开LXC服务器(CT)"
 fi

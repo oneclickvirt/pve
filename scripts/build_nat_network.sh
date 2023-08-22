@@ -1,8 +1,7 @@
 #!/bin/bash
-# from 
+# from
 # https://github.com/spiritLHLS/pve
 # 2023.08.22
-
 
 ########## 预设部分输出和部分中间变量
 
@@ -10,29 +9,29 @@ _red() { echo -e "\033[31m\033[01m$@\033[0m"; }
 _green() { echo -e "\033[32m\033[01m$@\033[0m"; }
 _yellow() { echo -e "\033[33m\033[01m$@\033[0m"; }
 _blue() { echo -e "\033[36m\033[01m$@\033[0m"; }
-reading(){ read -rp "$(_green "$1")" "$2"; }
+reading() { read -rp "$(_green "$1")" "$2"; }
 export DEBIAN_FRONTEND=noninteractive
 utf8_locale=$(locale -a 2>/dev/null | grep -i -m 1 -E "UTF-8|utf8")
 if [[ -z "$utf8_locale" ]]; then
-  echo "No UTF-8 locale found"
+    echo "No UTF-8 locale found"
 else
-  export LC_ALL="$utf8_locale"
-  export LANG="$utf8_locale"
-  export LANGUAGE="$utf8_locale"
-  echo "Locale set to $utf8_locale"
+    export LC_ALL="$utf8_locale"
+    export LANG="$utf8_locale"
+    export LANGUAGE="$utf8_locale"
+    echo "Locale set to $utf8_locale"
 fi
 rm -rf /usr/local/bin/build_backend_pve.txt
 
 check_cdn() {
-  local o_url=$1
-  for cdn_url in "${cdn_urls[@]}"; do
-    if curl -sL -k "$cdn_url$o_url" --max-time 6 | grep -q "success" > /dev/null 2>&1; then
-      export cdn_success_url="$cdn_url"
-      return
-    fi
-    sleep 0.5
-  done
-  export cdn_success_url=""
+    local o_url=$1
+    for cdn_url in "${cdn_urls[@]}"; do
+        if curl -sL -k "$cdn_url$o_url" --max-time 6 | grep -q "success" >/dev/null 2>&1; then
+            export cdn_success_url="$cdn_url"
+            return
+        fi
+        sleep 0.5
+    done
+    export cdn_success_url=""
 }
 
 check_cdn_file() {
@@ -46,10 +45,10 @@ check_cdn_file() {
 
 ########## 查询信息
 
-if ! command -v lshw > /dev/null 2>&1; then
+if ! command -v lshw >/dev/null 2>&1; then
     apt-get install -y lshw
 fi
-if ! command -v ipcalc > /dev/null 2>&1; then
+if ! command -v ipcalc >/dev/null 2>&1; then
     apt-get install -y ipcalc
 fi
 
@@ -103,7 +102,7 @@ if [[ -f "/etc/network/interfaces.d/50-cloud-init" && -f "/etc/network/interface
         chattr +i /etc/network/interfaces.d/50-cloud-init
     fi
 fi
-if [ -f "/etc/network/interfaces.new" ];then
+if [ -f "/etc/network/interfaces.new" ]; then
     chattr -i /etc/network/interfaces.new
     rm -rf /etc/network/interfaces.new
 fi
@@ -124,7 +123,7 @@ if grep -q "vmbr0" "/etc/network/interfaces"; then
     _blue "vmbr0 已存在在 /etc/network/interfaces"
 else
     if [ -z "$ipv6_address" ] || [ -z "$ipv6_prefixlen" ] || [ -z "$ipv6_gateway" ]; then
-cat << EOF | sudo tee -a /etc/network/interfaces
+        cat <<EOF | sudo tee -a /etc/network/interfaces
 auto vmbr0
 iface vmbr0 inet static
     address $ipv4_address
@@ -134,7 +133,7 @@ iface vmbr0 inet static
     bridge_fd 0
 EOF
     elif [ -f "/usr/local/bin/iface_auto.txt" ]; then
-cat << EOF | sudo tee -a /etc/network/interfaces
+        cat <<EOF | sudo tee -a /etc/network/interfaces
 auto vmbr0
 iface vmbr0 inet static
     address $ipv4_address
@@ -147,7 +146,7 @@ iface vmbr0 inet6 auto
     bridge_ports $interface
 EOF
     else
-cat << EOF | sudo tee -a /etc/network/interfaces
+        cat <<EOF | sudo tee -a /etc/network/interfaces
 auto vmbr0
 iface vmbr0 inet static
     address $ipv4_address
@@ -166,7 +165,7 @@ if grep -q "vmbr1" "$interfaces_file"; then
     _blue "vmbr1 already exists in ${interfaces_file}"
     _blue "vmbr1 已存在在 ${interfaces_file}"
 elif [ -f "/usr/local/bin/iface_auto.txt" ]; then
-cat << EOF | sudo tee -a "$interfaces_file"
+    cat <<EOF | sudo tee -a "$interfaces_file"
 auto vmbr1
 iface vmbr1 inet static
     address 172.16.1.1
@@ -182,7 +181,7 @@ iface vmbr1 inet static
 pre-up echo 2 > /proc/sys/net/ipv6/conf/vmbr0/accept_ra
 EOF
 elif [ -z "$ipv6_address" ] || [ -z "$ipv6_prefixlen" ] || [ -z "$ipv6_gateway" ]; then
-cat << EOF | sudo tee -a "$interfaces_file"
+    cat <<EOF | sudo tee -a "$interfaces_file"
 auto vmbr1
 iface vmbr1 inet static
     address 172.16.1.1
@@ -196,7 +195,7 @@ iface vmbr1 inet static
     post-down iptables -t nat -D POSTROUTING -s '172.16.1.0/24' -o vmbr0 -j MASQUERADE
 EOF
 else
-cat << EOF | sudo tee -a "$interfaces_file"
+    cat <<EOF | sudo tee -a "$interfaces_file"
 auto vmbr1
 iface vmbr1 inet static
     address 172.16.1.1
@@ -222,7 +221,7 @@ if [ "$ipv6_prefixlen" -le 64 ]; then
         _blue "vmbr2 already exists in ${interfaces_file}"
         _blue "vmbr2 已存在在 ${interfaces_file}"
     elif [ ! -z "$ipv6_address" ] && [ ! -z "$ipv6_prefixlen" ] && [ ! -z "$ipv6_gateway" ] && [ ! -z "$ipv6_address_without_last_segment" ]; then
-cat << EOF | sudo tee -a "$interfaces_file"
+        cat <<EOF | sudo tee -a "$interfaces_file"
 auto vmbr2
 iface vmbr2 inet6 static
     address ${ipv6_address_without_last_segment}1/${ipv6_prefixlen}
@@ -230,12 +229,12 @@ iface vmbr2 inet6 static
     bridge_stp off
     bridge_fd 0
 EOF
-      if [ -f "/usr/local/bin/ndpresponder" ]; then
-          new_exec_start="ExecStart=/usr/local/bin/ndpresponder -i vmbr0 -n ${ipv6_address_without_last_segment}/${ipv6_prefixlen}"
-          file_path="/etc/systemd/system/ndpresponder.service"
-          line_number=6
-          sed -i "${line_number}s|.*|${new_exec_start}|" "$file_path"
-      fi
+        if [ -f "/usr/local/bin/ndpresponder" ]; then
+            new_exec_start="ExecStart=/usr/local/bin/ndpresponder -i vmbr0 -n ${ipv6_address_without_last_segment}/${ipv6_prefixlen}"
+            file_path="/etc/systemd/system/ndpresponder.service"
+            line_number=6
+            sed -i "${line_number}s|.*|${new_exec_start}|" "$file_path"
+        fi
     fi
 fi
 chattr +i /etc/network/interfaces
@@ -247,11 +246,11 @@ iptables -t nat -A POSTROUTING -j MASQUERADE
 sysctl net.ipv4.ip_forward=1
 sysctl_path=$(which sysctl)
 if grep -q "^net.ipv4.ip_forward=1" /etc/sysctl.conf; then
-  if grep -q "^#net.ipv4.ip_forward=1" /etc/sysctl.conf; then
-    sed -i 's/^#net.ipv4.ip_forward=1/net.ipv4.ip_forward=1/' /etc/sysctl.conf
-  fi
+    if grep -q "^#net.ipv4.ip_forward=1" /etc/sysctl.conf; then
+        sed -i 's/^#net.ipv4.ip_forward=1/net.ipv4.ip_forward=1/' /etc/sysctl.conf
+    fi
 else
-    echo "net.ipv4.ip_forward=1" >> /etc/sysctl.conf
+    echo "net.ipv4.ip_forward=1" >>/etc/sysctl.conf
 fi
 ${sysctl_path} -p
 
@@ -281,17 +280,17 @@ while IFS= read -r line; do
         delete_lines=1
     fi
     if [ $delete_lines -eq 0 ] || [[ $line == *"$start_pattern"* ]] || [[ $line == *"$end_pattern"* ]]; then
-        echo "$line" >> "$output_file"
+        echo "$line" >>"$output_file"
     fi
     if [[ $line == *"$end_pattern"* ]]; then
         delete_lines=0
     fi
-done < "$input_file"
+done <"$input_file"
 mv "$output_file" "$input_file"
 chattr +i /etc/network/interfaces
 
 # 已加载网络，删除对应缓存文件
-if [ -f "/etc/network/interfaces.new" ];then
+if [ -f "/etc/network/interfaces.new" ]; then
     chattr -i /etc/network/interfaces.new
     rm -rf /etc/network/interfaces.new
 fi

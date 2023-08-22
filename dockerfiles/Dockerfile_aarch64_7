@@ -1,33 +1,31 @@
 FROM debian:11
 
 # Set official Debian sources
-RUN rm /etc/apt/sources.list && \
-    echo "deb http://deb.debian.org/debian/ bullseye main contrib non-free" >> /etc/apt/sources.list && \
-    echo "deb http://deb.debian.org/debian/ bullseye-updates main contrib non-free" >> /etc/apt/sources.list && \
-    echo "deb http://deb.debian.org/debian/ bullseye-backports main contrib non-free" >> /etc/apt/sources.list && \
-    echo "deb http://security.debian.org/debian-security bullseye-security main contrib" >> /etc/apt/sources.list
+RUN rm /etc/apt/sources.list &&
+    echo "deb http://deb.debian.org/debian/ bullseye main contrib non-free" >>/etc/apt/sources.list &&
+    echo "deb http://deb.debian.org/debian/ bullseye-updates main contrib non-free" >>/etc/apt/sources.list &&
+    echo "deb http://deb.debian.org/debian/ bullseye-backports main contrib non-free" >>/etc/apt/sources.list &&
+    echo "deb http://security.debian.org/debian-security bullseye-security main contrib" >>/etc/apt/sources.list
 
 # Install base packages
-RUN apt-get update && \
+RUN apt-get update &&
     apt-get install wget systemd nano vim curl gnupg ca-certificates -y
 
 #add proxmox repo
 #use jiangcuo_proxmox_arm64 https://github.com/jiangcuo/Proxmox-Arm64
-RUN echo "deb https://global.mirrors.apqa.cn/proxmox/ pvearm  main">/etc/apt/sources.list.d/foxi.list && \
-    wget --no-check-certificate https://global.mirrors.apqa.cn/proxmox/gpg.key -O /etc/apt/trusted.gpg.d/gpg.key && \
+RUN echo "deb https://global.mirrors.apqa.cn/proxmox/ pvearm  main" >/etc/apt/sources.list.d/foxi.list &&
+    wget --no-check-certificate https://global.mirrors.apqa.cn/proxmox/gpg.key -O /etc/apt/trusted.gpg.d/gpg.key &&
     chmod +r /etc/apt/trusted.gpg.d/gpg.key
 
-
-#intall proxmox-ve without recommends. 
-RUN apt-get update && \
-DEBIAN_FRONTEND=noninteractiv apt-get -y --no-install-recommends  install  proxmox-ve || echo ok
-
+#intall proxmox-ve without recommends.
+RUN apt-get update &&
+    DEBIAN_FRONTEND=noninteractiv apt-get -y --no-install-recommends install proxmox-ve || echo ok
 
 #set passwd for root
-RUN echo "root:root"|chpasswd
+RUN echo "root:root" | chpasswd
 
 #clean
-RUN rm -rf /var/lib/apt/lists/*  /*.deb
+RUN rm -rf /var/lib/apt/lists/* /*.deb
 
 #use setup.sh to start proxmox service
 STOPSIGNAL SIGINT

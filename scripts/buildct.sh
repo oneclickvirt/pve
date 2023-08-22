@@ -3,7 +3,6 @@
 # https://github.com/spiritLHLS/pve
 # 2023.08.21
 
-
 # ./buildct.sh CTID 密码 CPU核数 内存 硬盘 SSH端口 80端口 443端口 外网端口起 外网端口止 系统 存储盘 独立IPV6
 # ./buildct.sh 102 1234567 1 512 5 20001 20002 20003 30000 30025 debian11 local N
 
@@ -12,7 +11,7 @@ _red() { echo -e "\033[31m\033[01m$@\033[0m"; }
 _green() { echo -e "\033[32m\033[01m$@\033[0m"; }
 _yellow() { echo -e "\033[33m\033[01m$@\033[0m"; }
 _blue() { echo -e "\033[36m\033[01m$@\033[0m"; }
-reading(){ read -rp "$(_green "$1")" "$2"; }
+reading() { read -rp "$(_green "$1")" "$2"; }
 utf8_locale=$(locale -a 2>/dev/null | grep -i -m 1 -E "UTF-8|utf8")
 if [[ -z "$utf8_locale" ]]; then
     echo "No UTF-8 locale found"
@@ -30,19 +29,19 @@ get_system_arch() {
     fi
     # 根据架构信息设置系统位数并下载文件,其余 * 包括了 x86_64
     case "${sysarch}" in
-        "i386" | "i686" | "x86_64")
-            system_arch="x86"
-            ;;
-        "armv7l" | "armv8" | "armv8l" | "aarch64")
-            system_arch="arch"
-            ;;
-        *)
-            system_arch=""
-            ;;
+    "i386" | "i686" | "x86_64")
+        system_arch="x86"
+        ;;
+    "armv7l" | "armv8" | "armv8l" | "aarch64")
+        system_arch="arch"
+        ;;
+    *)
+        system_arch=""
+        ;;
     esac
 }
 
-check_china(){
+check_china() {
     _yellow "IP area being detected ......"
     if [[ -z "${CN}" ]]; then
         if [[ $(curl -m 6 -s https://ipapi.co/json | grep 'China') != "" ]]; then
@@ -61,8 +60,8 @@ check_china(){
 
 get_system_arch
 if [ -z "${system_arch}" ] || [ ! -v system_arch ]; then
-   _red "This script can only run on machines under x86_64 or arm architecture."
-   exit 1
+    _red "This script can only run on machines under x86_64 or arm architecture."
+    exit 1
 fi
 cd /root >/dev/null 2>&1
 CTID="${1:-102}"
@@ -86,53 +85,53 @@ system="$en_system-$num_system"
 if [ "$system_arch" = "arch" ]; then
     if [ "$en_system" = "ubuntu" ]; then
         case "$system_ori" in
-            ubuntu14)
-                version="trusty"
-                ;;
-            ubuntu16)
-                version="xenial"
-                ;;
-            ubuntu18)
-                version="bionic"
-                ;;
-            ubuntu20)
-                version="focal"
-                ;;
-            ubuntu22)
-                version="jammy"
-                ;;
-            *)
-                echo "Unsupported Ubuntu version."
-                exit 1
-                ;;
+        ubuntu14)
+            version="trusty"
+            ;;
+        ubuntu16)
+            version="xenial"
+            ;;
+        ubuntu18)
+            version="bionic"
+            ;;
+        ubuntu20)
+            version="focal"
+            ;;
+        ubuntu22)
+            version="jammy"
+            ;;
+        *)
+            echo "Unsupported Ubuntu version."
+            exit 1
+            ;;
         esac
     elif [ "$en_system" = "debian" ]; then
         case "$system_ori" in
-            debian6)
-                version="squeeze"
-                ;;
-            debian7)
-                version="wheezy"
-                ;;
-            debian8)
-                version="jessie"
-                ;;
-            debian9)
-                version="stretch"
-                ;;
-            debian10)
-                version="buster"
-                ;;
-            debian11)
-                version="bullseye"
-                ;;
-            debian12)
-                version="bookworm"
-                ;;
-            *)
-                echo "Unsupported Debian version."
-                exit 1
-                ;;
+        debian6)
+            version="squeeze"
+            ;;
+        debian7)
+            version="wheezy"
+            ;;
+        debian8)
+            version="jessie"
+            ;;
+        debian9)
+            version="stretch"
+            ;;
+        debian10)
+            version="buster"
+            ;;
+        debian11)
+            version="bullseye"
+            ;;
+        debian12)
+            version="bookworm"
+            ;;
+        *)
+            echo "Unsupported Debian version."
+            exit 1
+            ;;
         esac
     else
         version=${num_system}
@@ -152,7 +151,7 @@ if [ "$system_arch" = "arch" ]; then
     fi
 else
     system_name=$(pveam available --section system | grep "$system" | awk '{print $2}' | head -n1)
-    if ! pveam available --section system | grep "$system" > /dev/null; then
+    if ! pveam available --section system | grep "$system" >/dev/null; then
         _red "No such system"
         exit
     else
@@ -164,7 +163,7 @@ fi
 check_cdn() {
     local o_url=$1
     for cdn_url in "${cdn_urls[@]}"; do
-        if curl -sL -k "$cdn_url$o_url" --max-time 6 | grep -q "success" > /dev/null 2>&1; then
+        if curl -sL -k "$cdn_url$o_url" --max-time 6 | grep -q "success" >/dev/null 2>&1; then
             export cdn_success_url="$cdn_url"
             return
         fi
@@ -212,12 +211,12 @@ if [ "$independent_ipv6" == "y" ]; then
 else
     if [ -f /usr/local/bin/pve_check_ipv6 ]; then
         ipv6_address="2001:db8:1::2"
-        IFS="/" read -ra parts <<< "$ipv6_address"
+        IFS="/" read -ra parts <<<"$ipv6_address"
         part_1="${parts[0]}"
         part_2="${parts[1]}"
-        IFS=":" read -ra part_1_parts <<< "$part_1"
+        IFS=":" read -ra part_1_parts <<<"$part_1"
         if [ ! -z "${part_1_parts[*]}" ]; then
-            part_1_last="${part_1_parts[-1]}"    
+            part_1_last="${part_1_parts[-1]}"
             if [ "$part_1_last" = "$CTID" ]; then
                 ipv6_address=""
             else
@@ -308,28 +307,27 @@ if [ ! -f "/etc/iptables/rules.v4" ]; then
     touch /etc/iptables/rules.v4
 fi
 iptables-save | awk '{if($1=="COMMIT"){delete x}}$1=="-A"?!x[$0]++:1' | iptables-restore
-iptables-save > /etc/iptables/rules.v4
+iptables-save >/etc/iptables/rules.v4
 service netfilter-persistent restart
 
 # 容器的相关信息将会存储到对应的容器的NOTE中，可在WEB端查看
 if [ "$independent_ipv6_status" == "Y" ]; then
-    echo "$CTID $password $core $memory $disk $sshn $web1_port $web2_port $port_first $port_last $system_ori $storage ${ipv6_address_without_last_segment}${CTID}" >> "ct${CTID}"
+    echo "$CTID $password $core $memory $disk $sshn $web1_port $web2_port $port_first $port_last $system_ori $storage ${ipv6_address_without_last_segment}${CTID}" >>"ct${CTID}"
     data=$(echo " CTID root密码-password CPU核数-CPU 内存-memory 硬盘-disk SSH端口 80端口 443端口 外网端口起-port-start 外网端口止-port-end 系统-system 存储盘-storage 独立IPV6地址-ipv6_address")
 else
-    echo "$CTID $password $core $memory $disk $sshn $web1_port $web2_port $port_first $port_last $system_ori $storage" >> "ct${CTID}"
+    echo "$CTID $password $core $memory $disk $sshn $web1_port $web2_port $port_first $port_last $system_ori $storage" >>"ct${CTID}"
     data=$(echo " CTID root密码-password CPU核数-CPU 内存-memory 硬盘-disk SSH端口 80端口 443端口 外网端口起-port-start 外网端口止-port-end 系统-system 存储盘-storage")
 fi
 values=$(cat "ct${CTID}")
-IFS=' ' read -ra data_array <<< "$data"
-IFS=' ' read -ra values_array <<< "$values"
+IFS=' ' read -ra data_array <<<"$data"
+IFS=' ' read -ra values_array <<<"$values"
 length=${#data_array[@]}
-for ((i=0; i<$length; i++))
-do
+for ((i = 0; i < $length; i++)); do
     echo "${data_array[$i]} ${values_array[$i]}"
     echo ""
-done > "/tmp/temp${CTID}.txt"
+done >"/tmp/temp${CTID}.txt"
 sed -i 's/^/# /' "/tmp/temp${CTID}.txt"
-cat "/etc/pve/lxc/${CTID}.conf" >> "/tmp/temp${CTID}.txt"
+cat "/etc/pve/lxc/${CTID}.conf" >>"/tmp/temp${CTID}.txt"
 cp "/tmp/temp${CTID}.txt" "/etc/pve/lxc/${CTID}.conf"
 rm -rf "/tmp/temp${CTID}.txt"
 cat "ct${CTID}"

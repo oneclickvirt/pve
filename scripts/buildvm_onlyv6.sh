@@ -1,5 +1,5 @@
 #!/bin/bash
-# from 
+# from
 # https://github.com/spiritLHLS/pve
 # 2023.08.22
 # 自动选择要绑定的IPV6地址
@@ -22,7 +22,7 @@ _red() { echo -e "\033[31m\033[01m$@\033[0m"; }
 _green() { echo -e "\033[32m\033[01m$@\033[0m"; }
 _yellow() { echo -e "\033[33m\033[01m$@\033[0m"; }
 _blue() { echo -e "\033[36m\033[01m$@\033[0m"; }
-reading(){ read -rp "$(_green "$1")" "$2"; }
+reading() { read -rp "$(_green "$1")" "$2"; }
 utf8_locale=$(locale -a 2>/dev/null | grep -i -m 1 -E "utf8|UTF-8")
 if [[ -z "$utf8_locale" ]]; then
     _yellow "No UTF-8 locale found"
@@ -46,22 +46,22 @@ get_system_arch() {
     fi
     # 根据架构信息设置系统位数并下载文件,其余 * 包括了 x86_64
     case "${sysarch}" in
-        "i386" | "i686" | "x86_64")
-            system_arch="x86"
-            ;;
-        "armv7l" | "armv8" | "armv8l" | "aarch64")
-            system_arch="arch"
-            ;;
-        *)
-            system_arch=""
-            ;;
+    "i386" | "i686" | "x86_64")
+        system_arch="x86"
+        ;;
+    "armv7l" | "armv8" | "armv8l" | "aarch64")
+        system_arch="arch"
+        ;;
+    *)
+        system_arch=""
+        ;;
     esac
 }
 
 check_cdn() {
     local o_url=$1
     for cdn_url in "${cdn_urls[@]}"; do
-        if curl -sL -k "$cdn_url$o_url" --max-time 6 | grep -q "success" > /dev/null 2>&1; then
+        if curl -sL -k "$cdn_url$o_url" --max-time 6 | grep -q "success" >/dev/null 2>&1; then
             export cdn_success_url="$cdn_url"
             return
         fi
@@ -85,13 +85,13 @@ if [ ! -d "qcow" ]; then
 fi
 get_system_arch
 if [ -z "${system_arch}" ] || [ ! -v system_arch ]; then
-   _red "This script can only run on machines under x86_64 or arm architecture."
-   exit 1
+    _red "This script can only run on machines under x86_64 or arm architecture."
+    exit 1
 fi
 if [ "$system_arch" = "x86" ]; then
     file_path=""
     systems=(
-        "debian10" 
+        "debian10"
         "debian11"
         "debian12"
         "ubuntu18"
@@ -107,7 +107,7 @@ if [ "$system_arch" = "x86" ]; then
         "alpinelinux_stable"
         "rockylinux8"
         "centos8-stream"
-        )
+    )
     for sys in ${systems[@]}; do
         if [[ "$system" == "$sys" ]]; then
             file_path="/root/qcow/${system}.qcow2"
@@ -132,7 +132,7 @@ if [ "$system_arch" = "x86" ]; then
             array=("${!array_name}")
             if [[ " ${array[*]} " == *" $system "* ]]; then
                 index=$(echo ${ver_list[*]} | tr -s ' ' '\n' | grep -n "$ver" | cut -d':' -f1)
-                ver="${ver_name_list[$((index-1))]}"
+                ver="${ver_name_list[$((index - 1))]}"
                 break
             fi
         done
@@ -166,25 +166,25 @@ elif [ "$system_arch" = "arch" ]; then
     fi
     if [ -n "$file_path" ] && [ -f "$file_path" ]; then
         case "$system" in
-            ubuntu14)
-                version="trusty"
-                ;;
-            ubuntu16)
-                version="xenial"
-                ;;
-            ubuntu18)
-                version="bionic"
-                ;;
-            ubuntu20)
-                version="focal"
-                ;;
-            ubuntu22)
-                version="jammy"
-                ;;
-            *)
-                echo "Unsupported Ubuntu version."
-                exit 1
-                ;;
+        ubuntu14)
+            version="trusty"
+            ;;
+        ubuntu16)
+            version="xenial"
+            ;;
+        ubuntu18)
+            version="bionic"
+            ;;
+        ubuntu20)
+            version="focal"
+            ;;
+        ubuntu22)
+            version="jammy"
+            ;;
+        *)
+            echo "Unsupported Ubuntu version."
+            exit 1
+            ;;
         esac
         url="http://cloud-images.ubuntu.com/${version}/current/${version}-server-cloudimg-arm64.img"
         curl -L -o "$file_path" "$url"
@@ -248,20 +248,19 @@ if [ $? -ne 0 ]; then
     fi
 fi
 qm start $vm_num
-echo "$vm_num $user $password $core $memory $disk $system $storage ${ipv6_address_without_last_segment}${vm_num}" >> "vm${vm_num}"
+echo "$vm_num $user $password $core $memory $disk $system $storage ${ipv6_address_without_last_segment}${vm_num}" >>"vm${vm_num}"
 # 虚拟机的相关信息将会存储到对应的虚拟机的NOTE中，可在WEB端查看
 data=$(echo " VMID 用户名-username 密码-password CPU核数-CPU 内存-memory 硬盘-disk 系统-system 存储盘-storage 外网IPV6-ipv6")
 values=$(cat "vm${vm_num}")
-IFS=' ' read -ra data_array <<< "$data"
-IFS=' ' read -ra values_array <<< "$values"
+IFS=' ' read -ra data_array <<<"$data"
+IFS=' ' read -ra values_array <<<"$values"
 length=${#data_array[@]}
-for ((i=0; i<$length; i++))
-do
+for ((i = 0; i < $length; i++)); do
     echo "${data_array[$i]} ${values_array[$i]}"
     echo ""
-done > "/tmp/temp${vm_num}.txt"
+done >"/tmp/temp${vm_num}.txt"
 sed -i 's/^/# /' "/tmp/temp${vm_num}.txt"
-cat "/etc/pve/qemu-server/${vm_num}.conf" >> "/tmp/temp${vm_num}.txt"
+cat "/etc/pve/qemu-server/${vm_num}.conf" >>"/tmp/temp${vm_num}.txt"
 cp "/tmp/temp${vm_num}.txt" "/etc/pve/qemu-server/${vm_num}.conf"
 rm -rf "/tmp/temp${vm_num}.txt"
 cat "vm${vm_num}"

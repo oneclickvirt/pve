@@ -4,7 +4,6 @@
 # 2023.08.04
 # 手动指定要绑定的IPV4地址
 
-
 # ./buildvm_manual_ip.sh VMID 用户名 密码 CPU核数 内存 硬盘 系统 存储盘 IPV4地址 是否附加IPV6(默认为N)
 # ./buildvm_manual_ip.sh 152 test1 1234567 1 512 5 debian11 local a.b.c.d/24 N
 
@@ -30,7 +29,7 @@ _red() { echo -e "\033[31m\033[01m$@\033[0m"; }
 _green() { echo -e "\033[32m\033[01m$@\033[0m"; }
 _yellow() { echo -e "\033[33m\033[01m$@\033[0m"; }
 _blue() { echo -e "\033[36m\033[01m$@\033[0m"; }
-reading(){ read -rp "$(_green "$1")" "$2"; }
+reading() { read -rp "$(_green "$1")" "$2"; }
 utf8_locale=$(locale -a 2>/dev/null | grep -i -m 1 -E "utf8|UTF-8")
 if [[ -z "$utf8_locale" ]]; then
     _yellow "No UTF-8 locale found"
@@ -48,15 +47,15 @@ get_system_arch() {
     fi
     # 根据架构信息设置系统位数并下载文件,其余 * 包括了 x86_64
     case "${sysarch}" in
-        "i386" | "i686" | "x86_64")
-            system_arch="x86"
-            ;;
-        "armv7l" | "armv8" | "armv8l" | "aarch64")
-            system_arch="arch"
-            ;;
-        *)
-            system_arch=""
-            ;;
+    "i386" | "i686" | "x86_64")
+        system_arch="x86"
+        ;;
+    "armv7l" | "armv8" | "armv8l" | "aarch64")
+        system_arch="arch"
+        ;;
+    *)
+        system_arch=""
+        ;;
     esac
 }
 
@@ -64,9 +63,9 @@ is_ipv4() {
     local ip=$1
     local regex="^([0-9]{1,3}\.){3}[0-9]{1,3}$"
     if [[ $ip =~ $regex ]]; then
-        return 0  # 符合IPv4格式
+        return 0 # 符合IPv4格式
     else
-        return 1  # 不符合IPv4格式
+        return 1 # 不符合IPv4格式
     fi
 }
 
@@ -88,15 +87,15 @@ else
 fi
 
 check_cdn() {
-  local o_url=$1
-  for cdn_url in "${cdn_urls[@]}"; do
-    if curl -sL -k "$cdn_url$o_url" --max-time 6 | grep -q "success" > /dev/null 2>&1; then
-      export cdn_success_url="$cdn_url"
-      return
-    fi
-    sleep 0.5
-  done
-  export cdn_success_url=""
+    local o_url=$1
+    for cdn_url in "${cdn_urls[@]}"; do
+        if curl -sL -k "$cdn_url$o_url" --max-time 6 | grep -q "success" >/dev/null 2>&1; then
+            export cdn_success_url="$cdn_url"
+            return
+        fi
+        sleep 0.5
+    done
+    export cdn_success_url=""
 }
 
 check_cdn_file() {
@@ -110,17 +109,17 @@ check_cdn_file() {
 
 cdn_urls=("https://cdn.spiritlhl.workers.dev/" "https://cdn3.spiritlhl.net/" "https://cdn1.spiritlhl.net/" "https://ghproxy.com/" "https://cdn2.spiritlhl.net/")
 if [ ! -d "qcow" ]; then
-  mkdir qcow
+    mkdir qcow
 fi
 get_system_arch
 if [ -z "${system_arch}" ] || [ ! -v system_arch ]; then
-   _red "This script can only run on machines under x86_64 or arm architecture."
-   exit 1
+    _red "This script can only run on machines under x86_64 or arm architecture."
+    exit 1
 fi
 if [ "$system_arch" = "x86" ]; then
     file_path=""
     systems=(
-        "debian10" 
+        "debian10"
         "debian11"
         "debian12"
         "ubuntu18"
@@ -136,7 +135,7 @@ if [ "$system_arch" = "x86" ]; then
         "alpinelinux_stable"
         "rockylinux8"
         "centos8-stream"
-        )
+    )
     for sys in ${systems[@]}; do
         if [[ "$system" == "$sys" ]]; then
             file_path="/root/qcow/${system}.qcow2"
@@ -161,7 +160,7 @@ if [ "$system_arch" = "x86" ]; then
             array=("${!array_name}")
             if [[ " ${array[*]} " == *" $system "* ]]; then
                 index=$(echo ${ver_list[*]} | tr -s ' ' '\n' | grep -n "$ver" | cut -d':' -f1)
-                ver="${ver_name_list[$((index-1))]}"
+                ver="${ver_name_list[$((index - 1))]}"
                 break
             fi
         done
@@ -195,35 +194,35 @@ elif [ "$system_arch" = "arch" ]; then
     fi
     if [ -n "$file_path" ] && [ -f "$file_path" ]; then
         case "$system" in
-            ubuntu14)
-                version="trusty"
-                ;;
-            ubuntu16)
-                version="xenial"
-                ;;
-            ubuntu18)
-                version="bionic"
-                ;;
-            ubuntu20)
-                version="focal"
-                ;;
-            ubuntu22)
-                version="jammy"
-                ;;
-            *)
-                echo "Unsupported Ubuntu version."
-                exit 1
-                ;;
+        ubuntu14)
+            version="trusty"
+            ;;
+        ubuntu16)
+            version="xenial"
+            ;;
+        ubuntu18)
+            version="bionic"
+            ;;
+        ubuntu20)
+            version="focal"
+            ;;
+        ubuntu22)
+            version="jammy"
+            ;;
+        *)
+            echo "Unsupported Ubuntu version."
+            exit 1
+            ;;
         esac
         url="http://cloud-images.ubuntu.com/${version}/current/${version}-server-cloudimg-arm64.img"
         curl -L -o "$file_path" "$url"
     fi
 fi
 # 查询信息
-if ! command -v lshw > /dev/null 2>&1; then
+if ! command -v lshw >/dev/null 2>&1; then
     apt-get install -y lshw
 fi
-if ! command -v ping > /dev/null 2>&1; then
+if ! command -v ping >/dev/null 2>&1; then
     apt-get install -y iputils-ping
     apt-get install -y ping
 fi
@@ -270,10 +269,10 @@ if [ "$independent_ipv6" == "y" ]; then
 else
     if [ -f /usr/local/bin/pve_check_ipv6 ]; then
         ipv6_address=$(cat /usr/local/bin/pve_check_ipv6)
-        IFS="/" read -ra parts <<< "$ipv6_address"
+        IFS="/" read -ra parts <<<"$ipv6_address"
         part_1="${parts[0]}"
         part_2="${parts[1]}"
-        IFS=":" read -ra part_1_parts <<< "$part_1"
+        IFS=":" read -ra part_1_parts <<<"$part_1"
         if [ ! -z "${part_1_parts[*]}" ]; then
             part_1_last="${part_1_parts[-1]}"
             if [ "$part_1_last" = "$vm_num" ]; then
@@ -360,23 +359,22 @@ qm start $vm_num
 
 # 虚拟机的相关信息将会存储到对应的虚拟机的NOTE中，可在WEB端查看
 if [ "$independent_ipv6_status" == "N" ]; then
-    echo "$vm_num $user $password $core $memory $disk $system $storage $user_ip" >> "vm${vm_num}"
+    echo "$vm_num $user $password $core $memory $disk $system $storage $user_ip" >>"vm${vm_num}"
     data=$(echo " VMID 用户名-username 密码-password CPU核数-CPU 内存-memory 硬盘-disk 系统-system 存储盘-storage 外网IP地址-ipv4")
 else
-    echo "$vm_num $user $password $core $memory $disk $system $storage $user_ip ${ipv6_address_without_last_segment}${vm_num}" >> "vm${vm_num}"
+    echo "$vm_num $user $password $core $memory $disk $system $storage $user_ip ${ipv6_address_without_last_segment}${vm_num}" >>"vm${vm_num}"
     data=$(echo " VMID 用户名-username 密码-password CPU核数-CPU 内存-memory 硬盘-disk 系统-system 存储盘-storage 外网IPV4-ipv4 外网IPV6-ipv6")
 fi
 values=$(cat "vm${vm_num}")
-IFS=' ' read -ra data_array <<< "$data"
-IFS=' ' read -ra values_array <<< "$values"
+IFS=' ' read -ra data_array <<<"$data"
+IFS=' ' read -ra values_array <<<"$values"
 length=${#data_array[@]}
-for ((i=0; i<$length; i++))
-do
+for ((i = 0; i < $length; i++)); do
     echo "${data_array[$i]} ${values_array[$i]}"
     echo ""
-done > "/tmp/temp${vm_num}.txt"
+done >"/tmp/temp${vm_num}.txt"
 sed -i 's/^/# /' "/tmp/temp${vm_num}.txt"
-cat "/etc/pve/qemu-server/${vm_num}.conf" >> "/tmp/temp${vm_num}.txt"
+cat "/etc/pve/qemu-server/${vm_num}.conf" >>"/tmp/temp${vm_num}.txt"
 cp "/tmp/temp${vm_num}.txt" "/etc/pve/qemu-server/${vm_num}.conf"
 rm -rf "/tmp/temp${vm_num}.txt"
 cat "vm${vm_num}"
