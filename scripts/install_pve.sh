@@ -1,7 +1,7 @@
 #!/bin/bash
 # from 
 # https://github.com/spiritLHLS/pve
-# 2023.08.20
+# 2023.08.22
 
 
 ########## 预设部分输出和部分中间变量
@@ -422,13 +422,12 @@ is_private_ipv6() {
 
 check_ipv6(){
     IPV6=$(ip -6 addr show | grep global | awk '{print $2}' | cut -d '/' -f1 | head -n 1)
-    local response
     if is_private_ipv6 "$IPV6"; then # 由于是内网IPV6地址，需要通过API获取外网地址
         IPV6=""
-        local API_NET=("ipv6.ip.sb" "https://ipget.net" "ipv6.ping0.cc" "https://api.my-ip.io/ip" "https://ipv6.icanhazip.com")
+        API_NET=("ipv6.ip.sb" "https://ipget.net" "ipv6.ping0.cc" "https://api.my-ip.io/ip" "https://ipv6.icanhazip.com")
         for p in "${API_NET[@]}"; do
             response=$(curl -sLk6m8 "$p" | tr -d '[:space:]')
-            if [ $? -eq 0 ] && ! echo "$response" | grep -q "error"; then
+            if [ $? -eq 0 ] && ! ( echo "$response" | grep -q "error" ); then
                 IPV6="$response"
                 break
             fi
@@ -789,14 +788,14 @@ check_interface
 # fi
 
 # 检测IPV6相关的信息
-if [ ! -f /usr/local/bin/pve_check_ipv6 ]; then
+if [ ! -f /usr/local/bin/pve_check_ipv6 ] || [ ! -s /usr/local/bin/pve_check_ipv6 ] || [ "$(sed -e '/^[[:space:]]*$/d' /usr/local/bin/pve_check_ipv6)" = "" ]; then
     check_ipv6
 fi
-if [ ! -f /usr/local/bin/pve_ipv6_prefixlen ]; then
+if [ ! -f /usr/local/bin/pve_ipv6_prefixlen ] || [ ! -s /usr/local/bin/pve_ipv6_prefixlen ] || [ "$(sed -e '/^[[:space:]]*$/d' /usr/local/bin/pve_ipv6_prefixlen)" = "" ]; then
     ipv6_prefixlen=$(ifconfig ${interface} | grep -oP 'prefixlen \K\d+' | head -n 1)
     echo "$ipv6_prefixlen" > /usr/local/bin/pve_ipv6_prefixlen
 fi
-if [ ! -f /usr/local/bin/pve_ipv6_gateway ]; then
+if [ ! -f /usr/local/bin/pve_ipv6_gateway ] || [ ! -s /usr/local/bin/pve_ipv6_gateway ] || [ "$(sed -e '/^[[:space:]]*$/d' /usr/local/bin/pve_ipv6_gateway)" = "" ]; then
     ipv6_gateway=$(ip -6 route show | awk '/default via/{print $3}' | head -n1)
     # ip -6 route show | awk '/default via/{print $3}' | head -n1
     # if is_private_ipv6 "$ipv6_gateway"; then # 由于是内网IPV6地址，不设置V6地址
@@ -1173,6 +1172,7 @@ iface vmbr0 inet6 auto
     bridge_ports $interface
 EOF
     else
+      ipv6_address_without_last_segment="${ipv6_address%:*}:"
 cat << EOF | sudo tee -a /etc/network/interfaces
 auto vmbr0
 iface vmbr0 inet static
@@ -1183,7 +1183,7 @@ iface vmbr0 inet static
     bridge_fd 0
 
 iface vmbr0 inet6 static
-        address ${ipv6_address}/${ipv6_prefixlen}
+        address ${ipv6_address_without_last_segment}/128
         gateway ${ipv6_gateway}
 EOF
     fi

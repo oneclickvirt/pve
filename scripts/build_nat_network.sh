@@ -1,7 +1,7 @@
 #!/bin/bash
 # from 
 # https://github.com/spiritLHLS/pve
-# 2023.08.21
+# 2023.08.22
 
 
 ########## 预设部分输出和部分中间变量
@@ -225,7 +225,7 @@ if [ "$ipv6_prefixlen" -le 64 ]; then
 cat << EOF | sudo tee -a "$interfaces_file"
 auto vmbr2
 iface vmbr2 inet6 static
-    address ${ipv6_address_without_last_segment}2/${ipv6_prefixlen}
+    address ${ipv6_address_without_last_segment}1/${ipv6_prefixlen}
     bridge_ports none
     bridge_stp off
     bridge_fd 0
