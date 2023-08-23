@@ -23,7 +23,15 @@
 
 ## 说明文档
 
-[virt.spiritlhl.net](https://virt.spiritlhl.net/) 中 Proxmox VE 分区内容
+国内(China)：
+
+[virt.spiritlhl.net](https://virt.spiritlhl.net/)
+
+国际(Global)：
+
+[www.spiritlhl.net](https://www.spiritlhl.net/)
+
+说明文档中 Proxmox VE 分区内容
 
 [https://github.com/oneclickvirt/kvm_images](https://github.com/oneclickvirt/kvm_images) 为对应虚拟机镜像仓库
 
