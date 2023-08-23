@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/spiritLHLS/pve
-# 2023.08.22
+# 2023.08.23
 
 ########## 预设部分输出和部分中间变量
 
@@ -22,6 +22,14 @@ else
     echo "Locale set to $utf8_locale"
 fi
 temp_file_apt_fix="/tmp/apt_fix.txt"
+command -v pct &> /dev/null
+pct_status=$?
+command -v qm &> /dev/null
+qm_status=$?
+if [ $pct_status -eq 0 ] && [ $qm_status -eq 0 ]; then
+    _green "Proxmox VE is already installed and does not need to be reinstalled."
+    _green "Proxmox VE已经安装，无需重复安装。"
+fi
 
 ########## 备份配置文件
 

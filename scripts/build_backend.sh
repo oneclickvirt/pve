@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/spiritLHLS/pve
-# 2023.08.03
+# 2023.08.22
 
 # 打印信息
 _red() { echo -e "\033[31m\033[01m$@\033[0m"; }

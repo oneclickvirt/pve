@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/spiritLHLS/pve
-# 2023.08.22
+# 2023.08.23
 
 ########## 预设部分输出和部分中间变量
 
@@ -325,6 +325,18 @@ if [ -f "/etc/network/interfaces.new" ]; then
     rm -rf /etc/network/interfaces.new
 fi
 systemctl start check-dns.service
+
+# 检测ndppd服务是否启动了
+service_status=$(systemctl is-active ndpresponder.service)
+if [ "$service_status" == "active" ]; then
+    _green "The ndpresponder service started successfully and is running, and the host can open a service with a separate IPV6 address."
+    _green "ndpresponder服务启动成功且正在运行，宿主机可开设带独立IPV6地址的服务。"
+else
+    _green "The status of the ndpresponder service is abnormal and the host may not open a service with a separate IPV6 address."
+    _green "ndpresponder服务状态异常，宿主机不可开设带独立IPV6地址的服务。"
+fi
+
+# 打印信息
 # _green "Although the gateway has been set automatically, I am not sure if it has been applied successfully, please check in Datacenter-->pve-->System-->Network in PVE"
 # _green "If vmbr0 and vmbr1 are displayed properly and the Apply Configuration button is grayed out, there is no need to reboot"
 # _green "If the above scenario is different, click on the Apply Configuration button, wait a few minutes and reboot the system to ensure that the gateway has been successfully applied"

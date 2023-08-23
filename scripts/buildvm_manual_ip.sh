@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/spiritLHLS/pve
-# 2023.08.04
+# 2023.08.23
 # 手动指定要绑定的IPV4地址
 
 # ./buildvm_manual_ip.sh VMID 用户名 密码 CPU核数 内存 硬盘 系统 存储盘 IPV4地址 是否附加IPV6(默认为N)
@@ -256,6 +256,16 @@ _green "The current IP to which the VM will be bound is: ${user_ip}"
 _green "当前虚拟机将绑定的IP为：${user_ip}"
 # 检测IPV6相关的信息
 if [ "$independent_ipv6" == "y" ]; then
+    # 检测ndppd服务是否启动了
+    service_status=$(systemctl is-active ndpresponder.service)
+    if [ "$service_status" == "active" ]; then
+        _green "The ndpresponder service started successfully and is running, and the host can open a service with a separate IPV6 address."
+        _green "ndpresponder服务启动成功且正在运行，宿主机可开设带独立IPV6地址的服务。"
+    else
+        _green "The status of the ndpresponder service is abnormal and the host may not open a service with a separate IPV6 address."
+        _green "ndpresponder服务状态异常，宿主机不可开设带独立IPV6地址的服务。"
+        exit 1
+    fi
     if [ -f /usr/local/bin/pve_check_ipv6 ]; then
         ipv6_address=$(cat /usr/local/bin/pve_check_ipv6)
         ipv6_address_without_last_segment="${ipv6_address%:*}:"
