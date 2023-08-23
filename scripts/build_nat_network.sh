@@ -43,6 +43,25 @@ check_cdn_file() {
     fi
 }
 
+get_system_arch() {
+    local sysarch="$(uname -m)"
+    if [ "${sysarch}" = "unknown" ] || [ "${sysarch}" = "" ]; then
+        local sysarch="$(arch)"
+    fi
+    # 根据架构信息设置系统位数并下载文件,其余 * 包括了 x86_64
+    case "${sysarch}" in
+    "i386" | "i686" | "x86_64")
+        system_arch="x86"
+        ;;
+    "armv7l" | "armv8" | "armv8l" | "aarch64")
+        system_arch="arch"
+        ;;
+    *)
+        system_arch=""
+        ;;
+    esac
+}
+
 ########## 查询信息
 
 if ! command -v lshw >/dev/null 2>&1; then
@@ -56,6 +75,9 @@ fi
 cdn_urls=("https://cdn.spiritlhl.workers.dev/" "https://cdn3.spiritlhl.net/" "https://cdn1.spiritlhl.net/" "https://ghproxy.com/" "https://cdn2.spiritlhl.net/")
 check_cdn_file
 
+# 检测架构
+get_system_arch
+
 # 检测IPV6相关的信息
 if [ -f /usr/local/bin/pve_check_ipv6 ]; then
     ipv6_address=$(cat /usr/local/bin/pve_check_ipv6)
@@ -67,13 +89,21 @@ fi
 if [ -f /usr/local/bin/pve_ipv6_gateway ]; then
     ipv6_gateway=$(cat /usr/local/bin/pve_ipv6_gateway)
 fi
+
 # 配置 ndpresponder 的守护进程
 if [ "$ipv6_prefixlen" -le 64 ]; then
     if [ ! -z "$ipv6_address" ] && [ ! -z "$ipv6_prefixlen" ] && [ ! -z "$ipv6_gateway" ] && [ ! -z "$ipv6_address_without_last_segment" ]; then
-        wget ${cdn_success_url}https://github.com/spiritLHLS/pve/releases/download/ndpresponder_x86/ndpresponder -O /usr/local/bin/ndpresponder
-        wget ${cdn_success_url}https://raw.githubusercontent.com/spiritLHLS/pve/main/extra_scripts/ndpresponder.service -O /etc/systemd/system/ndpresponder.service
-        chmod 777 /usr/local/bin/ndpresponder
-        chmod 777 /etc/systemd/system/ndpresponder.service
+        if [ "$system_arch" = "x86" ]; then
+            wget ${cdn_success_url}https://github.com/spiritLHLS/pve/releases/download/ndpresponder_x86/ndpresponder -O /usr/local/bin/ndpresponder
+            wget ${cdn_success_url}https://raw.githubusercontent.com/spiritLHLS/pve/main/extra_scripts/ndpresponder.service -O /etc/systemd/system/ndpresponder.service
+            chmod 777 /usr/local/bin/ndpresponder
+            chmod 777 /etc/systemd/system/ndpresponder.service
+        elif [ "$system_arch" = "arch" ]; then
+            wget ${cdn_success_url}https://github.com/spiritLHLS/pve/releases/download/ndpresponder_aarch64/ndpresponder -O /usr/local/bin/ndpresponder
+            wget ${cdn_success_url}https://raw.githubusercontent.com/spiritLHLS/pve/main/extra_scripts/ndpresponder.service -O /etc/systemd/system/ndpresponder.service
+            chmod 777 /usr/local/bin/ndpresponder
+            chmod 777 /etc/systemd/system/ndpresponder.service
+        fi
     fi
 fi
 
