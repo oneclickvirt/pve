@@ -294,7 +294,7 @@ if [ -f "/usr/local/bin/ndpresponder" ]; then
     systemctl daemon-reload
     systemctl enable ndpresponder.service
     systemctl start ndpresponder.service
-    systemctl status ndpresponder.service
+    systemctl status ndpresponder.service 2>/dev/null
 fi
 
 # 删除可能存在的原有的网卡配置
