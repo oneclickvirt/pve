@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/spiritLHLS/pve
-# 2023.08.18
+# 2023.08.26
 
 # 用颜色输出信息
 _red() { echo -e "\033[31m\033[01m$@\033[0m"; }
@@ -157,6 +157,22 @@ if command -v lshw >/dev/null 2>&1; then
     if [ -z "$ipv6_address" ] || [ -z "$ipv6_prefixlen" ] || [ -z "$ipv6_gateway" ]; then
         :
     else
+        while true; do
+            if ping -c 1 -6 -W 3 $ipv6_address >/dev/null 2>&1; then
+                echo "IPv6 address is reachable."
+            else
+                echo "IPv6 address is not reachable. Setting to empty."
+                echo "" > /usr/local/bin/pve_check_ipv6
+            fi
+            if ping -c 1 -6 -W 3 $ipv6_gateway >/dev/null 2>&1; then
+                echo "IPv6 gateway is reachable."
+            else
+                echo "IPv6 gateway is not reachable. Setting to empty."
+                echo "" > /usr/local/bin/pve_ipv6_gateway
+            fi
+        done
+        ipv6_address=$(cat /usr/local/bin/pve_check_ipv6)
+        ipv6_gateway=$(cat /usr/local/bin/pve_ipv6_gateway)
         _green "The following IPV6 information is detected for this machine:"
         _green "检测到本机的IPV6信息如下："
         _green "ipv6_address: ${ipv6_address}"
