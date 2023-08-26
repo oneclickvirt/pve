@@ -1218,6 +1218,24 @@ if [ "$system_arch" = "x86" ]; then
     fi
 fi
 
+# 确保DNS有效
+if [ ! -s "/etc/resolv.conf" ]; then
+    cp /etc/resolv.conf /etc/resolv.conf.bak
+    if [[ "${CN}" == true ]]; then
+        if [ -z "$ipv6_address" ] || [ -z "$ipv6_prefixlen" ] || [ -z "$ipv6_gateway" ]; then
+            echo -e "nameserver 8.8.8.8\nnameserver 223.5.5.5\n" >/etc/resolv.conf
+        else
+            echo -e "nameserver 8.8.8.8\nnameserver 223.5.5.5\nnameserver 2001:4860:4860::8888\nnameserver 2001:4860:4860::8844" >/etc/resolv.conf
+        fi
+    else
+        if [ -z "$ipv6_address" ] || [ -z "$ipv6_prefixlen" ] || [ -z "$ipv6_gateway" ]; then
+            echo -e "nameserver 8.8.8.8\nnameserver 8.8.4.4\n" >/etc/resolv.conf
+        else
+            echo -e "nameserver 8.8.8.8\nnameserver 8.8.4.4\nnameserver 2001:4860:4860::8888\nnameserver 2001:4860:4860::8844" >/etc/resolv.conf
+        fi
+    fi
+fi
+
 # 安装必备模块并替换apt源中的无效订阅
 cp /etc/apt/sources.list.d/pve-enterprise.list /etc/apt/sources.list.d/pve-enterprise.list.bak
 # echo "deb http://download.proxmox.com/debian/pve $(lsb_release -sc) pve-no-subscription" > /etc/apt/sources.list.d/pve-enterprise.list
@@ -1247,24 +1265,6 @@ install_package cloud-init
 rebuild_cloud_init
 # install_package isc-dhcp-server
 chattr +i /etc/network/interfaces
-
-# 确保DNS有效
-if [ ! -s "/etc/resolv.conf" ]; then
-    cp /etc/resolv.conf /etc/resolv.conf.bak
-    if [[ "${CN}" == true ]]; then
-        if [ -z "$ipv6_address" ] || [ -z "$ipv6_prefixlen" ] || [ -z "$ipv6_gateway" ]; then
-            echo -e "nameserver 8.8.8.8\nnameserver 223.5.5.5\n" >/etc/resolv.conf
-        else
-            echo -e "nameserver 8.8.8.8\nnameserver 223.5.5.5\nnameserver 2001:4860:4860::8888\nnameserver 2001:4860:4860::8844" >/etc/resolv.conf
-        fi
-    else
-        if [ -z "$ipv6_address" ] || [ -z "$ipv6_prefixlen" ] || [ -z "$ipv6_gateway" ]; then
-            echo -e "nameserver 8.8.8.8\nnameserver 8.8.4.4\n" >/etc/resolv.conf
-        else
-            echo -e "nameserver 8.8.8.8\nnameserver 8.8.4.4\nnameserver 2001:4860:4860::8888\nnameserver 2001:4860:4860::8844" >/etc/resolv.conf
-        fi
-    fi
-fi
 
 # 清除防火墙
 install_package ufw
