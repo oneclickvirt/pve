@@ -807,20 +807,19 @@ fi
 ipv6_address=$(cat /usr/local/bin/pve_check_ipv6)
 ipv6_prefixlen=$(cat /usr/local/bin/pve_ipv6_prefixlen)
 ipv6_gateway=$(cat /usr/local/bin/pve_ipv6_gateway)
-while true; do
-    if ping -c 1 -6 -W 3 $ipv6_address >/dev/null 2>&1; then
-        echo "IPv6 address is reachable."
-    else
-        echo "IPv6 address is not reachable. Setting to empty."
-        echo "" > /usr/local/bin/pve_check_ipv6
-    fi
-    if ping -c 1 -6 -W 3 $ipv6_gateway >/dev/null 2>&1; then
-        echo "IPv6 gateway is reachable."
-    else
-        echo "IPv6 gateway is not reachable. Setting to empty."
-        echo "" > /usr/local/bin/pve_ipv6_gateway
-    fi
-done
+if ping -c 1 -6 -W 3 $ipv6_address >/dev/null 2>&1; then
+    echo "IPv6 address is reachable."
+else
+    echo "IPv6 address is not reachable. Setting to empty."
+    echo "" > /usr/local/bin/pve_check_ipv6
+fi
+if ping -c 1 -6 -W 3 $ipv6_gateway >/dev/null 2>&1; then
+    echo "IPv6 gateway is reachable."
+    
+else
+    echo "IPv6 gateway is not reachable. Setting to empty."
+    echo "" > /usr/local/bin/pve_ipv6_gateway
+fi
 ipv6_address=$(cat /usr/local/bin/pve_check_ipv6)
 ipv6_gateway=$(cat /usr/local/bin/pve_ipv6_gateway)
 
