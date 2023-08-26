@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/spiritLHLS/pve
-# 2023.08.23
+# 2023.08.26
 
 ########## 预设部分输出和部分中间变量
 
@@ -62,6 +62,50 @@ get_system_arch() {
     esac
 }
 
+check_interface() {
+    if [ -z "$interface_2" ]; then
+        interface=${interface_1}
+        return
+    elif [ -n "$interface_1" ] && [ -n "$interface_2" ]; then
+        if ! grep -q "$interface_1" "/etc/network/interfaces" && ! grep -q "$interface_2" "/etc/network/interfaces" && [ -f "/etc/network/interfaces.d/50-cloud-init" ]; then
+            if grep -q "$interface_1" "/etc/network/interfaces.d/50-cloud-init" || grep -q "$interface_2" "/etc/network/interfaces.d/50-cloud-init"; then
+                if ! grep -q "$interface_1" "/etc/network/interfaces.d/50-cloud-init" && grep -q "$interface_2" "/etc/network/interfaces.d/50-cloud-init"; then
+                    interface=${interface_2}
+                    return
+                elif ! grep -q "$interface_2" "/etc/network/interfaces.d/50-cloud-init" && grep -q "$interface_1" "/etc/network/interfaces.d/50-cloud-init"; then
+                    interface=${interface_1}
+                    return
+                fi
+            fi
+        fi
+        if grep -q "$interface_1" "/etc/network/interfaces"; then
+            interface=${interface_1}
+            return
+        elif grep -q "$interface_2" "/etc/network/interfaces"; then
+            interface=${interface_2}
+            return
+        else
+            interfaces_list=$(ip addr show | awk '/^[0-9]+: [^lo]/ {print $2}' | cut -d ':' -f 1)
+            interface=""
+            for iface in $interfaces_list; do
+                if [[ "$iface" = "$interface_1" || "$iface" = "$interface_2" ]]; then
+                    interface="$iface"
+                fi
+            done
+            if [ -z "$interface" ]; then
+                interface="eth0"
+            fi
+            return
+        fi
+    else
+        interface="eth0"
+        return
+    fi
+    _red "Physical interface not found, exit execution"
+    _red "找不到物理接口，退出执行"
+    exit 1
+}
+
 ########## 查询信息
 
 if ! command -v lshw >/dev/null 2>&1; then
@@ -70,6 +114,7 @@ fi
 if ! command -v ipcalc >/dev/null 2>&1; then
     apt-get install -y ipcalc
 fi
+apt-get install -y net-tools
 
 # cdn检测
 cdn_urls=("https://cdn.spiritlhl.workers.dev/" "https://cdn3.spiritlhl.net/" "https://cdn1.spiritlhl.net/" "https://ghproxy.com/" "https://cdn2.spiritlhl.net/")
@@ -89,6 +134,11 @@ fi
 if [ -f /usr/local/bin/pve_ipv6_gateway ]; then
     ipv6_gateway=$(cat /usr/local/bin/pve_ipv6_gateway)
 fi
+
+# 检测物理接口和MAC地址
+interface_1=$(lshw -C network | awk '/logical name:/{print $3}' | sed -n '1p')
+interface_2=$(lshw -C network | awk '/logical name:/{print $3}' | sed -n '2p')
+check_interface
 
 # 配置 ndpresponder 的守护进程
 if [ "$ipv6_prefixlen" -le 64 ]; then
@@ -110,12 +160,21 @@ fi
 # 检测IPV4相关的信息
 if [ -f /usr/local/bin/pve_ipv4_address ]; then
     ipv4_address=$(cat /usr/local/bin/pve_ipv4_address)
+else
+    ipv4_address=$(ip addr show | awk '/inet .*global/ && !/inet6/ {print $2}' | sed -n '1p')
+    echo "$ipv4_address" >/usr/local/bin/pve_ipv4_address
 fi
 if [ -f /usr/local/bin/pve_ipv4_gateway ]; then
     ipv4_gateway=$(cat /usr/local/bin/pve_ipv4_gateway)
+else
+    ipv4_gateway=$(ip route | awk '/default/ {print $3}' | sed -n '1p')
+    echo "$ipv4_gateway" >/usr/local/bin/pve_ipv4_gateway
 fi
 if [ -f /usr/local/bin/pve_ipv4_subnet ]; then
     ipv4_subnet=$(cat /usr/local/bin/pve_ipv4_subnet)
+else
+    ipv4_subnet=$(ipcalc -n "$ipv4_address" | grep -oP 'Netmask:\s+\K.*' | awk '{print $1}')
+    echo "$ipv4_subnet" >/usr/local/bin/pve_ipv4_subnet
 fi
 
 # 录入网关
