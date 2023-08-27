@@ -149,6 +149,9 @@ if command -v lshw >/dev/null 2>&1; then
     fi
     if [ ! -f /usr/local/bin/pve_ipv6_gateway ]; then
         ipv6_gateway=$(ip -6 route show | awk '/default via/{print $3}' | head -n1)
+        if [[ "${ipv6_gateway: -2}" == "::" ]]; then
+            ipv6_gateway="${ipv6_gateway}0000"
+        fi
         echo "$ipv6_gateway" >/usr/local/bin/pve_ipv6_gateway
     fi
     ipv6_address=$(cat /usr/local/bin/pve_check_ipv6)
