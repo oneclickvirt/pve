@@ -802,9 +802,9 @@ if [ ! -f /usr/local/bin/pve_ipv6_prefixlen ] || [ ! -s /usr/local/bin/pve_ipv6_
 fi
 if [ ! -f /usr/local/bin/pve_ipv6_gateway ] || [ ! -s /usr/local/bin/pve_ipv6_gateway ] || [ "$(sed -e '/^[[:space:]]*$/d' /usr/local/bin/pve_ipv6_gateway)" = "" ]; then
     ipv6_gateway=$(ip -6 route show | awk '/default via/{print $3}' | head -n1)
-    if [[ "${ipv6_gateway: -2}" == "::" ]]; then
-        ipv6_gateway="${ipv6_gateway}0000"
-    fi
+    # if [[ "${ipv6_gateway: -2}" == "::" ]]; then
+    #     ipv6_gateway="${ipv6_gateway}0000"
+    # fi
     echo "$ipv6_gateway" >/usr/local/bin/pve_ipv6_gateway
 fi
 ipv6_address=$(cat /usr/local/bin/pve_check_ipv6)
@@ -1205,7 +1205,7 @@ iface vmbr0 inet static
     bridge_fd 0
 
 iface vmbr0 inet6 static
-        address ${ipv6_address_without_last_segment}/128
+        address ${ipv6_address_without_last_segment}:1/128
         gateway ${ipv6_gateway}
 EOF
     fi
@@ -1238,6 +1238,28 @@ if [ ! -s "/etc/resolv.conf" ]; then
         fi
     fi
 fi
+
+# 删除可能存在的原有的网卡配置
+cp /etc/network/interfaces /etc/network/interfaces_nat.bak
+chattr -i /etc/network/interfaces
+input_file="/etc/network/interfaces"
+output_file="/etc/network/interfaces.tmp"
+start_pattern="iface lo inet loopback"
+end_pattern="auto vmbr0"
+delete_lines=0
+while IFS= read -r line; do
+    if [[ $line == *"$start_pattern"* ]]; then
+        delete_lines=1
+    fi
+    if [ $delete_lines -eq 0 ] || [[ $line == *"$start_pattern"* ]] || [[ $line == *"$end_pattern"* ]]; then
+        echo "$line" >>"$output_file"
+    fi
+    if [[ $line == *"$end_pattern"* ]]; then
+        delete_lines=0
+    fi
+done <"$input_file"
+mv "$output_file" "$input_file"
+chattr +i /etc/network/interfaces
 
 # 安装必备模块并替换apt源中的无效订阅
 cp /etc/apt/sources.list.d/pve-enterprise.list /etc/apt/sources.list.d/pve-enterprise.list.bak
