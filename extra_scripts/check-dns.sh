@@ -18,3 +18,7 @@ else
         echo -e "nameserver 8.8.8.8\nnameserver 8.8.4.4\nnameserver 2606:4700:4700::1111\nnameserver 2001:4860:4860::8888\nnameserver 2001:4860:4860::8844" >>${RESOLV_CONF}
     fi
 fi
+sleep 3
+if grep -q "vmbr0" "/etc/network/interfaces"; then
+    resolvconf -a vmbr0 < ${RESOLV_CONF}
+fi
