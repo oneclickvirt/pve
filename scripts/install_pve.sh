@@ -1169,11 +1169,9 @@ fi
 install_package service
 
 # 正式安装PVE
-chattr -i /etc/network/interfaces
 install_package proxmox-ve
 install_package postfix
 install_package open-iscsi
-chattr +i /etc/network/interfaces
 rebuild_interfaces
 
 # 配置vmbr0
