@@ -300,7 +300,7 @@ else
         ipv6_gateway=$(cat /usr/local/bin/pve_ipv6_gateway)
     fi
 fi
-if [ "$independent_ipv6" == "N" ]; then
+if [ "$independent_ipv6" == "n" ]; then
     qm create $vm_num --agent 1 --scsihw virtio-scsi-single --serial0 socket --cores $core --sockets 1 --cpu host --net0 virtio,bridge=vmbr0,firewall=0
 else
     qm create $vm_num --agent 1 --scsihw virtio-scsi-single --serial0 socket --cores $core --sockets 1 --cpu host --net0 virtio,bridge=vmbr0,firewall=0 --net1 virtio,bridge=vmbr2,firewall=0
