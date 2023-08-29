@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/spiritLHLS/pve
-# 2023.08.26
+# 2023.08.29
 
 ########## 预设部分输出和部分中间变量
 
@@ -1153,6 +1153,16 @@ if [[ $dmidecode_output == *"Hetzner_vServer"* ]] || [[ $dmidecode_output == *"M
         echo "post-up ${ethtool_path} -K $auto_interface tx off rx off" >>/etc/network/interfaces
         chattr +i /etc/network/interfaces
     fi
+fi
+
+# 检测IPV6是不是启用了dhcp但未分配IPV6地址
+if [ -z "$ipv6_address" ] || [ -z "$ipv6_prefixlen" ] || [ -z "$ipv6_gateway" ]; then
+    if [ -f /etc/network/if-pre-up.d/cloud_inet6 ]; then
+        rm -rf /etc/network/if-pre-up.d/cloud_inet6
+    fi
+    chattr -i /etc/network/interfaces
+    sed -i '/iface ens4 inet6 \(manual\|dhcp\)/d' /etc/network/interfaces
+    chattr +i /etc/network/interfaces
 fi
 
 # 部分机器中途service丢失了，尝试修复
