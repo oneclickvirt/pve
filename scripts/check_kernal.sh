@@ -28,8 +28,15 @@ apt_status=$?
 if [ $apt_get_status -ne 0 ] || [ $apt_status -ne 0 ]; then
     _yellow "The host environment does not have the apt package manager command, please check the system"
     _yellow "宿主机的环境无apt包管理器命令，请检查系统"
+    exit 1
 fi
 apt-get install lsb-release -y
+if ! command -v lshw >/dev/null 2>&1; then
+    apt-get install lshw -y
+fi
+if ! command -v ifconfig >/dev/null 2>&1; then
+    apt-get install net-tools -y
+fi
 
 check_config() {
     _green "The machine configuration should meet the minimum requirements of at least 2 cores 2G RAM 20G hard drive"
@@ -143,12 +150,6 @@ stretch | buster | bullseye | bookworm)
 esac
 
 # 检测IPV6网络配置
-if ! command -v lshw >/dev/null 2>&1; then
-    apt-get install lshw -y
-fi
-if ! command -v ifconfig >/dev/null 2>&1; then
-    apt-get install net-tools -y
-fi
 if command -v lshw >/dev/null 2>&1; then
     # 检测物理接口
     interface_1=$(lshw -C network | awk '/logical name:/{print $3}' | sed -n '1p')
