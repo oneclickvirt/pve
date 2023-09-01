@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/spiritLHLS/pve
-# 2023.08.29
+# 2023.09.01
 
 ########## 预设部分输出和部分中间变量
 
@@ -22,9 +22,9 @@ else
     echo "Locale set to $utf8_locale"
 fi
 temp_file_apt_fix="/tmp/apt_fix.txt"
-command -v pct &> /dev/null
+command -v pct &>/dev/null
 pct_status=$?
-command -v qm &> /dev/null
+command -v qm &>/dev/null
 qm_status=$?
 if [ $pct_status -eq 0 ] && [ $qm_status -eq 0 ]; then
     _green "Proxmox VE is already installed and does not need to be reinstalled."
@@ -489,12 +489,13 @@ is_private_ipv4() {
     fi
     IFS='.' read -r -a ip_parts <<<"$ip_address"
     # 检查IP地址是否符合内网IP地址的范围
-    # 去除 回环，REC 1918，多播 地址
+    # 去除 回环，RFC 1918，多播，RFC 6598 地址
     if [[ ${ip_parts[0]} -eq 10 ]] ||
         [[ ${ip_parts[0]} -eq 172 && ${ip_parts[1]} -ge 16 && ${ip_parts[1]} -le 31 ]] ||
         [[ ${ip_parts[0]} -eq 192 && ${ip_parts[1]} -eq 168 ]] ||
         [[ ${ip_parts[0]} -eq 127 ]] ||
         [[ ${ip_parts[0]} -eq 0 ]] ||
+        [[ ${ip_parts[0]} -eq 100 && ${ip_parts[1]} -ge 64 && ${ip_parts[1]} -le 127 ]] ||
         [[ ${ip_parts[0]} -ge 224 ]]; then
         return 0 # 是内网IP地址
     else
@@ -751,8 +752,28 @@ install_package ipcalc
 install_package dmidecode
 install_package dnsutils
 install_package ethtool
+apt-get install gnupg -y
+apt-get install iputils-ping -y
+apt-get install iproute2 -y
+apt-get install lsb-release -y
 ethtool_path=$(which ethtool)
 check_haveged
+
+# 预检查
+if [ ! -f /etc/debian_version ] || [ $(grep MemTotal /proc/meminfo | awk '{print $2}') -lt 2000000 ] || [ $(grep -c ^processor /proc/cpuinfo) -lt 2 ] || [ $(
+    ping -c 3 google.com >/dev/null 2>&1
+    echo $?
+) -ne 0 ]; then
+    _red "Error: This system does not meet the minimum requirements for Proxmox VE installation."
+    _yellow "Do you want to continue the installation? (Enter to not continue the installation by default) (y/[n])"
+    reading "是否要继续安装？(回车则默认不继续安装) (y/[n]) " confirm
+    echo ""
+    if [ "$confirm" != "y" ]; then
+        exit 1
+    fi
+else
+    _green "The system meets the minimum requirements for Proxmox VE installation."
+fi
 
 # 检测系统信息
 _yellow "Detecting system information, will probably stay on the page for up to 1~2 minutes"
@@ -814,14 +835,14 @@ if ping -c 1 -6 -W 3 $ipv6_address >/dev/null 2>&1; then
     echo "IPv6 address is reachable."
 else
     echo "IPv6 address is not reachable. Setting to empty."
-    echo "" > /usr/local/bin/pve_check_ipv6
+    echo "" >/usr/local/bin/pve_check_ipv6
 fi
 if ping -c 1 -6 -W 3 $ipv6_gateway >/dev/null 2>&1; then
     echo "IPv6 gateway is reachable."
-    
+
 else
     echo "IPv6 gateway is not reachable. Setting to empty."
-    echo "" > /usr/local/bin/pve_ipv6_gateway
+    echo "" >/usr/local/bin/pve_ipv6_gateway
 fi
 ipv6_address=$(cat /usr/local/bin/pve_check_ipv6)
 ipv6_gateway=$(cat /usr/local/bin/pve_ipv6_gateway)
@@ -973,25 +994,7 @@ if [ "${hostname}" != "pve" ]; then
     chattr +i /etc/hosts
 fi
 
-# 再次预检查
-apt-get install gnupg -y
-if [ ! -f /etc/debian_version ] || [ $(grep MemTotal /proc/meminfo | awk '{print $2}') -lt 2000000 ] || [ $(grep -c ^processor /proc/cpuinfo) -lt 2 ] || [ $(
-    ping -c 3 google.com >/dev/null 2>&1
-    echo $?
-) -ne 0 ]; then
-    _red "Error: This system does not meet the minimum requirements for Proxmox VE installation."
-    _yellow "Do you want to continue the installation? (Enter to not continue the installation by default) (y/[n])"
-    reading "是否要继续安装？(回车则默认不继续安装) (y/[n]) " confirm
-    echo ""
-    if [ "$confirm" != "y" ]; then
-        exit 1
-    fi
-else
-    _green "The system meets the minimum requirements for Proxmox VE installation."
-fi
-
 # 新增pve源
-apt-get install lsb-release -y
 version=$(lsb_release -cs)
 # 如果是CN的IP则修改apt源先
 if [[ "${CN}" == true ]]; then

@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/spiritLHLS/pve
-# 2023.08.26
+# 2023.09.01
 
 # 用颜色输出信息
 _red() { echo -e "\033[31m\033[01m$@\033[0m"; }
@@ -21,6 +21,15 @@ fi
 if [ ! -d /usr/local/bin ]; then
     mkdir -p /usr/local/bin
 fi
+command -v apt-get &>/dev/null
+apt_get_status=$?
+command -v apt &>/dev/null
+apt_status=$?
+if [ $apt_get_status -ne 0 ] || [ $apt_status -ne 0 ]; then
+    _yellow "The host environment does not have the apt package manager command, please check the system"
+    _yellow "宿主机的环境无apt包管理器命令，请检查系统"
+fi
+apt-get install lsb-release -y
 
 check_config() {
     _green "The machine configuration should meet the minimum requirements of at least 2 cores 2G RAM 20G hard drive"
@@ -48,11 +57,15 @@ check_config() {
 
     # 检查内存大小
     total_mem=$(free -m | awk '/^Mem:/{print $2}')
+    swap_info=$(free -m | awk '/^Swap:/{print $2}')
+    if [ "$swap_info" -ne 0 ]; then
+        total_mem=$((total_mem + swap_info))
+    fi
     if [ "$total_mem" -lt 2048 ]; then
         _red "The machine configuration does not meet the minimum requirements: at least 2G RAM"
-        _red "The local memory configuration cannot install PVE (SWAP is not calculated, if the virtual memory of SWAP plus the actual memory of the local machine is greater than 2G please ignore this prompt)"
+        _red "The local memory configuration cannot install PVE"
         _red "本机配置不满足最低要求：至少2G内存"
-        _red "本机内存配置无法安装PVE (未计算SWAP，如若SWAP的虚拟内存加上本机实际内存大于2G请忽略本提示)"
+        _red "本机内存配置无法安装PVE"
     fi
 }
 
@@ -116,6 +129,19 @@ check_ipv6() {
     echo $IPV6 >/usr/local/bin/pve_check_ipv6
 }
 
+# 检测系统是否支持
+version=$(lsb_release -cs)
+case $version in
+stretch | buster | bullseye | bookworm)
+    _green "The recognized system is $version"
+    _green "识别到的系统为 $version"
+    ;;
+*)
+    _yellow "Error: Recognized as an unsupported version of Debian, but you can force an installation attempt or use the custom partitioning method to install the PVE"
+    _yellow "Error: 识别为不支持的Debian版本，但你可以强行安装尝试或使用自定义分区的方法安装PVE"
+    ;;
+esac
+
 # 检测IPV6网络配置
 if ! command -v lshw >/dev/null 2>&1; then
     apt-get install lshw -y
@@ -164,13 +190,13 @@ if command -v lshw >/dev/null 2>&1; then
             echo "IPv6 address is reachable."
         else
             echo "IPv6 address is not reachable. Setting to empty."
-            echo "" > /usr/local/bin/pve_check_ipv6
+            echo "" >/usr/local/bin/pve_check_ipv6
         fi
         if ping -c 1 -6 -W 3 $ipv6_gateway >/dev/null 2>&1; then
             echo "IPv6 gateway is reachable."
         else
             echo "IPv6 gateway is not reachable. Setting to empty."
-            echo "" > /usr/local/bin/pve_ipv6_gateway
+            echo "" >/usr/local/bin/pve_ipv6_gateway
         fi
         ipv6_address=$(cat /usr/local/bin/pve_check_ipv6)
         ipv6_gateway=$(cat /usr/local/bin/pve_ipv6_gateway)
