@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/spiritLHLS/pve
-# 2023.09.01
+# 2023.09.07
 
 ########## 预设部分输出和部分中间变量
 
@@ -667,7 +667,19 @@ check_interface() {
 ########## 前置环境检测和组件安装
 
 # 更改网络优先级为IPV4优先
-sed -i 's/.*precedence ::ffff:0:0\/96.*/precedence ::ffff:0:0\/96  100/g' /etc/gai.conf && systemctl restart networking
+sed -i 's/.*precedence ::ffff:0:0\/96.*/precedence ::ffff:0:0\/96  100/g' /etc/gai.conf
+systemctl restart networking 
+if [ $? -ne 0 ]; then
+    # altname=$(ip addr show eth0 | grep altname | awk '{print $NF}')
+    if [ -f /etc/network/interfaces ] && grep -q "eth0" /etc/network/interfaces; then
+        chattr -i /etc/network/interfaces
+        sed -i '/^auto ens[0-9]\+$/d' /etc/network/interfaces
+        sed -i '/^allow-hotplug ens[0-9]\+$/d' /etc/network/interfaces
+        sed -i '/^iface ens[0-9]\+ inet/d' /etc/network/interfaces
+        chattr +i /etc/network/interfaces
+    fi
+fi
+systemctl restart networking 
 
 # ChinaIP检测
 check_china
