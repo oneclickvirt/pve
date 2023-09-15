@@ -136,7 +136,7 @@ if [ "$system_arch" = "x86" ]; then
             fi
         done
         if [[ "$system" == "centos8-stream" ]]; then
-            url="https://git.ilolicon.dev/Ella-Alinda/images/raw/branch/main/centos8-stream.qcow2"
+            url="https://api.ilolicon.com/centos8-stream.qcow2"
             curl -Lk -o "$file_path" "$url"
         else
             if [[ -n "$ver" ]]; then
