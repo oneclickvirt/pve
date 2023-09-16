@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/spiritLHLS/pve
-# 2023.08.26
+# 2023.09.16
 
 ########## 预设部分输出和部分中间变量
 
@@ -106,6 +106,17 @@ check_interface() {
     exit 1
 }
 
+update_sysctl() {
+  sysctl_config="$1"
+  if grep -q "^$sysctl_config" /etc/sysctl.conf; then
+    if grep -q "^#$sysctl_config" /etc/sysctl.conf; then
+      sed -i "s/^#$sysctl_config/$sysctl_config/" /etc/sysctl.conf
+    fi
+  else
+    echo "$sysctl_config" >> /etc/sysctl.conf
+  fi
+}
+
 ########## 查询信息
 
 if ! command -v lshw >/dev/null 2>&1; then
@@ -122,6 +133,9 @@ check_cdn_file
 
 # 检测架构
 get_system_arch
+
+# sysctl路径查询
+sysctl_path=$(which sysctl)
 
 # 检测IPV6相关的信息
 if [ -f /usr/local/bin/pve_check_ipv6 ]; then
@@ -324,6 +338,11 @@ EOF
             line_number=6
             sed -i "${line_number}s|.*|${new_exec_start}|" "$file_path"
         fi
+        update_sysctl "net.ipv6.conf.all.forwarding=1"
+        update_sysctl "net.ipv6.conf.all.proxy_ndp=1"
+        update_sysctl "net.ipv6.conf.default.proxy_ndp=1"
+        update_sysctl "net.ipv6.conf.vmbr0.proxy_ndp=1"
+        update_sysctl "net.ipv6.conf.vmbr1.proxy_ndp=1"
     fi
 fi
 chattr +i /etc/network/interfaces
@@ -332,15 +351,7 @@ rm -rf /usr/local/bin/iface_auto.txt
 # 加载iptables并设置回源且允许NAT端口转发
 apt-get install -y iptables iptables-persistent
 iptables -t nat -A POSTROUTING -j MASQUERADE
-sysctl net.ipv4.ip_forward=1
-sysctl_path=$(which sysctl)
-if grep -q "^net.ipv4.ip_forward=1" /etc/sysctl.conf; then
-    if grep -q "^#net.ipv4.ip_forward=1" /etc/sysctl.conf; then
-        sed -i 's/^#net.ipv4.ip_forward=1/net.ipv4.ip_forward=1/' /etc/sysctl.conf
-    fi
-else
-    echo "net.ipv4.ip_forward=1" >>/etc/sysctl.conf
-fi
+update_sysctl "net.ipv4.ip_forward=1"
 ${sysctl_path} -p
 
 # 重启配置

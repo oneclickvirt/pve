@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/spiritLHLS/pve
-# 2023.09.07
+# 2023.09.16
 
 ########## 预设部分输出和部分中间变量
 
@@ -668,6 +668,14 @@ check_interface() {
 
 # 更改网络优先级为IPV4优先
 sed -i 's/.*precedence ::ffff:0:0\/96.*/precedence ::ffff:0:0\/96  100/g' /etc/gai.conf
+
+# ChinaIP检测
+check_china
+
+# cdn检测
+cdn_urls=("https://cdn.spiritlhl.workers.dev/" "https://cdn3.spiritlhl.net/" "https://cdn1.spiritlhl.net/" "https://ghproxy.com/" "https://cdn2.spiritlhl.net/")
+check_cdn_file
+
 systemctl restart networking 
 if [ $? -ne 0 ]; then
     # altname=$(ip addr show eth0 | grep altname | awk '{print $NF}')
@@ -679,14 +687,21 @@ if [ $? -ne 0 ]; then
         chattr +i /etc/network/interfaces
     fi
 fi
-systemctl restart networking 
-
-# ChinaIP检测
-check_china
-
-# cdn检测
-cdn_urls=("https://cdn.spiritlhl.workers.dev/" "https://cdn3.spiritlhl.net/" "https://cdn1.spiritlhl.net/" "https://ghproxy.com/" "https://cdn2.spiritlhl.net/")
-check_cdn_file
+systemctl restart networking
+if [ $? -ne 0 ]; then
+    if [ ! -f "/usr/local/bin/clear_interface_route_cache.sh" ]; then
+        wget ${cdn_success_url}https://raw.githubusercontent.com/spiritLHLS/pve/main/extra_scripts/clear_interface_route_cache.sh -O /usr/local/bin/clear_interface_route_cache.sh
+        wget ${cdn_success_url}https://raw.githubusercontent.com/spiritLHLS/pve/main/extra_scripts/clear_interface_route_cache.service -O /etc/systemd/system/clear_interface_route_cache.service
+        chmod +x /usr/local/bin/clear_interface_route_cache.sh
+        chmod +x /etc/systemd/system/clear_interface_route_cache.service
+        systemctl daemon-reload
+        systemctl enable clear_interface_route_cache.service
+        systemctl start clear_interface_route_cache.service
+        _green "An anomaly was detected with the routing conflict, perform a reboot to reboot the machine to start the repaired daemon and try the installation again."
+        _green "检测到路由冲突存在异常，请执行 reboot 重启机器以启动修复的守护进程，再次尝试安装"
+        exit 1
+    fi
+fi
 
 # 前置环境安装与配置
 if [ "$(id -u)" != "0" ]; then
