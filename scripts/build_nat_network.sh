@@ -343,6 +343,7 @@ EOF
         update_sysctl "net.ipv6.conf.default.proxy_ndp=1"
         update_sysctl "net.ipv6.conf.vmbr0.proxy_ndp=1"
         update_sysctl "net.ipv6.conf.vmbr1.proxy_ndp=1"
+        update_sysctl "net.ipv6.conf.vmbr2.proxy_ndp=1"
     fi
 fi
 chattr +i /etc/network/interfaces
@@ -351,7 +352,7 @@ rm -rf /usr/local/bin/iface_auto.txt
 # 加载iptables并设置回源且允许NAT端口转发
 apt-get install -y iptables iptables-persistent
 iptables -t nat -A POSTROUTING -j MASQUERADE
-update_sysctl "net.ipv4.ip_forward=1"
+ "net.ipv4.ip_forward=1"
 ${sysctl_path} -p
 
 # 重启配置
