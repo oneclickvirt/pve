@@ -21,9 +21,9 @@ fi
 
 if [ -f "/usr/local/bin/build_backend_pve.txt" ]; then
     _green "You have already executed this script, if you have already rebooted your system, please execute the subsequent script commands to automatically configure the gateway, if you have not rebooted your system, please reboot your system"
-    _grenn "Do not run this script repeatedly"
+    _green "Do not run this script repeatedly"
     _green "你已执行过本脚本，如果已重启过系统，请执行后续的自动配置网关的脚本命令，如果未重启过系统，请重启系统"
-    _grenn "不要重复运行本脚本"
+    _green "不要重复运行本脚本"
     exit 1
 fi
 
