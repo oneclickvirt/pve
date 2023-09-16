@@ -119,6 +119,7 @@ else
     unzip master.zip
     mv Geco-Cloudbase-Init-master/* /usr/local/bin/Geco-Cloudbase-Init/
 fi
+rm -rf master.zip Geco-Cloudbase-Init-master
 
 # 识别是否可替换对应版本镜像
 if [ "$major_version" == "7" ]; then
