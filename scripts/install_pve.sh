@@ -1262,7 +1262,7 @@ if [ "$system_arch" = "x86" ]; then
 fi
 
 # 确保DNS有效
-if [ ! -s "/etc/resolv.conf" ]; then
+if [ ! -s "/etc/resolv.conf" ] || [ -z "$(grep -vE '^\s*#' /etc/resolv.conf)" ]; then
     cp /etc/resolv.conf /etc/resolv.conf.bak
     if [[ "${CN}" == true ]]; then
         if [ -z "$ipv6_address" ] || [ -z "$ipv6_prefixlen" ] || [ -z "$ipv6_gateway" ]; then
