@@ -696,7 +696,6 @@ if [ $? -ne 0 ]; then
         chmod +x /etc/systemd/system/clear_interface_route_cache.service
         systemctl daemon-reload
         systemctl enable clear_interface_route_cache.service
-        systemctl start clear_interface_route_cache.service
         _green "An anomaly was detected with the routing conflict, perform a reboot to reboot the machine to start the repaired daemon and try the installation again."
         _green "检测到路由冲突存在异常，请执行 reboot 重启机器以启动修复的守护进程，再次尝试安装"
         exit 1
