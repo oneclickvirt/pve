@@ -21,6 +21,9 @@ fi
 if [ ! -d /usr/local/bin ]; then
     mkdir -p /usr/local/bin
 fi
+if [ ! -d /usr/local/bin/Geco-Cloudbase-Init ]; then
+    mkdir -p /usr/local/bin/Geco-Cloudbase-Init
+fi
 
 check_china() {
     _yellow "IP area being detected ......"
@@ -85,7 +88,7 @@ check_cdn_file() {
     fi
 }
 
-apt-get install git patch -y
+apt-get install unzip patch -y
 
 # ChinaIP检测
 check_china
@@ -108,11 +111,13 @@ fi
 # https://github.com/GECO-IT/Geco-Cloudbase-Init
 # https://forum.proxmox.com/threads/howto-scripts-to-make-cloudbase-work-like-cloudinit-for-your-windows-based-instances.103375/
 if [[ -z "${CN}" || "${CN}" != true ]]; then
-    cd /usr/local/bin/ && git clone git@github.com:GECO-IT/Geco-Cloudbase-Init.git
-    cd /root >/dev/null 2>&1
+    wget https://github.com/GECO-IT/Geco-Cloudbase-Init/archive/refs/heads/master.zip
+    unzip master.zip
+    mv Geco-Cloudbase-Init-master/* /usr/local/bin/Geco-Cloudbase-Init/
 else
-    cd /usr/local/bin/ && git clone "${cdn_success_url}https://github.com/GECO-IT/Geco-Cloudbase-Init.git"
-    cd /root >/dev/null 2>&1
+    wget "${cdn_success_url}https://github.com/GECO-IT/Geco-Cloudbase-Init/archive/refs/heads/master.zip"
+    unzip master.zip
+    mv Geco-Cloudbase-Init-master/* /usr/local/bin/Geco-Cloudbase-Init/
 fi
 
 # 识别是否可替换对应版本镜像
