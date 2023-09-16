@@ -677,7 +677,7 @@ cdn_urls=("https://cdn.spiritlhl.workers.dev/" "https://cdn3.spiritlhl.net/" "ht
 check_cdn_file
 
 systemctl restart networking 
-if [ $? -ne 0 ]; then
+if [ $? -ne 0 ] && [ -e "/etc/systemd/system/networking.service" ]; then
     # altname=$(ip addr show eth0 | grep altname | awk '{print $NF}')
     if [ -f /etc/network/interfaces ] && grep -q "eth0" /etc/network/interfaces; then
         chattr -i /etc/network/interfaces
@@ -688,7 +688,7 @@ if [ $? -ne 0 ]; then
     fi
 fi
 systemctl restart networking
-if [ $? -ne 0 ]; then
+if [ $? -ne 0 ] && [ -e "/etc/systemd/system/networking.service" ]; then
     if [ ! -f "/usr/local/bin/clear_interface_route_cache.sh" ]; then
         wget ${cdn_success_url}https://raw.githubusercontent.com/spiritLHLS/pve/main/extra_scripts/clear_interface_route_cache.sh -O /usr/local/bin/clear_interface_route_cache.sh
         wget ${cdn_success_url}https://raw.githubusercontent.com/spiritLHLS/pve/main/extra_scripts/clear_interface_route_cache.service -O /etc/systemd/system/clear_interface_route_cache.service
