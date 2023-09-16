@@ -85,6 +85,8 @@ check_cdn_file() {
     fi
 }
 
+apt-get install git patch -y
+
 # ChinaIP检测
 check_china
 
