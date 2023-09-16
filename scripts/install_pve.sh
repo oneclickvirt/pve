@@ -29,6 +29,7 @@ qm_status=$?
 if [ $pct_status -eq 0 ] && [ $qm_status -eq 0 ]; then
     _green "Proxmox VE is already installed and does not need to be reinstalled."
     _green "Proxmox VE已经安装，无需重复安装。"
+    exit 1
 fi
 
 ########## 备份配置文件
