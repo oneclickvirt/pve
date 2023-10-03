@@ -243,8 +243,9 @@ qm set $vm_num --boot order=scsi0
 qm set $vm_num --memory $memory
 # --swap 256
 qm set $vm_num --ide2 ${storage}:cloudinit
-qm set $vm_num --nameserver 8.8.8.8,2001:4860:4860::8888
-qm set $vm_num --searchdomain 8.8.4.4,2001:4860:4860::8844
+qm set $vm_num --nameserver 1.1.1.1
+qm set $vm_num --nameserver 1.0.0.1
+qm set $vm_num --searchdomain local
 user_ip="172.16.1.${num}"
 qm set $vm_num --ipconfig0 ip=${user_ip}/24,gw=172.16.1.1
 qm set $vm_num --ipconfig1 ip6="${ipv6_address_without_last_segment}${vm_num}/128",gw6="${ipv6_address_without_last_segment}1"
