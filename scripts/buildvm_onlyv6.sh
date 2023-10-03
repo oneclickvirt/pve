@@ -244,7 +244,7 @@ qm set $vm_num --memory $memory
 # --swap 256
 qm set $vm_num --ide2 ${storage}:cloudinit
 qm set $vm_num --nameserver 1.1.1.1
-qm set $vm_num --nameserver 1.0.0.1
+# qm set $vm_num --nameserver 1.0.0.1
 qm set $vm_num --searchdomain local
 user_ip="172.16.1.${num}"
 qm set $vm_num --ipconfig0 ip=${user_ip}/24,gw=172.16.1.1

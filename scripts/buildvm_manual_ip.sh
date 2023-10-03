@@ -330,7 +330,7 @@ if [ "$independent_ipv6" == "y" ]; then
                 qm set $vm_num --ipconfig0 ip=${user_ip}/${user_ip_range},gw=${gateway}
                 qm set $vm_num --ipconfig1 ip6="${ipv6_address_without_last_segment}${vm_num}/128",gw6="${ipv6_address_without_last_segment}1"
                 qm set $vm_num --nameserver 1.1.1.1
-                qm set $vm_num --nameserver 1.0.0.1
+                # qm set $vm_num --nameserver 1.0.0.1
                 qm set $vm_num --searchdomain local
                 independent_ipv6_status="Y"
             else
@@ -349,7 +349,7 @@ if [ "$independent_ipv6_status" == "N" ]; then
     # if [ -z "$ipv6_address" ] || [ -z "$ipv6_prefixlen" ] || [ -z "$ipv6_gateway" ] || [ "$ipv6_prefixlen" -gt 112 ]; then
         qm set $vm_num --ipconfig0 ip=${user_ip}/${user_ip_range},gw=${gateway}
         qm set $vm_num --nameserver 8.8.8.8
-        qm set $vm_num --nameserver 8.8.4.4
+        # qm set $vm_num --nameserver 8.8.4.4
         qm set $vm_num --searchdomain local
     # else
     #     qm set $vm_num --ipconfig0 ip=${user_ip}/${user_ip_range},gw=${gateway},ip6=${ipv6_address}/${ipv6_prefixlen},gw6=${ipv6_gateway}
