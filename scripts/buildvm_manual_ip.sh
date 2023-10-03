@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/spiritLHLS/pve
-# 2023.08.23
+# 2023.10.03
 # 手动指定要绑定的IPV4地址
 
 # ./buildvm_manual_ip.sh VMID 用户名 密码 CPU核数 内存 硬盘 系统 存储盘 IPV4地址 是否附加IPV6(默认为N)
@@ -327,8 +327,8 @@ if [ "$independent_ipv6" == "y" ]; then
     if [ "$ipv6_prefixlen" -le 64 ]; then
         if [ ! -z "$ipv6_address" ] && [ ! -z "$ipv6_prefixlen" ] && [ ! -z "$ipv6_gateway" ] && [ ! -z "$ipv6_address_without_last_segment" ]; then
             if grep -q "vmbr2" /etc/network/interfaces; then
-                qm set $vm_num --ipconfig0 ip6="${ipv6_address_without_last_segment}${vm_num}/128",gw6="${ipv6_address_without_last_segment}1"
-                qm set $vm_num --ipconfig1 ip=${user_ip}/${user_ip_range},gw=${gateway}
+                qm set $vm_num --ipconfig0 ip=${user_ip}/${user_ip_range},gw=${gateway}
+                qm set $vm_num --ipconfig1 ip6="${ipv6_address_without_last_segment}${vm_num}/128",gw6="${ipv6_address_without_last_segment}1"
                 qm set $vm_num --nameserver 8.8.8.8,2001:4860:4860::8888
                 qm set $vm_num --searchdomain 8.8.4.4,2001:4860:4860::8844
                 independent_ipv6_status="Y"
