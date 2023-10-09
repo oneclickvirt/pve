@@ -74,6 +74,7 @@ check_china() {
 }
 
 get_system_arch
+check_china
 if [ -z "${system_arch}" ] || [ ! -v system_arch ]; then
     _red "This script can only run on machines under x86_64 or arm architecture."
     exit 1
@@ -143,7 +144,6 @@ if [ "$system_arch" = "arch" ]; then
     else
         version=${num_system}
     fi
-    check_china
     if [[ -z "${CN}" || "${CN}" != true ]]; then
         curl -o "/var/lib/vz/template/cache/${en_system}-arm64-${version}-cloud.tar.xz" "https://jenkins.linuxcontainers.org/view/LXC/job/image-${en_system}/architecture=arm64,release=${version},variant=cloud/lastSuccessfulBuild/artifact/rootfs.tar.xz"
     else
@@ -233,6 +233,7 @@ if echo "$system" | grep -qiE "centos|almalinux|rockylinux" >/dev/null 2>&1; the
         pct exec $CTID -- yum update
         pct exec $CTID -- yum install -y dos2unix curl
     else
+        pct exec $CTID -- yum update
         pct exec $CTID -- yum install -y curl
         pct exec $CTID -- curl -lk https://gitee.com/SuperManito/LinuxMirrors/raw/main/ChangeMirrors.sh -o ChangeMirrors.sh
         pct exec $CTID -- chmod 777 ChangeMirrors.sh
@@ -247,6 +248,7 @@ else
         pct exec $CTID -- apt-get update
         pct exec $CTID -- apt-get install dos2unix curl -y
     else
+        pct exec $CTID -- apt-get update
         pct exec $CTID -- apt-get install curl -y --fix-missing
         pct exec $CTID -- curl -lk https://gitee.com/SuperManito/LinuxMirrors/raw/main/ChangeMirrors.sh -o ChangeMirrors.sh
         pct exec $CTID -- chmod 777 ChangeMirrors.sh
