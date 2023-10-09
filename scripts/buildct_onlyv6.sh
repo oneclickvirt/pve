@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/spiritLHLS/pve
-# 2023.08.23
+# 2023.10.09
 # ./buildct_onlyv6.sh CTID 密码 CPU核数 内存 硬盘 系统 存储盘
 # ./buildct_onlyv6.sh 102 1234567 1 512 5 debian11 local
 
@@ -228,14 +228,32 @@ pct set $CTID --net1 name=eth1,ip=${user_ip}/24,bridge=vmbr1,gw=172.16.1.1
 pct set $CTID --nameserver 8.8.8.8,2001:4860:4860::8888 --nameserver 8.8.4.4,2001:4860:4860::8844
 sleep 3
 if echo "$system" | grep -qiE "centos|almalinux|rockylinux" >/dev/null 2>&1; then
-    pct exec $CTID -- yum update -y
-    pct exec $CTID -- yum update
-    pct exec $CTID -- yum install -y dos2unix curl
+    if [[ -z "${CN}" || "${CN}" != true ]]; then
+        pct exec $CTID -- yum update -y
+        pct exec $CTID -- yum update
+        pct exec $CTID -- yum install -y dos2unix curl
+    else
+        pct exec $CTID -- yum install -y curl
+        pct exec $CTID -- curl -lk https://gitee.com/SuperManito/LinuxMirrors/raw/main/ChangeMirrors.sh -o ChangeMirrors.sh
+        pct exec $CTID -- chmod 777 ChangeMirrors.sh
+        pct exec $CTID -- ./ChangeMirrors.sh --source mirrors.tuna.tsinghua.edu.cn --web-protocol http --intranet false --close-firewall true --backup true --updata-software false --clean-cache false --ignore-backup-tips
+        pct exec $CTID -- rm -rf ChangeMirrors.sh
+        pct exec $CTID -- yum install -y dos2unix
+    fi
 else
-    pct exec $CTID -- apt-get update -y
-    pct exec $CTID -- dpkg --configure -a
-    pct exec $CTID -- apt-get update
-    pct exec $CTID -- apt-get install dos2unix curl -y
+    if [[ -z "${CN}" || "${CN}" != true ]]; then
+        pct exec $CTID -- apt-get update -y
+        pct exec $CTID -- dpkg --configure -a
+        pct exec $CTID -- apt-get update
+        pct exec $CTID -- apt-get install dos2unix curl -y
+    else
+        pct exec $CTID -- apt-get install curl -y --fix-missing
+        pct exec $CTID -- curl -lk https://gitee.com/SuperManito/LinuxMirrors/raw/main/ChangeMirrors.sh -o ChangeMirrors.sh
+        pct exec $CTID -- chmod 777 ChangeMirrors.sh
+        pct exec $CTID -- ./ChangeMirrors.sh --source mirrors.tuna.tsinghua.edu.cn --web-protocol http --intranet false --close-firewall true --backup true --updata-software false --clean-cache false --ignore-backup-tips
+        pct exec $CTID -- rm -rf ChangeMirrors.sh
+        pct exec $CTID -- apt-get install dos2unix -y
+    fi
 fi
 pct exec $CTID -- curl -L ${cdn_success_url}https://raw.githubusercontent.com/spiritLHLS/pve/main/scripts/ssh.sh -o ssh.sh
 pct exec $CTID -- chmod 777 ssh.sh
