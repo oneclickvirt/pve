@@ -289,6 +289,7 @@ if echo "$system" | grep -qiE "centos|almalinux|rockylinux"; then
         pct exec $CTID -- yum update
         pct exec $CTID -- yum install -y dos2unix curl
     else
+        pct exec $CTID -- yum update -y 
         pct exec $CTID -- yum install -y curl
         pct exec $CTID -- curl -lk https://gitee.com/SuperManito/LinuxMirrors/raw/main/ChangeMirrors.sh -o ChangeMirrors.sh
         pct exec $CTID -- chmod 777 ChangeMirrors.sh
@@ -303,6 +304,7 @@ else
         pct exec $CTID -- apt-get update
         pct exec $CTID -- apt-get install dos2unix curl -y
     else
+        pct exec $CTID -- apt-get update -y
         pct exec $CTID -- apt-get install curl -y --fix-missing
         pct exec $CTID -- curl -lk https://gitee.com/SuperManito/LinuxMirrors/raw/main/ChangeMirrors.sh -o ChangeMirrors.sh
         pct exec $CTID -- chmod 777 ChangeMirrors.sh
