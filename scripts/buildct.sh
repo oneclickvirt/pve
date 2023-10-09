@@ -59,6 +59,7 @@ check_china() {
 }
 
 get_system_arch
+check_china
 if [ -z "${system_arch}" ] || [ ! -v system_arch ]; then
     _red "This script can only run on machines under x86_64 or arm architecture."
     exit 1
@@ -136,7 +137,6 @@ if [ "$system_arch" = "arch" ]; then
     else
         version=${num_system}
     fi
-    check_china
     if [[ -z "${CN}" || "${CN}" != true ]]; then
         curl -o "/var/lib/vz/template/cache/${en_system}-arm64-${version}-cloud.tar.xz" "https://jenkins.linuxcontainers.org/view/LXC/job/image-${en_system}/architecture=arm64,release=${version},variant=cloud/lastSuccessfulBuild/artifact/rootfs.tar.xz"
     else
