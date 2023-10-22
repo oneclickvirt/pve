@@ -235,7 +235,7 @@ install_package curl
 install_package sudo
 
 # cdn检测
-cdn_urls=("https://cdn.spiritlhl.workers.dev/" "https://cdn3.spiritlhl.net/" "https://cdn1.spiritlhl.net/" "https://ghproxy.com/" "https://cdn2.spiritlhl.net/")
+cdn_urls=("https://cdn0.spiritlhl.top/" "https://cdn3.spiritlhl.net/" "https://cdn1.spiritlhl.net/" "https://ghproxy.com/" "https://cdn2.spiritlhl.net/")
 check_cdn_file
 
 if ! command -v docker >/dev/null 2>&1; then
