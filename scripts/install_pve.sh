@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/spiritLHLS/pve
-# 2023.09.16
+# 2023.10.22
 
 ########## 预设部分输出和部分中间变量
 
@@ -173,6 +173,7 @@ rebuild_cloud_init() {
         sed -i '/^\s*- set-passwords/s/^/#/' /etc/cloud/cloud.cfg
         chattr +i /etc/cloud/cloud.cfg
     fi
+    touch /etc/cloud/cloud-init.disabled
 }
 
 remove_source_input() {
