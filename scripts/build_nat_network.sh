@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/spiritLHLS/pve
-# 2023.09.16
+# 2023.10.27
 
 ########## 预设部分输出和部分中间变量
 
@@ -283,7 +283,11 @@ iface vmbr1 inet static
 
 pre-up echo 2 > /proc/sys/net/ipv6/conf/vmbr0/accept_ra
 EOF
-elif [ -z "$ipv6_address" ] || [ -z "$ipv6_prefixlen" ] || [ -z "$ipv6_gateway" ]; then
+elif [ -z "$ipv6_address" ] || [ -z "$ipv6_prefixlen" ] || [ -z "$ipv6_gateway" ] || grep -q "he-ipv6" "$interfaces_file"; then
+    if grep -q "auto he-ipv6" "$interfaces_file"; then
+        status_he=true
+        temp_config=$(awk '/auto he-ipv6/{flag=1; print $0; next} flag && flag++<10' /etc/network/interfaces)
+    fi
     cat <<EOF | sudo tee -a "$interfaces_file"
 auto vmbr1
 iface vmbr1 inet static
@@ -323,6 +327,12 @@ if [ "$ipv6_prefixlen" -le 64 ]; then
     if grep -q "vmbr2" "$interfaces_file"; then
         _blue "vmbr2 already exists in ${interfaces_file}"
         _blue "vmbr2 已存在在 ${interfaces_file}"
+    elif [ "$status_he" = true ]; then
+        temp_config=${temp_config//he-ipv6/vmbr2}
+        chattr -i /etc/network/interfaces
+        sudo tee -a /etc/network/interfaces <<EOF
+${temp_config}
+EOF
     elif [ ! -z "$ipv6_address" ] && [ ! -z "$ipv6_prefixlen" ] && [ ! -z "$ipv6_gateway" ] && [ ! -z "$ipv6_address_without_last_segment" ]; then
         cat <<EOF | sudo tee -a "$interfaces_file"
 auto vmbr2
