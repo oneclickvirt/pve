@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/spiritLHLS/pve
-# 2023.10.27
+# 2023.10.28
 
 ########## 预设部分输出和部分中间变量
 
@@ -125,6 +125,9 @@ fi
 if ! command -v ipcalc >/dev/null 2>&1; then
     apt-get install -y ipcalc
 fi
+if ! command -v ovs-vsctl >/dev/null 2>&1; then
+    apt-get install -y openvswitch-switch
+fi
 apt-get install -y net-tools
 
 # cdn检测
@@ -137,39 +140,58 @@ get_system_arch
 # sysctl路径查询
 sysctl_path=$(which sysctl)
 
-# 检测IPV6相关的信息
-if [ -f /usr/local/bin/pve_check_ipv6 ]; then
-    ipv6_address=$(cat /usr/local/bin/pve_check_ipv6)
-    ipv6_address_without_last_segment="${ipv6_address%:*}:"
-fi
-if [ -f /usr/local/bin/pve_ipv6_prefixlen ]; then
-    ipv6_prefixlen=$(cat /usr/local/bin/pve_ipv6_prefixlen)
-fi
-if [ -f /usr/local/bin/pve_ipv6_gateway ]; then
-    ipv6_gateway=$(cat /usr/local/bin/pve_ipv6_gateway)
-fi
-
 # 检测物理接口和MAC地址
 interface_1=$(lshw -C network | awk '/logical name:/{print $3}' | sed -n '1p')
 interface_2=$(lshw -C network | awk '/logical name:/{print $3}' | sed -n '2p')
 check_interface
 
-# 配置 ndpresponder 的守护进程
-if [ "$ipv6_prefixlen" -le 64 ]; then
-    if [ ! -z "$ipv6_address" ] && [ ! -z "$ipv6_prefixlen" ] && [ ! -z "$ipv6_gateway" ] && [ ! -z "$ipv6_address_without_last_segment" ]; then
-        if [ "$system_arch" = "x86" ]; then
-            wget ${cdn_success_url}https://github.com/spiritLHLS/pve/releases/download/ndpresponder_x86/ndpresponder -O /usr/local/bin/ndpresponder
-            wget ${cdn_success_url}https://raw.githubusercontent.com/spiritLHLS/pve/main/extra_scripts/ndpresponder.service -O /etc/systemd/system/ndpresponder.service
-            chmod 777 /usr/local/bin/ndpresponder
-            chmod 777 /etc/systemd/system/ndpresponder.service
-        elif [ "$system_arch" = "arch" ]; then
-            wget ${cdn_success_url}https://github.com/spiritLHLS/pve/releases/download/ndpresponder_aarch64/ndpresponder -O /usr/local/bin/ndpresponder
-            wget ${cdn_success_url}https://raw.githubusercontent.com/spiritLHLS/pve/main/extra_scripts/ndpresponder.service -O /etc/systemd/system/ndpresponder.service
-            chmod 777 /usr/local/bin/ndpresponder
-            chmod 777 /etc/systemd/system/ndpresponder.service
-        fi
+# 检测IPV6相关的信息
+interfaces_file="/etc/network/interfaces"
+status_he=false
+if grep -q "he-ipv6" /etc/network/interfaces; then
+    status_he=true
+    chattr -i /etc/network/interfaces
+    temp_config=$(awk '/auto he-ipv6/{flag=1; print $0; next} flag && flag++<10' /etc/network/interfaces)
+    sed -i '/^auto he-ipv6/,/^$/d' /etc/network/interfaces
+    chattr +i /etc/network/interfaces
+    ipv6_address=$(echo "$temp_config" | awk '/address/ {print $2}')
+    ipv6_gateway=$(echo "$temp_config" | awk '/gateway/ {print $2}')
+    ipv6_prefixlen=$(echo "$temp_config" | awk '/netmask/ {print $2}')
+    ipv6_address_without_last_segment="${ipv6_address%:*}:"
+    new_subnet="${ipv6_address}/${ipv6_prefixlen}"
+    echo $ipv6_address >/usr/local/bin/pve_check_ipv6
+    echo $ipv6_gateway >/usr/local/bin/pve_ipv6_gateway
+    echo $ipv6_prefixlen >/usr/local/bin/pve_ipv6_prefixlen
+else
+    if [ -f /usr/local/bin/pve_check_ipv6 ]; then
+        ipv6_address=$(cat /usr/local/bin/pve_check_ipv6)
+        # ipv6_address_without_last_segment="${ipv6_address%:*}:"
+    fi
+    if [ -f /usr/local/bin/pve_ipv6_prefixlen ]; then
+        ipv6_prefixlen=$(cat /usr/local/bin/pve_ipv6_prefixlen)
+    fi
+    if [ -f /usr/local/bin/pve_ipv6_gateway ]; then
+        ipv6_gateway=$(cat /usr/local/bin/pve_ipv6_gateway)
     fi
 fi
+
+# 配置 ndpresponder 的守护进程
+# if [ "$ipv6_prefixlen" -le 64 ]; then
+# if [ ! -z "$ipv6_address" ] && [ ! -z "$ipv6_prefixlen" ] && [ ! -z "$ipv6_gateway" ] && [ ! -z "$ipv6_address_without_last_segment" ]; then
+if [ ! -z "$ipv6_address" ] && [ ! -z "$ipv6_prefixlen" ] && [ ! -z "$ipv6_gateway" ]; then
+    if [ "$system_arch" = "x86" ]; then
+        wget ${cdn_success_url}https://github.com/spiritLHLS/pve/releases/download/ndpresponder_x86/ndpresponder -O /usr/local/bin/ndpresponder
+        wget ${cdn_success_url}https://raw.githubusercontent.com/spiritLHLS/pve/main/extra_scripts/ndpresponder.service -O /etc/systemd/system/ndpresponder.service
+        chmod 777 /usr/local/bin/ndpresponder
+        chmod 777 /etc/systemd/system/ndpresponder.service
+    elif [ "$system_arch" = "arch" ]; then
+        wget ${cdn_success_url}https://github.com/spiritLHLS/pve/releases/download/ndpresponder_aarch64/ndpresponder -O /usr/local/bin/ndpresponder
+        wget ${cdn_success_url}https://raw.githubusercontent.com/spiritLHLS/pve/main/extra_scripts/ndpresponder.service -O /etc/systemd/system/ndpresponder.service
+        chmod 777 /usr/local/bin/ndpresponder
+        chmod 777 /etc/systemd/system/ndpresponder.service
+    fi
+fi
+# fi
 
 # 检测IPV4相关的信息
 if [ -f /usr/local/bin/pve_ipv4_address ]; then
@@ -209,14 +231,13 @@ if [ -f "/etc/network/interfaces.new" ]; then
     chattr -i /etc/network/interfaces.new
     rm -rf /etc/network/interfaces.new
 fi
-interfaces_file="/etc/network/interfaces"
-chattr -i "$interfaces_file"
-if ! grep -q "auto lo" "$interfaces_file"; then
-    _blue "Can not find 'auto lo' in ${interfaces_file}"
+chattr -i /etc/network/interfaces
+if ! grep -q "auto lo" /etc/network/interfaces; then
+    _blue "Can not find 'auto lo' in /etc/network/interfaces"
     exit 1
 fi
-if ! grep -q "iface lo inet loopback" "$interfaces_file"; then
-    _blue "Can not find 'iface lo inet loopback' in ${interfaces_file}"
+if ! grep -q "iface lo inet loopback" /etc/network/interfaces; then
+    _blue "Can not find 'iface lo inet loopback' in /etc/network/interfaces"
     exit 1
 fi
 # 配置vmbr0
@@ -264,11 +285,11 @@ iface vmbr0 inet6 static
 EOF
     fi
 fi
-if grep -q "vmbr1" "$interfaces_file"; then
-    _blue "vmbr1 already exists in ${interfaces_file}"
-    _blue "vmbr1 已存在在 ${interfaces_file}"
+if grep -q "vmbr1" /etc/network/interfaces; then
+    _blue "vmbr1 already exists in /etc/network/interfaces"
+    _blue "vmbr1 已存在在 /etc/network/interfaces"
 elif [ -f "/usr/local/bin/iface_auto.txt" ]; then
-    cat <<EOF | sudo tee -a "$interfaces_file"
+    cat <<EOF | sudo tee -a /etc/network/interfaces
 auto vmbr1
 iface vmbr1 inet static
     address 172.16.1.1
@@ -283,12 +304,8 @@ iface vmbr1 inet static
 
 pre-up echo 2 > /proc/sys/net/ipv6/conf/vmbr0/accept_ra
 EOF
-elif [ -z "$ipv6_address" ] || [ -z "$ipv6_prefixlen" ] || [ -z "$ipv6_gateway" ] || grep -q "he-ipv6" "$interfaces_file"; then
-    if grep -q "auto he-ipv6" "$interfaces_file"; then
-        status_he=true
-        temp_config=$(awk '/auto he-ipv6/{flag=1; print $0; next} flag && flag++<10' /etc/network/interfaces)
-    fi
-    cat <<EOF | sudo tee -a "$interfaces_file"
+elif [ -z "$ipv6_address" ] || [ -z "$ipv6_prefixlen" ] || [ -z "$ipv6_gateway" ] || [ "$status_he" = true ]; then
+    cat <<EOF | sudo tee -a /etc/network/interfaces
 auto vmbr1
 iface vmbr1 inet static
     address 172.16.1.1
@@ -302,7 +319,7 @@ iface vmbr1 inet static
     post-down iptables -t nat -D POSTROUTING -s '172.16.1.0/24' -o vmbr0 -j MASQUERADE
 EOF
 else
-    cat <<EOF | sudo tee -a "$interfaces_file"
+    cat <<EOF | sudo tee -a /etc/network/interfaces
 auto vmbr1
 iface vmbr1 inet static
     address 172.16.1.1
@@ -324,17 +341,29 @@ iface vmbr1 inet6 static
 EOF
 fi
 if [ "$ipv6_prefixlen" -le 64 ]; then
-    if grep -q "vmbr2" "$interfaces_file"; then
-        _blue "vmbr2 already exists in ${interfaces_file}"
-        _blue "vmbr2 已存在在 ${interfaces_file}"
+    if grep -q "vmbr2" /etc/network/interfaces; then
+        _blue "vmbr2 already exists in /etc/network/interfaces"
+        _blue "vmbr2 已存在在 /etc/network/interfaces"
     elif [ "$status_he" = true ]; then
         temp_config=${temp_config//he-ipv6/vmbr2}
         chattr -i /etc/network/interfaces
         sudo tee -a /etc/network/interfaces <<EOF
 ${temp_config}
 EOF
+        if [ -f "/usr/local/bin/ndpresponder" ]; then
+            new_exec_start="ExecStart=/usr/local/bin/ndpresponder -i vmbr2 -n ${new_subnet}"
+            file_path="/etc/systemd/system/ndpresponder.service"
+            line_number=6
+            sed -i "${line_number}s|.*|${new_exec_start}|" "$file_path"
+        fi
+        update_sysctl "net.ipv6.conf.all.forwarding=1"
+        update_sysctl "net.ipv6.conf.all.proxy_ndp=1"
+        update_sysctl "net.ipv6.conf.default.proxy_ndp=1"
+        update_sysctl "net.ipv6.conf.vmbr0.proxy_ndp=1"
+        update_sysctl "net.ipv6.conf.vmbr1.proxy_ndp=1"
+        update_sysctl "net.ipv6.conf.vmbr2.proxy_ndp=1"
     elif [ ! -z "$ipv6_address" ] && [ ! -z "$ipv6_prefixlen" ] && [ ! -z "$ipv6_gateway" ] && [ ! -z "$ipv6_address_without_last_segment" ]; then
-        cat <<EOF | sudo tee -a "$interfaces_file"
+        cat <<EOF | sudo tee -a /etc/network/interfaces
 auto vmbr2
 iface vmbr2 inet6 static
     address ${ipv6_address_without_last_segment}1/${ipv6_prefixlen}
