@@ -321,18 +321,14 @@ qm set $vm_num --memory $memory
 # --swap 256
 qm set $vm_num --ide2 ${storage}:cloudinit
 if [ "$independent_ipv6" == "y" ]; then
-    if [ "$ipv6_prefixlen" -le 64 ]; then
-        if [ ! -z "$ipv6_address" ] && [ ! -z "$ipv6_prefixlen" ] && [ ! -z "$ipv6_gateway" ] && [ ! -z "$ipv6_address_without_last_segment" ]; then
-            if grep -q "vmbr2" /etc/network/interfaces; then
-                qm set $vm_num --ipconfig0 ip=${user_ip}/${user_ip_range},gw=${gateway}
-                qm set $vm_num --ipconfig1 ip6="${ipv6_address_without_last_segment}${vm_num}/128",gw6="${ipv6_address_without_last_segment}1"
-                qm set $vm_num --nameserver 1.1.1.1
-                # qm set $vm_num --nameserver 1.0.0.1
-                qm set $vm_num --searchdomain local
-                independent_ipv6_status="Y"
-            else
-                independent_ipv6_status="N"
-            fi
+    if [ ! -z "$ipv6_address" ] && [ ! -z "$ipv6_prefixlen" ] && [ ! -z "$ipv6_gateway" ] && [ ! -z "$ipv6_address_without_last_segment" ]; then
+        if grep -q "vmbr2" /etc/network/interfaces; then
+            qm set $vm_num --ipconfig0 ip=${user_ip}/${user_ip_range},gw=${gateway}
+            qm set $vm_num --ipconfig1 ip6="${ipv6_address_without_last_segment}${vm_num}/128",gw6="${ipv6_address_without_last_segment}1"
+            qm set $vm_num --nameserver 1.1.1.1
+            # qm set $vm_num --nameserver 1.0.0.1
+            qm set $vm_num --searchdomain local
+            independent_ipv6_status="Y"
         else
             independent_ipv6_status="N"
         fi
