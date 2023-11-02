@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/spiritLHLS/pve
-# 2023.10.28
+# 2023.11.02
 
 ########## 预设部分输出和部分中间变量
 
@@ -107,14 +107,14 @@ check_interface() {
 }
 
 update_sysctl() {
-  sysctl_config="$1"
-  if grep -q "^$sysctl_config" /etc/sysctl.conf; then
-    if grep -q "^#$sysctl_config" /etc/sysctl.conf; then
-      sed -i "s/^#$sysctl_config/$sysctl_config/" /etc/sysctl.conf
+    sysctl_config="$1"
+    if grep -q "^$sysctl_config" /etc/sysctl.conf; then
+        if grep -q "^#$sysctl_config" /etc/sysctl.conf; then
+            sed -i "s/^#$sysctl_config/$sysctl_config/" /etc/sysctl.conf
+        fi
+    else
+        echo "$sysctl_config" >>/etc/sysctl.conf
     fi
-  else
-    echo "$sysctl_config" >> /etc/sysctl.conf
-  fi
 }
 
 ########## 查询信息
@@ -149,6 +149,12 @@ check_interface
 interfaces_file="/etc/network/interfaces"
 status_he=false
 if grep -q "he-ipv6" /etc/network/interfaces; then
+    wget ${cdn_success_url}https://raw.githubusercontent.com/oneclickvirt/6in4/main/covert.sh -O /root/covert.sh
+    chmod 777 covert.sh
+    ./covert.sh
+    sleep 1
+    systemctl restart networking
+    sleep 3
     status_he=true
     chattr -i /etc/network/interfaces
     temp_config=$(awk '/auto he-ipv6/{flag=1; print $0; next} flag && flag++<10' /etc/network/interfaces)
@@ -391,7 +397,7 @@ rm -rf /usr/local/bin/iface_auto.txt
 # 加载iptables并设置回源且允许NAT端口转发
 apt-get install -y iptables iptables-persistent
 iptables -t nat -A POSTROUTING -j MASQUERADE
- "net.ipv4.ip_forward=1"
+"net.ipv4.ip_forward=1"
 ${sysctl_path} -p
 
 # 重启配置
