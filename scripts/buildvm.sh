@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/spiritLHLS/pve
-# 2023.10.03
+# 2023.11.02
 
 # ./buildvm.sh VMID 用户名 密码 CPU核数 内存 硬盘 SSH端口 80端口 443端口 外网端口起 外网端口止 系统 存储盘 独立IPV6
 # ./buildvm.sh 102 test1 1234567 1 512 5 40001 40002 40003 50000 50025 debian11 local N
@@ -280,7 +280,11 @@ if [ "$independent_ipv6" == "y" ]; then
         if [ ! -z "$ipv6_address" ] && [ ! -z "$ipv6_prefixlen" ] && [ ! -z "$ipv6_gateway" ] && [ ! -z "$ipv6_address_without_last_segment" ]; then
             if grep -q "vmbr2" /etc/network/interfaces; then
                 qm set $vm_num --ipconfig0 ip=${user_ip}/24,gw=172.16.1.1
-                qm set $vm_num --ipconfig1 ip6="${ipv6_address_without_last_segment}${vm_num}/128",gw6="${ipv6_address_without_last_segment}1"
+                if grep -q "he-ipv6" /etc/network/interfaces > /dev/null; then
+                    qm set $vm_num --ipconfig1 ip6="${ipv6_address_without_last_segment}${vm_num}/128",gw6="${ipv6_address_without_last_segment}2"
+                else
+                    qm set $vm_num --ipconfig1 ip6="${ipv6_address_without_last_segment}${vm_num}/128",gw6="${ipv6_address_without_last_segment}1"
+                fi
                 qm set $vm_num --nameserver 1.1.1.1
                 # qm set $vm_num --nameserver 1.0.0.1
                 qm set $vm_num --searchdomain local

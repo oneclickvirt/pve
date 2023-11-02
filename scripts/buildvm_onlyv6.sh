@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/spiritLHLS/pve
-# 2023.10.03
+# 2023.11.02
 # 自动选择要绑定的IPV6地址
 # ./buildvm_onlyv6.sh VMID 用户名 密码 CPU核数 内存 硬盘 系统 存储盘
 # ./buildvm_onlyv6.sh 152 test1 1234567 1 512 5 debian11 local
@@ -248,7 +248,11 @@ qm set $vm_num --nameserver 1.1.1.1
 qm set $vm_num --searchdomain local
 user_ip="172.16.1.${num}"
 qm set $vm_num --ipconfig0 ip=${user_ip}/24,gw=172.16.1.1
-qm set $vm_num --ipconfig1 ip6="${ipv6_address_without_last_segment}${vm_num}/128",gw6="${ipv6_address_without_last_segment}1"
+if grep -q "he-ipv6" /etc/network/interfaces > /dev/null; then
+    qm set $vm_num --ipconfig1 ip6="${ipv6_address_without_last_segment}${vm_num}/128",gw6="${ipv6_address_without_last_segment}2"
+else
+    qm set $vm_num --ipconfig1 ip6="${ipv6_address_without_last_segment}${vm_num}/128",gw6="${ipv6_address_without_last_segment}1"
+fi
 qm set $vm_num --cipassword $password --ciuser $user
 sleep 5
 qm resize $vm_num scsi0 ${disk}G
