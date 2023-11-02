@@ -248,11 +248,7 @@ qm set $vm_num --nameserver 1.1.1.1
 qm set $vm_num --searchdomain local
 user_ip="172.16.1.${num}"
 qm set $vm_num --ipconfig0 ip=${user_ip}/24,gw=172.16.1.1
-if grep -q "he-ipv6" /etc/network/interfaces > /dev/null; then
-    qm set $vm_num --ipconfig1 ip6="${ipv6_address_without_last_segment}${vm_num}/128",gw6="${ipv6_address_without_last_segment}2"
-else
-    qm set $vm_num --ipconfig1 ip6="${ipv6_address_without_last_segment}${vm_num}/128",gw6="${ipv6_address_without_last_segment}1"
-fi
+qm set $vm_num --ipconfig1 ip6="${ipv6_address_without_last_segment}${vm_num}/128",gw6="${ipv6_address_without_last_segment}1"
 qm set $vm_num --cipassword $password --ciuser $user
 sleep 5
 qm resize $vm_num scsi0 ${disk}G

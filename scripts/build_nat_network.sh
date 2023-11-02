@@ -170,7 +170,7 @@ if grep -q "he-ipv6" /etc/network/interfaces; then
     ipv6_subnet_2=$(sipcalc --v6split=${target_mask} ${ipv6_gateway}/${ipv6_prefixlen} | awk '/Network/{n++} n==2' | awk '{print $3}' | grep -v '^$')
     ipv6_subnet_2_without_last_segment="${ipv6_subnet_2%:*}:"
     new_subnet="${ipv6_subnet_2_without_last_segment}1/${target_mask}"
-    echo $ipv6_address >/usr/local/bin/pve_check_ipv6
+    echo ${ipv6_subnet_2_without_last_segment}1 >/usr/local/bin/pve_check_ipv6
     echo $ipv6_gateway >/usr/local/bin/pve_ipv6_gateway
 else
     if [ -f /usr/local/bin/pve_check_ipv6 ]; then
