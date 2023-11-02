@@ -357,7 +357,7 @@ if [ "$ipv6_prefixlen" -le 64 ]; then
 ${temp_config}
 EOF
         if [ -f "/usr/local/bin/ndpresponder" ]; then
-            new_exec_start="ExecStart=/usr/local/bin/ndpresponder -i vmbr2 -n ${new_subnet}"
+            new_exec_start="ExecStart=/usr/local/bin/ndpresponder -i he-ipv6 -n ${new_subnet}"
             file_path="/etc/systemd/system/ndpresponder.service"
             line_number=6
             sed -i "${line_number}s|.*|${new_exec_start}|" "$file_path"
