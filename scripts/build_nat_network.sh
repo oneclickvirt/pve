@@ -125,7 +125,7 @@ fi
 if ! command -v ipcalc >/dev/null 2>&1; then
     apt-get install -y ipcalc
 fi
-if ! command -v ipcalc >/dev/null 2>&1; then
+if ! command -v sipcalc >/dev/null 2>&1; then
     apt-get install -y sipcalc
 fi
 if ! command -v ovs-vsctl >/dev/null 2>&1; then
@@ -167,7 +167,7 @@ if grep -q "he-ipv6" /etc/network/interfaces; then
     target_mask=${ipv6_prefixlen}
     ((target_mask += 8 - ($target_mask % 8)))
     echo "$target_mask" >/usr/local/bin/pve_ipv6_prefixlen
-    ipv6_subnet_2=$(sipcalc --v6split=${target_mask} ${ipv6_address}/${ipv6_prefixlen} | awk '/Network/{n++} n==2' | awk '{print $3}' | grep -v '^$')
+    ipv6_subnet_2=$(sipcalc --v6split=${target_mask} ${ipv6_gateway}/${ipv6_prefixlen} | awk '/Network/{n++} n==2' | awk '{print $3}' | grep -v '^$')
     ipv6_subnet_2_without_last_segment="${ipv6_subnet_2%:*}:"
     new_subnet="${ipv6_subnet_2_without_last_segment}1/${target_mask}"
     echo $ipv6_address >/usr/local/bin/pve_check_ipv6
