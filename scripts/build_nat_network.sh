@@ -125,6 +125,9 @@ fi
 if ! command -v ipcalc >/dev/null 2>&1; then
     apt-get install -y ipcalc
 fi
+if ! command -v ipcalc >/dev/null 2>&1; then
+    apt-get install -y sipcalc
+fi
 if ! command -v ovs-vsctl >/dev/null 2>&1; then
     apt-get install -y openvswitch-switch
 fi
