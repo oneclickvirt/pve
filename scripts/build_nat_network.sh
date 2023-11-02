@@ -153,8 +153,6 @@ if grep -q "he-ipv6" /etc/network/interfaces; then
     chmod 777 covert.sh
     ./covert.sh
     sleep 1
-    systemctl restart networking
-    sleep 3
     status_he=true
     chattr -i /etc/network/interfaces
     temp_config=$(awk '/auto he-ipv6/{flag=1; print $0; next} flag && flag++<10' /etc/network/interfaces)
@@ -162,12 +160,15 @@ if grep -q "he-ipv6" /etc/network/interfaces; then
     chattr +i /etc/network/interfaces
     ipv6_address=$(echo "$temp_config" | awk '/address/ {print $2}')
     ipv6_gateway=$(echo "$temp_config" | awk '/gateway/ {print $2}')
-    ipv6_prefixlen=$(echo "$temp_config" | awk '/netmask/ {print $2}')
+    if [ ! -f /usr/local/bin/pve_ipv6_prefixlen ] || [ ! -s /usr/local/bin/pve_ipv6_prefixlen ] || [ "$(sed -e '/^[[:space:]]*$/d' /usr/local/bin/pve_ipv6_prefixlen)" = "" ]; then
+        ipv6_prefixlen=$(ifconfig he-ipv6 | grep -oP 'prefixlen \K\d+' | head -n 1)
+        echo "$ipv6_prefixlen" >/usr/local/bin/pve_ipv6_prefixlen
+    fi
+    ipv6_prefixlen=$(cat /usr/local/bin/pve_ipv6_prefixlen)
     ipv6_address_without_last_segment="${ipv6_address%:*}:"
-    new_subnet="${ipv6_address}/${ipv6_prefixlen}"
+    new_subnet="${ipv6_address_without_last_segment}2/${ipv6_prefixlen}"
     echo $ipv6_address >/usr/local/bin/pve_check_ipv6
     echo $ipv6_gateway >/usr/local/bin/pve_ipv6_gateway
-    echo $ipv6_prefixlen >/usr/local/bin/pve_ipv6_prefixlen
 else
     if [ -f /usr/local/bin/pve_check_ipv6 ]; then
         ipv6_address=$(cat /usr/local/bin/pve_check_ipv6)
@@ -346,15 +347,22 @@ iface vmbr1 inet6 static
     post-down ip6tables -t nat -D POSTROUTING -s 2001:db8:1::/64 -o vmbr0 -j MASQUERADE
 EOF
 fi
-if [ "$ipv6_prefixlen" -le 64 ]; then
+if [ -n "$ipv6_prefixlen" ] && [ "$((ipv6_prefixlen))" -le 64 ]; then
     if grep -q "vmbr2" /etc/network/interfaces; then
         _blue "vmbr2 already exists in /etc/network/interfaces"
         _blue "vmbr2 已存在在 /etc/network/interfaces"
     elif [ "$status_he" = true ]; then
-        temp_config=${temp_config//he-ipv6/vmbr2}
         chattr -i /etc/network/interfaces
         sudo tee -a /etc/network/interfaces <<EOF
 ${temp_config}
+EOF
+        cat <<EOF | sudo tee -a /etc/network/interfaces
+auto vmbr2
+iface vmbr2 inet6 static
+    address ${ipv6_address_without_last_segment}2/${ipv6_prefixlen}
+    bridge_ports off
+    bridge_stp on
+    bridge_fd 0
 EOF
         if [ -f "/usr/local/bin/ndpresponder" ]; then
             new_exec_start="ExecStart=/usr/local/bin/ndpresponder -i he-ipv6 -n ${new_subnet}"
@@ -397,7 +405,7 @@ rm -rf /usr/local/bin/iface_auto.txt
 # 加载iptables并设置回源且允许NAT端口转发
 apt-get install -y iptables iptables-persistent
 iptables -t nat -A POSTROUTING -j MASQUERADE
-"net.ipv4.ip_forward=1"
+update_sysctl "net.ipv4.ip_forward=1"
 ${sysctl_path} -p
 
 # 重启配置
