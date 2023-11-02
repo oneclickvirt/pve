@@ -160,13 +160,13 @@ if grep -q "he-ipv6" /etc/network/interfaces; then
     chattr +i /etc/network/interfaces
     ipv6_address=$(echo "$temp_config" | awk '/address/ {print $2}')
     ipv6_gateway=$(echo "$temp_config" | awk '/gateway/ {print $2}')
-    if [ ! -f /usr/local/bin/pve_ipv6_prefixlen ] || [ ! -s /usr/local/bin/pve_ipv6_prefixlen ] || [ "$(sed -e '/^[[:space:]]*$/d' /usr/local/bin/pve_ipv6_prefixlen)" = "" ]; then
-        ipv6_prefixlen=$(ifconfig he-ipv6 | grep -oP 'prefixlen \K\d+' | head -n 1)
-        echo "$ipv6_prefixlen" >/usr/local/bin/pve_ipv6_prefixlen
-    fi
-    ipv6_prefixlen=$(cat /usr/local/bin/pve_ipv6_prefixlen)
-    ipv6_address_without_last_segment="${ipv6_address%:*}:"
-    new_subnet="${ipv6_address_without_last_segment}2/${ipv6_prefixlen}"
+    ipv6_prefixlen=$(ifconfig he-ipv6 | grep -oP 'prefixlen \K\d+' | head -n 1)
+    target_mask=${ipv6_prefixlen}
+    ((target_mask += 8 - ($target_mask % 8)))
+    echo "$target_mask" >/usr/local/bin/pve_ipv6_prefixlen
+    ipv6_subnet_2=$(sipcalc --v6split=${target_mask} ${ipv6_address}/${ipv6_prefixlen} | awk '/Network/{n++} n==2' | awk '{print $3}' | grep -v '^$')
+    ipv6_subnet_2_without_last_segment="${ipv6_subnet_2%:*}:"
+    new_subnet="${ipv6_subnet_2_without_last_segment}1/${target_mask}"
     echo $ipv6_address >/usr/local/bin/pve_check_ipv6
     echo $ipv6_gateway >/usr/local/bin/pve_ipv6_gateway
 else
@@ -354,14 +354,16 @@ if [ -n "$ipv6_prefixlen" ] && [ "$((ipv6_prefixlen))" -le 64 ]; then
     elif [ "$status_he" = true ]; then
         chattr -i /etc/network/interfaces
         sudo tee -a /etc/network/interfaces <<EOF
+
 ${temp_config}
 EOF
         cat <<EOF | sudo tee -a /etc/network/interfaces
+
 auto vmbr2
 iface vmbr2 inet6 static
-    address ${ipv6_address_without_last_segment}2/${ipv6_prefixlen}
-    bridge_ports off
-    bridge_stp on
+    address ${new_subnet}
+    bridge_ports none
+    bridge_stp off
     bridge_fd 0
 EOF
         if [ -f "/usr/local/bin/ndpresponder" ]; then
