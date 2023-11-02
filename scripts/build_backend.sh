@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/spiritLHLS/pve
-# 2023.08.22
+# 2023.11.02
 
 # 打印信息
 _red() { echo -e "\033[31m\033[01m$@\033[0m"; }
@@ -116,5 +116,7 @@ if [ ${#installed_kernels[@]} -gt 0 ]; then
 else
     _yellow "The current kernel is already a PVE kernel, no need to reboot the system to update the kernel"
     _yellow "当前内核已是PVE内核，无需重启系统更新内核"
+    _yellow "However, a reboot will ensure that some of the hidden settings are loaded successfully, so be sure to reboot the server once if you are in a position to do so."
+    _yellow "但重启可以保证部分隐藏设置加载成功，有条件务必重启一次服务器"
 fi
 echo "1" >"/usr/local/bin/build_backend_pve.txt"

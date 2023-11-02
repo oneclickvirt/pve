@@ -255,9 +255,10 @@ pct set $CTID --hostname $CTID
 if [ "$independent_ipv6" == "y" ]; then
     if [ ! -z "$ipv6_address" ] && [ ! -z "$ipv6_prefixlen" ] && [ ! -z "$ipv6_gateway" ] && [ ! -z "$ipv6_address_without_last_segment" ]; then
         if grep -q "vmbr2" /etc/network/interfaces; then
-            pct set $CTID --net0 name=eth0,ip6="${ipv6_address_without_last_segment}${CTID}/128",bridge=vmbr2,gw6="${ipv6_address_without_last_segment}1"
-            pct set $CTID --net1 name=eth1,ip=${user_ip}/24,bridge=vmbr1,gw=172.16.1.1
-            pct set $CTID --nameserver 8.8.8.8,2001:4860:4860::8888 --nameserver 8.8.4.4,2001:4860:4860::8844
+            pct set $CTID --net0 name=eth0,ip=${user_ip}/24,bridge=vmbr1,gw=172.16.1.1
+            pct set $CTID --net1 name=eth1,ip6="${ipv6_address_without_last_segment}${CTID}/128",bridge=vmbr2,gw6="${ipv6_address_without_last_segment}1"
+            pct set $CTID --nameserver 1.1.1.1
+            pct set $CTID --searchdomain local
             independent_ipv6_status="Y"
         else
             independent_ipv6_status="N"
@@ -271,7 +272,8 @@ fi
 if [ "$independent_ipv6_status" == "N" ]; then
     # if [ -z "$ipv6_address" ] || [ -z "$ipv6_prefixlen" ] || [ -z "$ipv6_gateway" ] || [ "$ipv6_prefixlen" -gt 112 ]; then
         pct set $CTID --net0 name=eth0,ip=${user_ip}/24,bridge=vmbr1,gw=172.16.1.1
-        pct set $CTID --nameserver 8.8.8.8 --nameserver 8.8.4.4
+        pct set $CTID --nameserver 1.1.1.1
+        pct set $CTID --searchdomain local
     # else
     #     pct set $CTID --net0 name=eth0,ip=${user_ip}/24,bridge=vmbr1,gw=172.16.1.1,ip6=${ipv6_address}/${ipv6_prefixlen},gw6=${ipv6_gateway}
     #     pct set $CTID --nameserver 8.8.8.8,2001:4860:4860::8888 --nameserver 8.8.4.4,2001:4860:4860::8844
