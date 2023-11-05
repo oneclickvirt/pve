@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/spiritLHLS/pve
-# 2023.11.02
+# 2023.11.05
 
 # ./buildct.sh CTID 密码 CPU核数 内存 硬盘 SSH端口 80端口 443端口 外网端口起 外网端口止 系统 存储盘 独立IPV6
 # ./buildct.sh 102 1234567 1 512 5 20001 20002 20003 30000 30025 debian11 local N
@@ -220,7 +220,7 @@ if [ "$independent_ipv6" == "y" ]; then
     fi
 else
     if [ -f /usr/local/bin/pve_check_ipv6 ]; then
-        ipv6_address="2001:db8:1::2"
+        ipv6_address=$(cat /usr/local/bin/pve_check_ipv6)
         IFS="/" read -ra parts <<<"$ipv6_address"
         part_1="${parts[0]}"
         part_2="${parts[1]}"
@@ -236,10 +236,10 @@ else
         fi
     fi
     if [ -f /usr/local/bin/pve_ipv6_prefixlen ]; then
-        ipv6_prefixlen="64"
+        ipv6_prefixlen=$(cat /usr/local/bin/pve_ipv6_prefixlen)
     fi
     if [ -f /usr/local/bin/pve_ipv6_gateway ]; then
-        ipv6_gateway="2001:db8:1::"
+        ipv6_gateway=$(cat /usr/local/bin/pve_ipv6_gateway)
     fi
 fi
 
