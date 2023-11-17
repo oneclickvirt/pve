@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/spiritLHLS/pve
-# 2023.10.22
+# 2023.11.17
 
 ########## 预设部分输出和部分中间变量
 
@@ -845,20 +845,50 @@ check_interface
 if [ ! -f /usr/local/bin/pve_check_ipv6 ] || [ ! -s /usr/local/bin/pve_check_ipv6 ] || [ "$(sed -e '/^[[:space:]]*$/d' /usr/local/bin/pve_check_ipv6)" = "" ]; then
     check_ipv6
 fi
-if [ ! -f /usr/local/bin/pve_ipv6_prefixlen ] || [ ! -s /usr/local/bin/pve_ipv6_prefixlen ] || [ "$(sed -e '/^[[:space:]]*$/d' /usr/local/bin/pve_ipv6_prefixlen)" = "" ]; then
-    ipv6_prefixlen=$(ifconfig ${interface} | grep -oP 'prefixlen \K\d+' | head -n 1)
-    echo "$ipv6_prefixlen" >/usr/local/bin/pve_ipv6_prefixlen
-fi
 if [ ! -f /usr/local/bin/pve_ipv6_gateway ] || [ ! -s /usr/local/bin/pve_ipv6_gateway ] || [ "$(sed -e '/^[[:space:]]*$/d' /usr/local/bin/pve_ipv6_gateway)" = "" ]; then
-    ipv6_gateway=$(ip -6 route show | awk '/default via/{print $3}' | head -n1)
-    # if [[ "${ipv6_gateway: -2}" == "::" ]]; then
-    #     ipv6_gateway="${ipv6_gateway}0000"
-    # fi
+    # ipv6_gateway=$(ip -6 route show | awk '/default via/{print $3}' | head -n1)
+    output=$(ip -6 route show | awk '/default via/{print $3}')
+    num_lines=$(echo "$output" | wc -l)
+    ipv6_gateway=""
+    if [ $num_lines -eq 1 ]; then
+        ipv6_gateway="$output"
+    elif [ $num_lines -ge 2 ]; then
+        non_fe80_lines=$(echo "$output" | grep -v '^fe80')
+        if [ -n "$non_fe80_lines" ]; then
+            ipv6_gateway=$(echo "$non_fe80_lines" | head -n 1)
+        else
+            ipv6_gateway=$(echo "$output" | head -n 1)
+        fi
+    fi
     echo "$ipv6_gateway" >/usr/local/bin/pve_ipv6_gateway
 fi
+if [ ! -f /usr/local/bin/pve_fe80_address ] || [ ! -s /usr/local/bin/pve_fe80_address ] || [ "$(sed -e '/^[[:space:]]*$/d' /usr/local/bin/pve_fe80_address)" = "" ]; then
+    fe80_address=$(ip -6 addr show dev $interface | awk '/inet6 fe80/ {print $2}')
+    echo "$fe80_address" >/usr/local/bin/pve_fe80_address
+fi
+# 判断fe80是否已加白
+if [[ $ipv6_gateway == fe80* ]]; then
+    ipv6_gateway_fe80="Y"
+else
+    ipv6_gateway_fe80="N"
+fi
 ipv6_address=$(cat /usr/local/bin/pve_check_ipv6)
-ipv6_prefixlen=$(cat /usr/local/bin/pve_ipv6_prefixlen)
 ipv6_gateway=$(cat /usr/local/bin/pve_ipv6_gateway)
+fe80_address=$(cat /usr/local/bin/docker_fe80_address)
+if [ ! -f /usr/local/bin/pve_ipv6_prefixlen ] || [ ! -s /usr/local/bin/pve_ipv6_prefixlen ] || [ "$(sed -e '/^[[:space:]]*$/d' /usr/local/bin/pve_ipv6_prefixlen)" = "" ]; then
+    ipv6_prefixlen=""
+    output=$(ifconfig ${interface} | grep -oP 'prefixlen \K\d+')
+    num_lines=$(echo "$output" | wc -l)
+    if [ $num_lines -eq 1 ]; then
+        ipv6_prefixlen="$output"
+    elif [[ "${ipv6_gateway_fe80}" == "N" ]]; then
+        ipv6_prefixlen=$(echo "$output" | head -n 2 | tail -n 1)
+    else
+        ipv6_prefixlen=$(echo "$output" | tail -n 1)
+    fi
+    echo "$ipv6_prefixlen" >/usr/local/bin/pve_ipv6_prefixlen
+fi
+ipv6_prefixlen=$(cat /usr/local/bin/pve_ipv6_prefixlen)
 if ping -c 1 -6 -W 3 $ipv6_address >/dev/null 2>&1; then
     echo "IPv6 address is reachable."
 else
@@ -944,6 +974,14 @@ fi
 # cloudinit 重构
 rebuild_cloud_init
 fix_interfaces_ipv6_auto_type
+
+# 判断是否需要IPV6加白
+if [[ "${ipv6_gateway_fe80}" == "N" ]]; then
+    chattr -i /etc/network/interfaces
+    echo "        up ip addr del $fe80_address dev $interface" >> /etc/network/interfaces
+    remove_duplicate_lines "/etc/network/interfaces"
+    chattr +i /etc/network/interfaces
+fi
 
 # 统计运行次数
 statistics_of_run-times

@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/spiritLHLS/pve
-# 2023.09.01
+# 2023.11.17
 
 # 用颜色输出信息
 _red() { echo -e "\033[31m\033[01m$@\033[0m"; }
@@ -136,6 +136,50 @@ check_ipv6() {
     echo $IPV6 >/usr/local/bin/pve_check_ipv6
 }
 
+check_interface() {
+    if [ -z "$interface_2" ]; then
+        interface=${interface_1}
+        return
+    elif [ -n "$interface_1" ] && [ -n "$interface_2" ]; then
+        if ! grep -q "$interface_1" "/etc/network/interfaces" && ! grep -q "$interface_2" "/etc/network/interfaces" && [ -f "/etc/network/interfaces.d/50-cloud-init" ]; then
+            if grep -q "$interface_1" "/etc/network/interfaces.d/50-cloud-init" || grep -q "$interface_2" "/etc/network/interfaces.d/50-cloud-init"; then
+                if ! grep -q "$interface_1" "/etc/network/interfaces.d/50-cloud-init" && grep -q "$interface_2" "/etc/network/interfaces.d/50-cloud-init"; then
+                    interface=${interface_2}
+                    return
+                elif ! grep -q "$interface_2" "/etc/network/interfaces.d/50-cloud-init" && grep -q "$interface_1" "/etc/network/interfaces.d/50-cloud-init"; then
+                    interface=${interface_1}
+                    return
+                fi
+            fi
+        fi
+        if grep -q "$interface_1" "/etc/network/interfaces"; then
+            interface=${interface_1}
+            return
+        elif grep -q "$interface_2" "/etc/network/interfaces"; then
+            interface=${interface_2}
+            return
+        else
+            interfaces_list=$(ip addr show | awk '/^[0-9]+: [^lo]/ {print $2}' | cut -d ':' -f 1)
+            interface=""
+            for iface in $interfaces_list; do
+                if [[ "$iface" = "$interface_1" || "$iface" = "$interface_2" ]]; then
+                    interface="$iface"
+                fi
+            done
+            if [ -z "$interface" ]; then
+                interface="eth0"
+            fi
+            return
+        fi
+    else
+        interface="eth0"
+        return
+    fi
+    _red "Physical interface not found, exit execution"
+    _red "找不到物理接口，退出执行"
+    exit 1
+}
+
 # 检测系统是否支持
 version=$(lsb_release -cs)
 case $version in
@@ -154,14 +198,51 @@ if command -v lshw >/dev/null 2>&1; then
     # 检测物理接口
     interface_1=$(lshw -C network | awk '/logical name:/{print $3}' | sed -n '1p')
     interface_2=$(lshw -C network | awk '/logical name:/{print $3}' | sed -n '2p')
+    check_interface
     # 检测IPV6相关的信息
     if [ ! -f /usr/local/bin/pve_check_ipv6 ]; then
         check_ipv6
     fi
+    if [ ! -f /usr/local/bin/pve_ipv6_gateway ] || [ ! -s /usr/local/bin/pve_ipv6_gateway ] || [ "$(sed -e '/^[[:space:]]*$/d' /usr/local/bin/pve_ipv6_gateway)" = "" ]; then
+        # ipv6_gateway=$(ip -6 route show | awk '/default via/{print $3}' | head -n1)
+        output=$(ip -6 route show | awk '/default via/{print $3}')
+        num_lines=$(echo "$output" | wc -l)
+        ipv6_gateway=""
+        if [ $num_lines -eq 1 ]; then
+            ipv6_gateway="$output"
+        elif [ $num_lines -ge 2 ]; then
+            non_fe80_lines=$(echo "$output" | grep -v '^fe80')
+            if [ -n "$non_fe80_lines" ]; then
+                ipv6_gateway=$(echo "$non_fe80_lines" | head -n 1)
+            else
+                ipv6_gateway=$(echo "$output" | head -n 1)
+            fi
+        fi
+        echo "$ipv6_gateway" >/usr/local/bin/pve_ipv6_gateway
+    fi
+    if [ ! -f /usr/local/bin/pve_fe80_address ] || [ ! -s /usr/local/bin/pve_fe80_address ] || [ "$(sed -e '/^[[:space:]]*$/d' /usr/local/bin/pve_fe80_address)" = "" ]; then
+        fe80_address=$(ip -6 addr show dev $interface | awk '/inet6 fe80/ {print $2}')
+        echo "$fe80_address" >/usr/local/bin/pve_fe80_address
+    fi
+    ipv6_address=$(cat /usr/local/bin/pve_check_ipv6)
+    ipv6_gateway=$(cat /usr/local/bin/pve_ipv6_gateway)
+    fe80_address=$(cat /usr/local/bin/pve_fe80_address)
+    # 判断fe80是否已加白
+    if [[ $ipv6_gateway == fe80* ]]; then
+        ipv6_gateway_fe80="Y"
+    else
+        ipv6_gateway_fe80="N"
+    fi
     if [ ! -f /usr/local/bin/pve_ipv6_prefixlen ]; then
-        ipv6_prefixlen=$(ifconfig ${interface_1} | grep -oP 'prefixlen \K\d+' | head -n 1)
-        if [ -z "$ipv6_prefixlen" ]; then
-            ipv6_prefixlen=$(ifconfig ${interface_2} | grep -oP 'prefixlen \K\d+' | head -n 1)
+        ipv6_prefixlen=""
+        output=$(ifconfig ${interface} | grep -oP 'prefixlen \K\d+')
+        num_lines=$(echo "$output" | wc -l)
+        if [ $num_lines -eq 1 ]; then
+            ipv6_prefixlen="$output"
+        elif [[ "${ipv6_gateway_fe80}" == "N" ]]; then
+            ipv6_prefixlen=$(echo "$output" | head -n 2 | tail -n 1)
+        else
+            ipv6_prefixlen=$(echo "$output" | tail -n 1)
         fi
         if [ -z "$ipv6_prefixlen" ]; then
             ipv6_prefixlen=$(ifconfig eth0 | grep -oP 'prefixlen \K\d+' | head -n 1)
@@ -174,16 +255,7 @@ if command -v lshw >/dev/null 2>&1; then
         fi
         echo "$ipv6_prefixlen" >/usr/local/bin/pve_ipv6_prefixlen
     fi
-    if [ ! -f /usr/local/bin/pve_ipv6_gateway ]; then
-        ipv6_gateway=$(ip -6 route show | awk '/default via/{print $3}' | head -n1)
-        if [[ "${ipv6_gateway: -2}" == "::" ]]; then
-            ipv6_gateway="${ipv6_gateway}0000"
-        fi
-        echo "$ipv6_gateway" >/usr/local/bin/pve_ipv6_gateway
-    fi
-    ipv6_address=$(cat /usr/local/bin/pve_check_ipv6)
     ipv6_prefixlen=$(cat /usr/local/bin/pve_ipv6_prefixlen)
-    ipv6_gateway=$(cat /usr/local/bin/pve_ipv6_gateway)
     if [ -z "$ipv6_address" ] || [ -z "$ipv6_prefixlen" ] || [ -z "$ipv6_gateway" ]; then
         :
     else
