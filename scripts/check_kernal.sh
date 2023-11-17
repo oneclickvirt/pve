@@ -239,10 +239,8 @@ if command -v lshw >/dev/null 2>&1; then
         num_lines=$(echo "$output" | wc -l)
         if [ $num_lines -eq 1 ]; then
             ipv6_prefixlen="$output"
-        elif [[ "${ipv6_gateway_fe80}" == "N" ]]; then
-            ipv6_prefixlen=$(echo "$output" | head -n 2 | tail -n 1)
         else
-            ipv6_prefixlen=$(echo "$output" | tail -n 1)
+            ipv6_prefixlen=$(echo "$output" | head -n 2 | tail -n 1)
         fi
         if [ -z "$ipv6_prefixlen" ]; then
             ipv6_prefixlen=$(ifconfig eth0 | grep -oP 'prefixlen \K\d+' | head -n 1)

@@ -881,10 +881,8 @@ if [ ! -f /usr/local/bin/pve_ipv6_prefixlen ] || [ ! -s /usr/local/bin/pve_ipv6_
     num_lines=$(echo "$output" | wc -l)
     if [ $num_lines -eq 1 ]; then
         ipv6_prefixlen="$output"
-    elif [[ "${ipv6_gateway_fe80}" == "N" ]]; then
-        ipv6_prefixlen=$(echo "$output" | head -n 2 | tail -n 1)
     else
-        ipv6_prefixlen=$(echo "$output" | tail -n 1)
+        ipv6_prefixlen=$(echo "$output" | head -n 2 | tail -n 1)
     fi
     echo "$ipv6_prefixlen" >/usr/local/bin/pve_ipv6_prefixlen
 fi
