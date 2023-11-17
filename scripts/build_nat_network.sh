@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/spiritLHLS/pve
-# 2023.11.02
+# 2023.11.17
 
 ########## 预设部分输出和部分中间变量
 
@@ -175,7 +175,7 @@ if grep -q "he-ipv6" /etc/network/interfaces; then
 else
     if [ -f /usr/local/bin/pve_check_ipv6 ]; then
         ipv6_address=$(cat /usr/local/bin/pve_check_ipv6)
-        # ipv6_address_without_last_segment="${ipv6_address%:*}:"
+        ipv6_address_without_last_segment="${ipv6_address%:*}:"
     fi
     if [ -f /usr/local/bin/pve_ipv6_prefixlen ]; then
         ipv6_prefixlen=$(cat /usr/local/bin/pve_ipv6_prefixlen)
