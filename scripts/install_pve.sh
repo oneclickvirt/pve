@@ -846,20 +846,20 @@ if [ ! -f /usr/local/bin/pve_check_ipv6 ] || [ ! -s /usr/local/bin/pve_check_ipv
     check_ipv6
 fi
 if [ ! -f /usr/local/bin/pve_ipv6_gateway ] || [ ! -s /usr/local/bin/pve_ipv6_gateway ] || [ "$(sed -e '/^[[:space:]]*$/d' /usr/local/bin/pve_ipv6_gateway)" = "" ]; then
-    # ipv6_gateway=$(ip -6 route show | awk '/default via/{print $3}' | head -n1)
-    output=$(ip -6 route show | awk '/default via/{print $3}')
-    num_lines=$(echo "$output" | wc -l)
-    ipv6_gateway=""
-    if [ $num_lines -eq 1 ]; then
-        ipv6_gateway="$output"
-    elif [ $num_lines -ge 2 ]; then
-        non_fe80_lines=$(echo "$output" | grep -v '^fe80')
-        if [ -n "$non_fe80_lines" ]; then
-            ipv6_gateway=$(echo "$non_fe80_lines" | head -n 1)
-        else
-            ipv6_gateway=$(echo "$output" | head -n 1)
-        fi
-    fi
+    ipv6_gateway=$(ip -6 route show | awk '/default via/{print $3}' | head -n1)
+    # output=$(ip -6 route show | awk '/default via/{print $3}')
+    # num_lines=$(echo "$output" | wc -l)
+    # ipv6_gateway=""
+    # if [ $num_lines -eq 1 ]; then
+    #     ipv6_gateway="$output"
+    # elif [ $num_lines -ge 2 ]; then
+    #     non_fe80_lines=$(echo "$output" | grep -v '^fe80')
+    #     if [ -n "$non_fe80_lines" ]; then
+    #         ipv6_gateway=$(echo "$non_fe80_lines" | head -n 1)
+    #     else
+    #         ipv6_gateway=$(echo "$output" | head -n 1)
+    #     fi
+    # fi
     echo "$ipv6_gateway" >/usr/local/bin/pve_ipv6_gateway
 fi
 if [ ! -f /usr/local/bin/pve_fe80_address ] || [ ! -s /usr/local/bin/pve_fe80_address ] || [ "$(sed -e '/^[[:space:]]*$/d' /usr/local/bin/pve_fe80_address)" = "" ]; then
