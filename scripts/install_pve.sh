@@ -874,7 +874,7 @@ else
 fi
 ipv6_address=$(cat /usr/local/bin/pve_check_ipv6)
 ipv6_gateway=$(cat /usr/local/bin/pve_ipv6_gateway)
-fe80_address=$(cat /usr/local/bin/docker_fe80_address)
+fe80_address=$(cat /usr/local/bin/pve_fe80_address)
 if [ ! -f /usr/local/bin/pve_ipv6_prefixlen ] || [ ! -s /usr/local/bin/pve_ipv6_prefixlen ] || [ "$(sed -e '/^[[:space:]]*$/d' /usr/local/bin/pve_ipv6_prefixlen)" = "" ]; then
     ipv6_prefixlen=""
     output=$(ifconfig ${interface} | grep -oP 'prefixlen \K\d+')
