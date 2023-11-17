@@ -879,10 +879,10 @@ if [ ! -f /usr/local/bin/pve_ipv6_prefixlen ] || [ ! -s /usr/local/bin/pve_ipv6_
     ipv6_prefixlen=""
     output=$(ifconfig ${interface} | grep -oP 'prefixlen \K\d+')
     num_lines=$(echo "$output" | wc -l)
-    if [ $num_lines -eq 1 ]; then
-        ipv6_prefixlen="$output"
+    if [ $num_lines -gt 2 ]; then
+        ipv6_prefixlen=$(echo "$output" | head -n $((num_lines-1)) | sort -n | head -n 1)
     else
-        ipv6_prefixlen=$(echo "$output" | head -n 2 | tail -n 1)
+        ipv6_prefixlen=$(echo "$output" | head -n 1)
     fi
     echo "$ipv6_prefixlen" >/usr/local/bin/pve_ipv6_prefixlen
 fi
