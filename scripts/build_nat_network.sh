@@ -316,6 +316,7 @@ if [[ "${ipv6_gateway_fe80}" == "N" ]]; then
     chattr -i /etc/network/interfaces
     echo "        up ip addr del $fe80_address dev $interface" >> /etc/network/interfaces
     remove_duplicate_lines "/etc/network/interfaces"
+    chattr -i /etc/network/interfaces
 fi
 if grep -q "vmbr1" /etc/network/interfaces; then
     _blue "vmbr1 already exists in /etc/network/interfaces"
