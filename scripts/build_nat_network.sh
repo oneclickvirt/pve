@@ -117,6 +117,17 @@ update_sysctl() {
     fi
 }
 
+remove_duplicate_lines() {
+    chattr -i "$1"
+    # 预处理：去除行尾空格和制表符
+    sed -i 's/[ \t]*$//' "$1"
+    # 去除重复行并跳过空行和注释行
+    if [ -f "$1" ]; then
+        awk '{ line = $0; gsub(/^[ \t]+/, "", line); gsub(/[ \t]+/, " ", line); if (!NF || !seen[line]++) print $0 }' "$1" >"$1.tmp" && mv -f "$1.tmp" "$1"
+    fi
+    chattr +i "$1"
+}
+
 ########## 查询信息
 
 if ! command -v lshw >/dev/null 2>&1; then
@@ -184,6 +195,12 @@ else
         ipv6_gateway=$(cat /usr/local/bin/pve_ipv6_gateway)
     fi
 fi
+if [[ $ipv6_gateway == fe80* ]]; then
+    ipv6_gateway_fe80="Y"
+else
+    ipv6_gateway_fe80="N"
+fi
+fe80_address=$(cat /usr/local/bin/pve_fe80_address)
 
 # 配置 ndpresponder 的守护进程
 # if [ "$ipv6_prefixlen" -le 64 ]; then
@@ -294,6 +311,11 @@ iface vmbr0 inet6 static
         gateway ${ipv6_gateway}
 EOF
     fi
+fi
+if [[ "${ipv6_gateway_fe80}" == "N" ]]; then
+    chattr -i /etc/network/interfaces
+    echo "        up ip addr del $fe80_address dev $interface" >> /etc/network/interfaces
+    remove_duplicate_lines "/etc/network/interfaces"
 fi
 if grep -q "vmbr1" /etc/network/interfaces; then
     _blue "vmbr1 already exists in /etc/network/interfaces"
