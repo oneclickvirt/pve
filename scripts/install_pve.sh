@@ -848,6 +848,7 @@ if [ ! -f /etc/systemd/network/10-persistent-net.link ]; then
     echo "" >>/etc/systemd/network/10-persistent-net.link
     echo '[Link]' >>/etc/systemd/network/10-persistent-net.link
     echo "Name=${interface}" >>/etc/systemd/network/10-persistent-net.link
+    /etc/init.d/udev force-reload
 fi
 
 # 检测IPV6相关的信息
