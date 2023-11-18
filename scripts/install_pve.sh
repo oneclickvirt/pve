@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/spiritLHLS/pve
-# 2023.11.17
+# 2023.11.18
 
 ########## 预设部分输出和部分中间变量
 
@@ -837,9 +837,18 @@ ipv4_subnet=$(cat /usr/local/bin/pve_ipv4_subnet)
 interface_1=$(lshw -C network | awk '/logical name:/{print $3}' | sed -n '1p')
 interface_2=$(lshw -C network | awk '/logical name:/{print $3}' | sed -n '2p')
 check_interface
-# if [ "$system_arch" = "arch" ]; then
-#     mac_address=$(ip -o link show dev ${interface} | awk '{print $17}')
-# fi
+if [ ! -f /usr/local/bin/pve_mac_address ] || [ ! -s /usr/local/bin/pve_mac_address ] || [ "$(sed -e '/^[[:space:]]*$/d' /usr/local/bin/pve_mac_address)" = "" ]; then
+    mac_address=$(ip -o link show dev ${interface} | awk '{print $17}')
+    echo "$mac_address" >/usr/local/bin/pve_mac_address
+fi
+mac_address=$(cat /usr/local/bin/pve_mac_address)
+if [ ! -f /etc/systemd/network/10-persistent-net.link ]; then
+    echo '[Match]' >/etc/systemd/network/10-persistent-net.link
+    echo "MACAddress=${mac_address}" >>/etc/systemd/network/10-persistent-net.link
+    echo "" >>/etc/systemd/network/10-persistent-net.link
+    echo '[Link]' >>/etc/systemd/network/10-persistent-net.link
+    echo "Name=${interface}" >>/etc/systemd/network/10-persistent-net.link
+fi
 
 # 检测IPV6相关的信息
 if [ ! -f /usr/local/bin/pve_check_ipv6 ] || [ ! -s /usr/local/bin/pve_check_ipv6 ] || [ "$(sed -e '/^[[:space:]]*$/d' /usr/local/bin/pve_check_ipv6)" = "" ]; then
