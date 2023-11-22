@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/spiritLHLS/pve
-# 2023.11.18
+# 2023.11.22
 
 ########## 预设部分输出和部分中间变量
 
@@ -428,7 +428,7 @@ is_private_ipv6() {
 }
 
 check_ipv6() {
-    IPV6=$(ip -6 addr show | grep global | awk '{print $2}' | cut -d '/' -f1 | head -n 1)
+    IPV6=$(ip -6 addr show | grep global | awk '{print length, $2}' | sort -nr | head -n 1 | awk '{print $2}' | cut -d '/' -f1)
     if is_private_ipv6 "$IPV6"; then # 由于是内网IPV6地址，需要通过API获取外网地址
         IPV6=""
         API_NET=("ipv6.ip.sb" "https://ipget.net" "ipv6.ping0.cc" "https://api.my-ip.io/ip" "https://ipv6.icanhazip.com")
@@ -913,6 +913,7 @@ if [[ "${ipv6_gateway_fe80}" == "Y" ]]; then
 fi
 ipv6_address=$(cat /usr/local/bin/pve_check_ipv6)
 ipv6_gateway=$(cat /usr/local/bin/pve_ipv6_gateway)
+ipv6_address_without_last_segment="${ipv6_address%:*}:"
 
 # 检查50-cloud-init是否存在特定配置
 if [ -f "/etc/network/interfaces.d/50-cloud-init" ]; then
@@ -1282,7 +1283,6 @@ iface vmbr0 inet6 auto
     bridge_ports $interface
 EOF
     else
-        ipv6_address_without_last_segment="${ipv6_address%:*}:"
         cat <<EOF | sudo tee -a /etc/network/interfaces
 auto vmbr0
 iface vmbr0 inet static
