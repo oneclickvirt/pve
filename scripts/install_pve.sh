@@ -387,44 +387,50 @@ fix_interfaces_ipv6_auto_type() {
 
 is_private_ipv6() {
     local address=$1
-    # 输入不含:符号
-    if [[ $ip_address != *":"* ]]; then
-        return 0
-    fi
+    local temp="0"
     # 输入为空
-    if [[ -z $ip_address ]]; then
-        return 0
+    if [[ ! -n $address ]]; then
+        temp="1"
+    fi
+    # 输入不含:符号
+    if [[ -n $address && $address != *":"* ]]; then
+        temp="2"
     fi
     # 检查IPv6地址是否以fe80开头（链接本地地址）
     if [[ $address == fe80:* ]]; then
-        return 0
+        temp="3"
     fi
     # 检查IPv6地址是否以fc00或fd00开头（唯一本地地址）
     if [[ $address == fc00:* || $address == fd00:* ]]; then
-        return 0
+        temp="4"
     fi
     # 检查IPv6地址是否以2001:db8开头（文档前缀）
     if [[ $address == 2001:db8* ]]; then
-        return 0
+        temp="5"
     fi
     # 检查IPv6地址是否以::1开头（环回地址）
     if [[ $address == ::1 ]]; then
-        return 0
+        temp="6"
     fi
     # 检查IPv6地址是否以::ffff:开头（IPv4映射地址）
     if [[ $address == ::ffff:* ]]; then
-        return 0
+        temp="7"
     fi
     # 检查IPv6地址是否以2002:开头（6to4隧道地址）
     if [[ $address == 2002:* ]]; then
-        return 0
+        temp="8"
     fi
     # 检查IPv6地址是否以2001:开头（Teredo隧道地址）
     if [[ $address == 2001:* ]]; then
-        return 0
+        temp="9"
     fi
-    # 其他情况为公网地址
-    return 1
+    if [ "$temp" -gt 0 ]; then
+        # 非公网情况
+        return 0
+    else
+        # 其他情况为公网地址
+        return 1
+    fi
 }
 
 check_ipv6() {
@@ -487,7 +493,7 @@ is_private_ipv4() {
     local ip_address=$1
     local ip_parts
     if [[ -z $ip_address ]]; then
-        return 0 # 输入为空
+        echo "0" # 输入为空
     fi
     IFS='.' read -r -a ip_parts <<<"$ip_address"
     # 检查IP地址是否符合内网IP地址的范围
@@ -499,7 +505,7 @@ is_private_ipv4() {
         [[ ${ip_parts[0]} -eq 0 ]] ||
         [[ ${ip_parts[0]} -eq 100 && ${ip_parts[1]} -ge 64 && ${ip_parts[1]} -le 127 ]] ||
         [[ ${ip_parts[0]} -ge 224 ]]; then
-        return 0 # 是内网IP地址
+        echo "0" # 是内网IP地址
     else
         return 1 # 不是内网IP地址
     fi
