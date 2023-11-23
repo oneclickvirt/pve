@@ -101,6 +101,7 @@ install_package() {
                 fi
                 apt-get install -y $package_name --fix-missing
             fi
+            apt-get install -y $package_name --fix-missing
         fi
         if [ $? -ne 0 ]; then
             _green "$package_name tried to install but failed, exited the program"
