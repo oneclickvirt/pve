@@ -736,6 +736,7 @@ if [ ! -f "/usr/local/bin/check-dns.sh" ]; then
 fi
 
 # 确保apt没有问题
+/usr/local/bin/check-dns.sh
 apt-get update -y
 apt-get full-upgrade -y
 if [ $? -ne 0 ]; then
@@ -1251,6 +1252,9 @@ if [ -z "$ipv6_address" ] || [ -z "$ipv6_prefixlen" ] || [ -z "$ipv6_gateway" ];
     chattr +i /etc/network/interfaces
 fi
 
+# 保证DNS有效
+/usr/local/bin/check-dns.sh
+
 # 部分机器中途service丢失了，尝试修复
 install_package service
 
@@ -1360,6 +1364,7 @@ chattr +i /etc/network/interfaces
 cp /etc/apt/sources.list.d/pve-enterprise.list /etc/apt/sources.list.d/pve-enterprise.list.bak
 # echo "deb http://download.proxmox.com/debian/pve $(lsb_release -sc) pve-no-subscription" > /etc/apt/sources.list.d/pve-enterprise.list
 rm -rf /etc/apt/sources.list.d/pve-enterprise.list
+/usr/local/bin/check-dns.sh
 apt-get update
 install_package sudo
 install_package iproute2
