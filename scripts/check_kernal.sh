@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/spiritLHLS/pve
-# 2023.11.22
+# 2023.11.24
 
 # 用颜色输出信息
 _red() { echo -e "\033[31m\033[01m$@\033[0m"; }
@@ -126,13 +126,27 @@ is_private_ipv6() {
 
 check_ipv6() {
     IPV6=$(ip -6 addr show | grep global | awk '{print length, $2}' | sort -nr | head -n 1 | awk '{print $2}' | cut -d '/' -f1)
-    local response
-    if is_private_ipv6 "$IPV6"; then # 由于是内网IPV4地址，需要通过API获取外网地址
+    ipv6_list=$(ip -6 addr show | grep global | awk '{print length, $2}' | sort -nr | awk '{print $2}')
+    line_count=$(echo "$ipv6_list" | wc -l)
+    if [ "$line_count" -ge 2 ]; then
+        # 获取最后一行的内容
+        last_ipv6=$(echo "$ipv6_list" | tail -n 1)
+        # 切分最后一个:之前的内容
+        last_ipv6_prefix="${last_ipv6%:*}:"
+        # 与${ipv6_gateway}比较是否相同
+        if [ "${last_ipv6_prefix}" = "${ipv6_gateway}" ]; then
+            echo $last_ipv6 >/usr/local/bin/pve_last_ipv6
+        fi
+        _green "The local machine is bound to more than one IPV6 address"
+        _green "本机绑定了不止一个IPV6地址"
+    fi
+
+    if is_private_ipv6 "$IPV6"; then # 由于是内网IPV6地址，需要通过API获取外网地址
         IPV6=""
-        local API_NET=("ipv6.ip.sb" "https://ipget.net" "ipv6.ping0.cc" "https://api.my-ip.io/ip" "https://ipv6.icanhazip.com")
+        API_NET=("ipv6.ip.sb" "https://ipget.net" "ipv6.ping0.cc" "https://api.my-ip.io/ip" "https://ipv6.icanhazip.com")
         for p in "${API_NET[@]}"; do
             response=$(curl -sLk6m8 "$p" | tr -d '[:space:]')
-            if [ $? -eq 0 ] && ! echo "$response" | grep -q "error"; then
+            if [ $? -eq 0 ] && ! (echo "$response" | grep -q "error"); then
                 IPV6="$response"
                 break
             fi
@@ -206,9 +220,6 @@ if command -v lshw >/dev/null 2>&1; then
     interface_2=$(lshw -C network | awk '/logical name:/{print $3}' | sed -n '2p')
     check_interface
     # 检测IPV6相关的信息
-    if [ ! -f /usr/local/bin/pve_check_ipv6 ]; then
-        check_ipv6
-    fi
     if [ ! -f /usr/local/bin/pve_ipv6_gateway ] || [ ! -s /usr/local/bin/pve_ipv6_gateway ] || [ "$(sed -e '/^[[:space:]]*$/d' /usr/local/bin/pve_ipv6_gateway)" = "" ]; then
         ipv6_gateway=$(ip -6 route show | awk '/default via/{print $3}' | head -n1)
         # output=$(ip -6 route show | awk '/default via/{print $3}')
@@ -226,12 +237,15 @@ if command -v lshw >/dev/null 2>&1; then
         # fi
         echo "$ipv6_gateway" >/usr/local/bin/pve_ipv6_gateway
     fi
+    ipv6_gateway=$(cat /usr/local/bin/pve_ipv6_gateway)
+    if [ ! -f /usr/local/bin/pve_check_ipv6 ]; then
+        check_ipv6
+    fi
     if [ ! -f /usr/local/bin/pve_fe80_address ] || [ ! -s /usr/local/bin/pve_fe80_address ] || [ "$(sed -e '/^[[:space:]]*$/d' /usr/local/bin/pve_fe80_address)" = "" ]; then
         fe80_address=$(ip -6 addr show dev $interface | awk '/inet6 fe80/ {print $2}')
         echo "$fe80_address" >/usr/local/bin/pve_fe80_address
     fi
     ipv6_address=$(cat /usr/local/bin/pve_check_ipv6)
-    ipv6_gateway=$(cat /usr/local/bin/pve_ipv6_gateway)
     fe80_address=$(cat /usr/local/bin/pve_fe80_address)
     # 判断fe80是否已加白
     if [[ $ipv6_gateway == fe80* ]]; then
