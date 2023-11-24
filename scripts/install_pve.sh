@@ -444,7 +444,7 @@ check_ipv6() {
         # 切分最后一个:之前的内容
         last_ipv6_prefix="${last_ipv6%:*}:"
         # 与${ipv6_gateway}比较是否相同
-        if [ "${last_ipv6_prefix}" = "${ipv6_gateway}" ]; then
+        if [ "${last_ipv6_prefix}" = "${ipv6_gateway%:*}:" ]; then
             echo $last_ipv6 >/usr/local/bin/pve_last_ipv6
         fi
         _green "The local machine is bound to more than one IPV6 address"
