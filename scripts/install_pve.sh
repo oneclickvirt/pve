@@ -1334,7 +1334,7 @@ iface vmbr0 inet6 static
     gateway ${ipv6_gateway}
 
 iface vmbr0 inet6 static
-    address ${ipv6_address_without_last_segment}1/128
+    address ${ipv6_address}/128
 EOF
     else
         cat <<EOF | sudo tee -a /etc/network/interfaces
@@ -1347,7 +1347,7 @@ iface vmbr0 inet static
     bridge_fd 0
 
 iface vmbr0 inet6 static
-    address ${ipv6_address_without_last_segment}1/128
+    address ${ipv6_address}/128
     gateway ${ipv6_gateway}
 EOF
     fi
