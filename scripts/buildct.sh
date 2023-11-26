@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/spiritLHLS/pve
-# 2023.11.05
+# 2023.11.26
 
 # ./buildct.sh CTID 密码 CPU核数 内存 硬盘 SSH端口 80端口 443端口 外网端口起 外网端口止 系统 存储盘 独立IPV6
 # ./buildct.sh 102 1234567 1 512 5 20001 20002 20003 30000 30025 debian11 local N
@@ -209,8 +209,8 @@ if [ "$independent_ipv6" == "y" ]; then
         exit 1
     fi
     if [ -f /usr/local/bin/pve_check_ipv6 ]; then
-        ipv6_address=$(cat /usr/local/bin/pve_check_ipv6)
-        ipv6_address_without_last_segment="${ipv6_address%:*}:"
+        host_ipv6_address=$(cat /usr/local/bin/pve_check_ipv6)
+        ipv6_address_without_last_segment="${host_ipv6_address%:*}:"
     fi
     if [ -f /usr/local/bin/pve_ipv6_prefixlen ]; then
         ipv6_prefixlen=$(cat /usr/local/bin/pve_ipv6_prefixlen)
@@ -256,7 +256,7 @@ if [ "$independent_ipv6" == "y" ]; then
     if [ ! -z "$ipv6_address" ] && [ ! -z "$ipv6_prefixlen" ] && [ ! -z "$ipv6_gateway" ] && [ ! -z "$ipv6_address_without_last_segment" ]; then
         if grep -q "vmbr2" /etc/network/interfaces; then
             pct set $CTID --net0 name=eth0,ip=${user_ip}/24,bridge=vmbr1,gw=172.16.1.1
-            pct set $CTID --net1 name=eth1,ip6="${ipv6_address_without_last_segment}${CTID}/128",bridge=vmbr2,gw6="${ipv6_address_without_last_segment}1"
+            pct set $CTID --net1 name=eth1,ip6="${ipv6_address_without_last_segment}${CTID}/128",bridge=vmbr2,gw6="${host_ipv6_address}"
             pct set $CTID --nameserver 1.1.1.1
             pct set $CTID --searchdomain local
             independent_ipv6_status="Y"

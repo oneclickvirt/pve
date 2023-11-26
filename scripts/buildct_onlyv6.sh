@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/spiritLHLS/pve
-# 2023.11.02
+# 2023.11.26
 # ./buildct_onlyv6.sh CTID 密码 CPU核数 内存 硬盘 系统 存储盘
 # ./buildct_onlyv6.sh 102 1234567 1 512 5 debian11 local
 
@@ -205,8 +205,8 @@ else
 fi
 # 检测IPV6相关的信息
 if [ -f /usr/local/bin/pve_check_ipv6 ]; then
-    ipv6_address=$(cat /usr/local/bin/pve_check_ipv6)
-    ipv6_address_without_last_segment="${ipv6_address%:*}:"
+    host_ipv6_address=$(cat /usr/local/bin/pve_check_ipv6)
+    ipv6_address_without_last_segment="${host_ipv6_address%:*}:"
 fi
 if [ -f /usr/local/bin/pve_ipv6_prefixlen ]; then
     ipv6_prefixlen=$(cat /usr/local/bin/pve_ipv6_prefixlen)
@@ -223,7 +223,7 @@ fi
 pct start $CTID
 pct set $CTID --hostname $CTID
 user_ip="172.16.1.${num}"
-pct set $CTID --net0 name=eth0,ip6="${ipv6_address_without_last_segment}${CTID}/128",bridge=vmbr2,gw6="${ipv6_address_without_last_segment}1"
+pct set $CTID --net0 name=eth0,ip6="${ipv6_address_without_last_segment}${CTID}/128",bridge=vmbr2,gw6="${host_ipv6_address}"
 pct set $CTID --net1 name=eth1,ip=${user_ip}/24,bridge=vmbr1,gw=172.16.1.1
 pct set $CTID --nameserver 8.8.8.8,2001:4860:4860::8888 --nameserver 8.8.4.4,2001:4860:4860::8844
 sleep 3
