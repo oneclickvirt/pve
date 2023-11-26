@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/spiritLHLS/pve
-# 2023.11.25
+# 2023.11.26
 
 ########## 预设部分输出和部分中间变量
 
@@ -910,7 +910,7 @@ ipv6_address=$(cat /usr/local/bin/pve_check_ipv6)
 fe80_address=$(cat /usr/local/bin/pve_fe80_address)
 if [ ! -f /usr/local/bin/pve_ipv6_prefixlen ] || [ ! -s /usr/local/bin/pve_ipv6_prefixlen ] || [ "$(sed -e '/^[[:space:]]*$/d' /usr/local/bin/pve_ipv6_prefixlen)" = "" ]; then
     ipv6_prefixlen=""
-    output=$(ifconfig ${interface} | grep -oP 'prefixlen \K\d+')
+    output=$(ifconfig ${interface} | grep -oP 'inet6 [^f][^e][^8][^0].*prefixlen \K\d+')
     num_lines=$(echo "$output" | wc -l)
     if [ $num_lines -gt 2 ]; then
         ipv6_prefixlen=$(echo "$output" | head -n $((num_lines-1)) | sort -n | head -n 1)
