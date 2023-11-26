@@ -431,7 +431,7 @@ EOF
         cat <<EOF | sudo tee -a /etc/network/interfaces
 auto vmbr2
 iface vmbr2 inet6 static
-    address ${ipv6_address_without_last_segment}1/${ipv6_prefixlen}
+    address ${ipv6_address}/${ipv6_prefixlen}
     bridge_ports none
     bridge_stp off
     bridge_fd 0
