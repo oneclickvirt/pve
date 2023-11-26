@@ -200,6 +200,9 @@ else
     if [ -f /usr/local/bin/pve_ipv6_prefixlen ]; then
         ipv6_prefixlen=$(cat /usr/local/bin/pve_ipv6_prefixlen)
     fi
+    if [ -f /usr/local/bin/pve_ipv6_gateway ]; then
+        ipv6_gateway=$(cat /usr/local/bin/pve_ipv6_gateway)
+    fi
     if [ -f /usr/local/bin/pve_check_ipv6 ]; then
         ipv6_address=$(cat /usr/local/bin/pve_check_ipv6)
         # ipv6_address_without_last_segment="${ipv6_address%:*}:"
@@ -213,9 +216,6 @@ else
         if ping -c 1 -6 -W 3 $ipv6_address >/dev/null 2>&1; then
             echo "${ipv6_address}" >/usr/local/bin/pve_check_ipv6
         fi
-    fi
-    if [ -f /usr/local/bin/pve_ipv6_gateway ]; then
-        ipv6_gateway=$(cat /usr/local/bin/pve_ipv6_gateway)
     fi
 fi
 if [[ $ipv6_gateway == fe80* ]]; then
