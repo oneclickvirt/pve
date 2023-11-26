@@ -800,6 +800,7 @@ install_package lshw
 install_package net-tools
 install_package service
 install_package ipcalc
+install_package sipcalc
 install_package dmidecode
 install_package dnsutils
 install_package ethtool
@@ -936,6 +937,9 @@ ipv6_prefixlen=$(cat /usr/local/bin/pve_ipv6_prefixlen)
 # fi
 ipv6_address=$(cat /usr/local/bin/pve_check_ipv6)
 ipv6_gateway=$(cat /usr/local/bin/pve_ipv6_gateway)
+# 重构IPV6地址，使用该IPV6子网内的0001结尾的地址
+ipv6_address=$(sipcalc -i ${ipv6_address}/${ipv6_prefixlen} | grep "Subnet prefix (masked)" | cut -d ' ' -f 4 | cut -d '/' -f 1)
+ipv6_address="${ipv6_address%:*}:1"
 ipv6_address_without_last_segment="${ipv6_address%:*}:"
 
 # 检查50-cloud-init是否存在特定配置

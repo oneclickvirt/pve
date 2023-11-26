@@ -37,6 +37,9 @@ fi
 if ! command -v ifconfig >/dev/null 2>&1; then
     apt-get install net-tools -y
 fi
+if ! command -v sipcalc >/dev/null 2>&1; then
+    apt-get install sipcalc -y
+fi
 
 check_config() {
     _green "The machine configuration should meet the minimum requirements of at least 2 cores 2G RAM 20G hard drive"
