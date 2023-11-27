@@ -297,7 +297,7 @@ if grep -q "vmbr0" "/etc/network/interfaces"; then
     _blue "vmbr0 already exists in /etc/network/interfaces"
     _blue "vmbr0 已存在在 /etc/network/interfaces"
 else
-    if [ -z "$ipv6_address" ] || [ -z "$ipv6_prefixlen" ] || [ -z "$ipv6_gateway" ]; then
+    if [ -z "$ipv6_address" ] || [ -z "$ipv6_prefixlen" ] || [ -z "$ipv6_gateway" ] && [ ! -f /usr/local/bin/pve_last_ipv6 ]; then
         cat <<EOF | sudo tee -a /etc/network/interfaces
 auto vmbr0
 iface vmbr0 inet static
@@ -307,7 +307,7 @@ iface vmbr0 inet static
     bridge_stp off
     bridge_fd 0
 EOF
-    elif [ -f "/usr/local/bin/iface_auto.txt" ]; then
+    elif [ -f "/usr/local/bin/iface_auto.txt" ] && [ ! -f /usr/local/bin/pve_last_ipv6 ]; then
         cat <<EOF | sudo tee -a /etc/network/interfaces
 auto vmbr0
 iface vmbr0 inet static
@@ -320,6 +320,24 @@ iface vmbr0 inet static
 iface vmbr0 inet6 auto
     bridge_ports $interface
 EOF
+    elif [ -f /usr/local/bin/pve_last_ipv6 ]; then
+        last_ipv6=$(cat /usr/local/bin/pve_last_ipv6)
+        cat <<EOF | sudo tee -a /etc/network/interfaces
+auto vmbr0
+iface vmbr0 inet static
+    address $ipv4_address
+    gateway $ipv4_gateway
+    bridge_ports $interface
+    bridge_stp off
+    bridge_fd 0
+
+iface vmbr0 inet6 static
+    address ${last_ipv6}
+    gateway ${ipv6_gateway}
+
+iface vmbr0 inet6 static
+    address ${ipv6_address}/128
+EOF
     else
         cat <<EOF | sudo tee -a /etc/network/interfaces
 auto vmbr0
@@ -331,14 +349,14 @@ iface vmbr0 inet static
     bridge_fd 0
 
 iface vmbr0 inet6 static
-        address ${ipv6_address}/${ipv6_prefixlen}
-        gateway ${ipv6_gateway}
+    address ${ipv6_address}/128
+    gateway ${ipv6_gateway}
 EOF
     fi
 fi
 if [[ "${ipv6_gateway_fe80}" == "N" ]]; then
     chattr -i /etc/network/interfaces
-    echo "        up ip addr del $fe80_address dev $interface" >> /etc/network/interfaces
+    echo "    up ip addr del $fe80_address dev $interface" >> /etc/network/interfaces
     remove_duplicate_lines "/etc/network/interfaces"
     chattr -i /etc/network/interfaces
 fi

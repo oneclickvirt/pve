@@ -31,6 +31,9 @@ if [ $pct_status -eq 0 ] && [ $qm_status -eq 0 ]; then
     _green "Proxmox VE已经安装，无需重复安装。"
     exit 1
 fi
+if [ ! -d /usr/local/bin ]; then
+    mkdir -p /usr/local/bin
+fi
 
 ########## 备份配置文件
 
