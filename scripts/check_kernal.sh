@@ -129,19 +129,21 @@ is_private_ipv6() {
 
 check_ipv6() {
     IPV6=$(ip -6 addr show | grep global | awk '{print length, $2}' | sort -nr | head -n 1 | awk '{print $2}' | cut -d '/' -f1)
-    ipv6_list=$(ip -6 addr show | grep global | awk '{print length, $2}' | sort -nr | awk '{print $2}')
-    line_count=$(echo "$ipv6_list" | wc -l)
-    if [ "$line_count" -ge 2 ]; then
-        # 获取最后一行的内容
-        last_ipv6=$(echo "$ipv6_list" | tail -n 1)
-        # 切分最后一个:之前的内容
-        last_ipv6_prefix="${last_ipv6%:*}:"
-        # 与${ipv6_gateway}比较是否相同
-        if [ "${last_ipv6_prefix}" = "${ipv6_gateway%:*}:" ]; then
-            echo $last_ipv6 >/usr/local/bin/pve_last_ipv6
+    if [ ! -f /usr/local/bin/pve_last_ipv6 ] || [ ! -s /usr/local/bin/pve_last_ipv6 ] || [ "$(sed -e '/^[[:space:]]*$/d' /usr/local/bin/pve_last_ipv6)" = "" ]; then
+        ipv6_list=$(ip -6 addr show | grep global | awk '{print length, $2}' | sort -nr | awk '{print $2}')
+        line_count=$(echo "$ipv6_list" | wc -l)
+        if [ "$line_count" -ge 2 ]; then
+            # 获取最后一行的内容
+            last_ipv6=$(echo "$ipv6_list" | tail -n 1)
+            # 切分最后一个:之前的内容
+            last_ipv6_prefix="${last_ipv6%:*}:"
+            # 与${ipv6_gateway}比较是否相同
+            if [ "${last_ipv6_prefix}" = "${ipv6_gateway%:*}:" ]; then
+                echo $last_ipv6 >/usr/local/bin/pve_last_ipv6
+            fi
+            _green "The local machine is bound to more than one IPV6 address"
+            _green "本机绑定了不止一个IPV6地址"
         fi
-        _green "The local machine is bound to more than one IPV6 address"
-        _green "本机绑定了不止一个IPV6地址"
     fi
 
     if is_private_ipv6 "$IPV6"; then # 由于是内网IPV6地址，需要通过API获取外网地址
