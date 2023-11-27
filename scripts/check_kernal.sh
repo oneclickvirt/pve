@@ -260,7 +260,7 @@ if command -v lshw >/dev/null 2>&1; then
         ipv6_prefixlen=""
         output=$(ifconfig ${interface} | grep -oP 'inet6 [^f][^e][^8][^0].*prefixlen \K\d+')
         num_lines=$(echo "$output" | wc -l)
-        if [ $num_lines -gt 2 ]; then
+        if [ $num_lines -ge 2 ]; then
             ipv6_prefixlen=$(echo "$output" | head -n $((num_lines-1)) | sort -n | head -n 1)
         else
             ipv6_prefixlen=$(echo "$output" | head -n 1)
