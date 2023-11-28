@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/spiritLHLS/pve
-# 2023.11.26
+# 2023.11.28
 
 ########## 预设部分输出和部分中间变量
 
@@ -216,6 +216,7 @@ else
         if ping -c 1 -6 -W 3 $ipv6_address >/dev/null 2>&1; then
             check_ipv6
             echo "${ipv6_address}" >/usr/local/bin/pve_check_ipv6
+            ipv6_address_without_last_segment="${ipv6_address%:*}:"
         fi
     fi
 fi
