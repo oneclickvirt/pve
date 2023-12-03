@@ -287,19 +287,21 @@ else
     fi
     if [ -f /usr/local/bin/pve_check_ipv6 ]; then
         ipv6_address=$(cat /usr/local/bin/pve_check_ipv6)
-        # ipv6_address_without_last_segment="${ipv6_address%:*}:"
-        # 重构IPV6地址，使用该IPV6子网内的0001结尾的地址
-        ipv6_address=$(sipcalc -i ${ipv6_address}/${ipv6_prefixlen} | grep "Subnet prefix (masked)" | cut -d ' ' -f 4 | cut -d '/' -f 1 | sed 's/:0:0:0:0:/::/' | sed 's/:0:0:0:/::/')
-        ipv6_address="${ipv6_address%:*}:1"
-        if [ "$ipv6_address" == "$ipv6_gateway" ]; then
-            ipv6_address="${ipv6_address%:*}:2"
-        fi
         ipv6_address_without_last_segment="${ipv6_address%:*}:"
-        if ping -c 1 -6 -W 3 $ipv6_address >/dev/null 2>&1; then
-            check_ipv6
-            ipv6_address=$(cat /usr/local/bin/pve_check_ipv6)
-            echo "${ipv6_address}" >/usr/local/bin/pve_check_ipv6
+        if [[ $ipv6_address != *:: && $ipv6_address_without_last_segment != *:: ]]; then
+            # 重构IPV6地址，使用该IPV6子网内的0001结尾的地址
+            ipv6_address=$(sipcalc -i ${ipv6_address}/${ipv6_prefixlen} | grep "Subnet prefix (masked)" | cut -d ' ' -f 4 | cut -d '/' -f 1 | sed 's/:0:0:0:0:/::/' | sed 's/:0:0:0:/::/')
+            ipv6_address="${ipv6_address%:*}:1"
+            if [ "$ipv6_address" == "$ipv6_gateway" ]; then
+                ipv6_address="${ipv6_address%:*}:2"
+            fi
             ipv6_address_without_last_segment="${ipv6_address%:*}:"
+            if ping -c 1 -6 -W 3 $ipv6_address >/dev/null 2>&1; then
+                check_ipv6
+                ipv6_address=$(cat /usr/local/bin/pve_check_ipv6)
+                echo "${ipv6_address}" >/usr/local/bin/pve_check_ipv6
+                ipv6_address_without_last_segment="${ipv6_address%:*}:"
+            fi
         fi
     fi
 fi
