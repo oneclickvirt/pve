@@ -302,6 +302,12 @@ else
                 echo "${ipv6_address}" >/usr/local/bin/pve_check_ipv6
                 ipv6_address_without_last_segment="${ipv6_address%:*}:"
             fi
+        elif [[ $ipv6_address == *:: ]]; then
+            ipv6_address="${ipv6_address}1"
+            if [ "$ipv6_address" == "$ipv6_gateway" ]; then
+                ipv6_address="${ipv6_address%:*}:2"
+            fi
+            echo "${ipv6_address}" >/usr/local/bin/pve_check_ipv6
         fi
     fi
 fi

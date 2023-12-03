@@ -966,6 +966,12 @@ if [[ $ipv6_address != *:: && $ipv6_address_without_last_segment != *:: ]]; then
         ipv6_address=$(cat /usr/local/bin/pve_check_ipv6)
         echo "${ipv6_address}" >/usr/local/bin/pve_check_ipv6
     fi
+elif [[ $ipv6_address == *:: ]]; then
+    ipv6_address="${ipv6_address}1"
+    if [ "$ipv6_address" == "$ipv6_gateway" ]; then
+        ipv6_address="${ipv6_address%:*}:2"
+    fi
+    echo "${ipv6_address}" >/usr/local/bin/pve_check_ipv6
 fi
 
 # 检查50-cloud-init是否存在特定配置
