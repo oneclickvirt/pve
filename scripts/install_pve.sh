@@ -961,6 +961,7 @@ fi
 ipv6_address_without_last_segment="${ipv6_address%:*}:"
 if ping -c 1 -6 -W 3 $ipv6_address >/dev/null 2>&1; then
     check_ipv6
+    ipv6_address=$(cat /usr/local/bin/pve_check_ipv6)
     echo "${ipv6_address}" >/usr/local/bin/pve_check_ipv6
 fi
 
