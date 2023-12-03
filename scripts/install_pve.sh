@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/spiritLHLS/pve
-# 2023.11.26
+# 2023.12.03
 
 ########## 预设部分输出和部分中间变量
 
@@ -50,6 +50,11 @@ fi
 if [ -f "/etc/cloud/cloud.cfg" ]; then
     if [ ! -f /etc/cloud/cloud.cfg.bak ]; then
         cp /etc/cloud/cloud.cfg /etc/cloud/cloud.cfg.bak
+    fi
+fi
+if [ -f "/etc/hostname" ]; then
+    if [ ! -f /etc/hostname.bak ]; then
+        cp /etc/hostname /etc/hostname.bak
     fi
 fi
 if [ -f "/etc/hosts" ]; then
@@ -839,6 +844,11 @@ _yellow "正在检测系统信息，大概会停留在该页面最多1~2分钟"
 # 检测主IPV4相关信息
 if [ ! -f /usr/local/bin/pve_main_ipv4 ]; then
     main_ipv4=$(ip -4 addr show | grep global | awk '{print $2}' | cut -d '/' -f1 | head -n 1)
+    if is_private_ipv4 "$main_ipv4"; then
+        # 查询公网IPV4
+        check_ipv4
+        main_ipv4="$IPV4"
+    fi
     echo "$main_ipv4" >/usr/local/bin/pve_main_ipv4
 fi
 # 提取主IPV4地址
@@ -1101,7 +1111,11 @@ if [ "${hostname}" != "pve" ]; then
         sed -i '/^127\.0\.1\.1/s/^/#/' /etc/hosts
         echo "Commented out lines starting with 127.0.1.1 in /etc/hosts"
     fi
-    if ! grep -q "^127\.0\.0\.1 localhost\.localdomain localhost$" /etc/hosts; then
+    hostname_bak=$(cat /etc/hostname.bak)
+    if grep -q "^127\.0\.0\.1 ${hostname_bak}\.localdomain ${hostname_bak}$" /etc/hosts; then
+        sed -i "s/^127\.0\.0\.1 ${hostname_bak}\.localdomain ${hostname_bak}$/&\n${main_ipv4} ${hostname}.localdomain ${hostname}/" /etc/hosts
+        echo "Replaced the line for ${hostname_bak} in /etc/hosts"
+    elif ! grep -q "^127\.0\.0\.1 localhost\.localdomain localhost$" /etc/hosts; then
         # 127.0.1.1
         echo "${main_ipv4} ${hostname}.localdomain ${hostname}" >>/etc/hosts
         echo "Added ${main_ipv4} ${hostname}.localdomain ${hostname} to /etc/hosts"
