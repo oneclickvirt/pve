@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/spiritLHLS/pve
-# 2023.12.03
+# 2023.12.08
 
 ########## 预设部分输出和部分中间变量
 
@@ -67,6 +67,20 @@ if [ -f "/etc/apt/sources.list" ]; then
         cp /etc/apt/sources.list /etc/apt/sources.list.bak
     fi
 fi
+# 删除无效别名网卡
+if [ -d "/run/network/interfaces.d/" ]; then
+    directory="/run/network/interfaces.d/"
+    file=$(ls -1 $directory | grep -v "cloud-init" | head -n 1)
+    if [ -n "$file" ]; then
+        awk_condition='/^[0-9]+:/ {interface=$2; gsub(/:/, "", interface)} /^[[:space:]]+altname/ {next} /^[[:space:]]+link/ {if (interface == file) exit 0} END {exit 1}'
+        if ip addr show | awk -v file="$file" "$awk_condition"; then
+            :
+        else
+            rm "$directory$file"
+        fi
+    fi
+fi
+
 
 ########## 定义部分需要使用的函数
 
@@ -710,7 +724,7 @@ check_china
 cdn_urls=("https://cdn0.spiritlhl.top/" "http://cdn3.spiritlhl.net/" "http://cdn1.spiritlhl.net/" "https://ghproxy.com/" "http://cdn2.spiritlhl.net/")
 check_cdn_file
 
-systemctl restart networking 
+systemctl restart networking
 if [ $? -ne 0 ] && [ -e "/etc/systemd/system/networking.service" ]; then
     # altname=$(ip addr show eth0 | grep altname | awk '{print $NF}')
     if [ -f /etc/network/interfaces ] && grep -q "eth0" /etc/network/interfaces; then
@@ -1047,7 +1061,7 @@ fix_interfaces_ipv6_auto_type
 # 判断是否需要IPV6加白
 if [[ "${ipv6_gateway_fe80}" == "N" ]]; then
     chattr -i /etc/network/interfaces
-    echo "        up ip addr del $fe80_address dev $interface" >> /etc/network/interfaces
+    echo "        up ip addr del $fe80_address dev $interface" >>/etc/network/interfaces
     remove_duplicate_lines "/etc/network/interfaces"
     chattr +i /etc/network/interfaces
 fi
