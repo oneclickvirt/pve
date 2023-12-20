@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/spiritLHLS/pve
-# 2023.11.26
+# 2023.12.20
 # ./buildct_onlyv6.sh CTID 密码 CPU核数 内存 硬盘 系统 存储盘
 # ./buildct_onlyv6.sh 102 1234567 1 512 5 debian11 local
 
@@ -259,6 +259,7 @@ pct exec $CTID -- curl -L ${cdn_success_url}https://raw.githubusercontent.com/sp
 pct exec $CTID -- chmod 777 ssh.sh
 pct exec $CTID -- dos2unix ssh.sh
 pct exec $CTID -- bash ssh.sh
+pct exec $CTID -- echo '*/1 * * * * curl -m 6 -s ipv6.ip.sb && curl -m 6 -s ipv6.ip.sb' | crontab -
 # 禁止PVE自动修改网络接口设置
 pct exec $CTID -- touch /etc/network/.pve-ignore.interfaces
 # 禁止PVE自动修改DNS设置

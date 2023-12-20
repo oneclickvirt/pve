@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/spiritLHLS/pve
-# 2023.12.03
+# 2023.12.20
 
 ########## 预设部分输出和部分中间变量
 
@@ -508,6 +508,7 @@ iface vmbr1 inet6 static
 EOF
 fi
 if [ -n "$ipv6_prefixlen" ] && [ "$((ipv6_prefixlen))" -le 64 ]; then
+    echo '*/1 * * * * curl -m 6 -s ipv6.ip.sb && curl -m 6 -s ipv6.ip.sb' | crontab -
     if grep -q "vmbr2" /etc/network/interfaces; then
         _blue "vmbr2 already exists in /etc/network/interfaces"
         _blue "vmbr2 已存在在 /etc/network/interfaces"
