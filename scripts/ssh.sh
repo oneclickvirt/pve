@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/spiritLHLS/pve
-# 2023.08.22
+# 2023.12.21
 
 if [ -f "/etc/resolv.conf" ]; then
     cp /etc/resolv.conf /etc/resolv.conf.bak
@@ -123,6 +123,11 @@ install_required_modules() {
             ${PACKAGE_INSTALL[int]} $module
         fi
     done
+    if command -v apt-get >/dev/null 2>&1; then
+        ${PACKAGE_INSTALL[int]} cron 
+    else
+        ${PACKAGE_INSTALL[int]} cronie
+    fi
 }
 
 remove_duplicate_lines() {

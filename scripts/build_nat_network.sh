@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/spiritLHLS/pve
-# 2023.12.20
+# 2023.12.21
 
 ########## 预设部分输出和部分中间变量
 
@@ -223,6 +223,9 @@ if ! command -v sipcalc >/dev/null 2>&1; then
 fi
 if ! command -v ovs-vsctl >/dev/null 2>&1; then
     apt-get install -y openvswitch-switch
+fi
+if ! command -v crontab >/dev/null 2>&1; then
+    apt-get install -y cron 
 fi
 apt-get install -y net-tools
 
