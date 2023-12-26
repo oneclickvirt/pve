@@ -13,9 +13,9 @@ if [ $? -eq 0 ]; then
 else
     echo "Adding DNS server ${DNS_SERVER} to ${RESOLV_CONF}..."
     if [ -z "$ipv6_address" ] || [ -z "$ipv6_prefixlen" ] || [ -z "$ipv6_gateway" ]; then
-        echo -e "nameserver 8.8.8.8\nnameserver 8.8.4.4\n" >>${RESOLV_CONF}
+        echo -e "\nnameserver 8.8.8.8\nnameserver 8.8.4.4\n" >>${RESOLV_CONF}
     else
-        echo -e "nameserver 8.8.8.8\nnameserver 8.8.4.4\nnameserver 2606:4700:4700::1111\nnameserver 2001:4860:4860::8888\nnameserver 2001:4860:4860::8844" >>${RESOLV_CONF}
+        echo -e "\nnameserver 8.8.8.8\nnameserver 8.8.4.4\nnameserver 2606:4700:4700::1111\nnameserver 2001:4860:4860::8888\nnameserver 2001:4860:4860::8844" >>${RESOLV_CONF}
     fi
 fi
 sleep 3
