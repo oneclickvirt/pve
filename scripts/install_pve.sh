@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/spiritLHLS/pve
-# 2023.12.08
+# 2023.12.26
 
 ########## 预设部分输出和部分中间变量
 
@@ -1102,7 +1102,7 @@ fi
 
 # 如果是CN的IP则增加DNS先
 if [[ "${CN}" == true ]]; then
-    echo "nameserver 223.5.5.5" >>/etc/resolv.conf
+    echo "\nnameserver 223.5.5.5" >>/etc/resolv.conf
 fi
 
 # cloud-init文件修改
@@ -1412,15 +1412,15 @@ if [ ! -s "/etc/resolv.conf" ] || [ -z "$(grep -vE '^\s*#' /etc/resolv.conf)" ];
     cp /etc/resolv.conf /etc/resolv.conf.bak
     if [[ "${CN}" == true ]]; then
         if [ -z "$ipv6_address" ] || [ -z "$ipv6_prefixlen" ] || [ -z "$ipv6_gateway" ]; then
-            echo -e "nameserver 8.8.8.8\nnameserver 223.5.5.5\n" >/etc/resolv.conf
+            echo -e "\nnameserver 8.8.8.8\nnameserver 223.5.5.5\n" >/etc/resolv.conf
         else
-            echo -e "nameserver 8.8.8.8\nnameserver 223.5.5.5\nnameserver 2001:4860:4860::8888\nnameserver 2001:4860:4860::8844" >/etc/resolv.conf
+            echo -e "\nnameserver 8.8.8.8\nnameserver 223.5.5.5\nnameserver 2001:4860:4860::8888\nnameserver 2001:4860:4860::8844" >/etc/resolv.conf
         fi
     else
         if [ -z "$ipv6_address" ] || [ -z "$ipv6_prefixlen" ] || [ -z "$ipv6_gateway" ]; then
-            echo -e "nameserver 8.8.8.8\nnameserver 8.8.4.4\n" >/etc/resolv.conf
+            echo -e "\nnameserver 8.8.8.8\nnameserver 8.8.4.4\n" >/etc/resolv.conf
         else
-            echo -e "nameserver 8.8.8.8\nnameserver 8.8.4.4\nnameserver 2001:4860:4860::8888\nnameserver 2001:4860:4860::8844" >/etc/resolv.conf
+            echo -e "\nnameserver 8.8.8.8\nnameserver 8.8.4.4\nnameserver 2001:4860:4860::8888\nnameserver 2001:4860:4860::8844" >/etc/resolv.conf
         fi
     fi
 fi
