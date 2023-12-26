@@ -204,7 +204,7 @@ build_new_cts() {
         ./buildct.sh $ct_num $password $cpu_nums $memory_nums $disk_nums $ssh_port $web1_port $web2_port $port_start $port_end $system $storage $independent_ipv6
         cat "ct$ct_num" >>ctlog
         rm -rf "ct$ct_num"
-        sleep 60
+        sleep 30
     done
 }
 
