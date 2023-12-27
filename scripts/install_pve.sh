@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/spiritLHLS/pve
-# 2023.12.26
+# 2023.12.27
 
 ########## 预设部分输出和部分中间变量
 
@@ -122,6 +122,16 @@ install_package() {
                     exit 1
                 fi
                 apt-get install -y $package_name --fix-missing
+            elif echo "$apt_output" | grep -qE 'dpkg: error processing archive /var/cache/apt/archives/pve-firmware' &&
+                echo "$apt_output" | grep -qE '/lib/firmware/ath9k_htc' &&
+                echo "$apt_output" | grep -qE 'which is also in package firmware-ath9k-htc'; then
+                sudo DEBIAN_FRONTEND=noninteractive dpkg --remove --force-remove-reinstreq firmware-ath9k-htc
+                apt-get --fix-broken install -y $package_name
+                if [ $? -ne 0 ]; then
+                    _green "$package_name tried to install but failed, exited the program"
+                    _green "$package_name 已尝试安装但失败，退出程序"
+                    exit 1
+                fi
             fi
             apt-get install -y $package_name --fix-missing
         fi
