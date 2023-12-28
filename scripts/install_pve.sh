@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/spiritLHLS/pve
-# 2023.12.27
+# 2023.12.28
 
 ########## 预设部分输出和部分中间变量
 
@@ -115,22 +115,6 @@ install_package() {
                 echo "grub-pc grub-pc/install_devices multiselect /dev/sda" | sudo debconf-set-selections
                 # 配置grub-pc并自动选择第一个选项确认
                 sudo DEBIAN_FRONTEND=noninteractive dpkg --configure grub-pc
-                dpkg --configure -a
-                if [ $? -ne 0 ]; then
-                    _green "$package_name tried to install but failed, exited the program"
-                    _green "$package_name 已尝试安装但失败，退出程序"
-                    exit 1
-                fi
-                apt_output=$(apt-get install -y $package_name --fix-missing 2>&1)
-            fi
-        fi
-        if [ $? -ne 0 ]; then
-            if echo "$apt_output" | grep -qE 'dpkg: error processing archive /var/cache/apt/archives/pve-firmware' &&
-                echo "$apt_output" | grep -qE '/lib/firmware/ath9k_htc' &&
-                echo "$apt_output" | grep -qE 'which is also in package firmware-ath9k-htc'; then
-                sudo DEBIAN_FRONTEND=noninteractive dpkg --remove --force-remove-reinstreq firmware-ath9k-htc
-                apt-get --fix-broken install -y
-                sleep 1
                 dpkg --configure -a
                 if [ $? -ne 0 ]; then
                     _green "$package_name tried to install but failed, exited the program"
@@ -1350,6 +1334,13 @@ fi
 
 # 部分机器中途service丢失了，尝试修复
 install_package service
+
+# esxi 开设的部分机器中含有冲突组件 firmware-ath9k-htc ，需要预先卸载
+if dpkg -S firmware-ath9k-htc >/dev/null 2>&1; then
+    dpkg --remove --force-remove-reinstreq firmware-ath9k-htc
+    apt --fix-broken install
+    dpkg --configure -a
+fi
 
 # 正式安装PVE
 install_package proxmox-ve
