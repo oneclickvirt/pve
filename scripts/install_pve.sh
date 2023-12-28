@@ -121,24 +121,38 @@ install_package() {
                     _green "$package_name 已尝试安装但失败，退出程序"
                     exit 1
                 fi
-                apt-get install -y $package_name --fix-missing
-            elif echo "$apt_output" | grep -qE 'dpkg: error processing archive /var/cache/apt/archives/pve-firmware' &&
+                apt_output=$(apt-get install -y $package_name --fix-missing 2>&1)
+            fi
+        fi
+        if [ $? -ne 0 ]; then
+            if echo "$apt_output" | grep -qE 'dpkg: error processing archive /var/cache/apt/archives/pve-firmware' &&
                 echo "$apt_output" | grep -qE '/lib/firmware/ath9k_htc' &&
                 echo "$apt_output" | grep -qE 'which is also in package firmware-ath9k-htc'; then
                 sudo DEBIAN_FRONTEND=noninteractive dpkg --remove --force-remove-reinstreq firmware-ath9k-htc
-                apt-get --fix-broken install -y $package_name
+                apt-get --fix-broken install -y
+                sleep 1
+                dpkg --configure -a
+                if [ $? -ne 0 ]; then
+                    _green "$package_name tried to install but failed, exited the program"
+                    _green "$package_name 已尝试安装但失败，退出程序"
+                    exit 1
+                fi
+                apt_output=$(apt-get install -y $package_name --fix-missing 2>&1)
+            fi
+        fi
+        if [ $? -ne 0 ]; then
+            if echo "$apt_output" | grep -qE 'apt --fix-broken install' &&
+                echo "$apt_output" | grep -qE 'Unmet dependencies.' &&
+                echo "$apt_output" | grep -qE 'with no packages'; then
+                apt-get --fix-broken install -y
+                sleep 1
+                dpkg --configure -a
                 if [ $? -ne 0 ]; then
                     _green "$package_name tried to install but failed, exited the program"
                     _green "$package_name 已尝试安装但失败，退出程序"
                     exit 1
                 fi
             fi
-            apt-get install -y $package_name --fix-missing
-        fi
-        if [ $? -ne 0 ]; then
-            _green "$package_name tried to install but failed, exited the program"
-            _green "$package_name 已尝试安装但失败，退出程序"
-            exit 1
         fi
         _green "$package_name tried to install"
         _green "$package_name 已尝试安装"
