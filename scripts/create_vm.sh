@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/spiritLHLS/pve
-# 2023.07.31
+# 2023.12.31
 
 # cd /root
 
@@ -242,7 +242,10 @@ build_new_vms() {
         ./buildvm.sh $vm_num $user $password $cpu_nums $memory_nums $disk_nums $ssh_port $web1_port $web2_port $port_start $port_end $system $storage $independent_ipv6
         cat "vm$vm_num" >>vmlog
         rm -rf "vm$vm_num"
-        sleep 60
+        if [ "$i" = "$new_nums" ]; then
+            break
+        fi
+        sleep 30
     done
 }
 

@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/spiritLHLS/pve
-# 2023.07.31
+# 2023.12.31
 
 # cd /root
 
@@ -204,6 +204,9 @@ build_new_cts() {
         ./buildct.sh $ct_num $password $cpu_nums $memory_nums $disk_nums $ssh_port $web1_port $web2_port $port_start $port_end $system $storage $independent_ipv6
         cat "ct$ct_num" >>ctlog
         rm -rf "ct$ct_num"
+        if [ "$i" = "$new_nums" ]; then
+            break
+        fi
         sleep 30
     done
 }
