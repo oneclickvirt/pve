@@ -27,9 +27,9 @@ if [ -n "$vmids" ]; then
                 ip_address="${vmip_array[$key_1]}"
                 echo "Delete VMID $key_1 IP Address $ip_address Mapping"
                 sed -i "/$ip_address:/d" /etc/iptables/rules.v4
-                qm stop $vmid
-                qm destroy $vmid
-                rm -rf /var/lib/vz/images/$vmid*
+                qm stop $key_1
+                qm destroy $key_1
+                rm -rf /var/lib/vz/images/$key_1*
                 rm -rf vm"$key_1"
             fi
         done
