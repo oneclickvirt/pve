@@ -8,6 +8,8 @@
 # 输入解析
 args=("$@")
 num_args=${#args[@]}
+declare -A ctip_array
+declare -A vmip_array
 
 # 虚拟机操作
 vmids=$(qm list | awk '{if(NR>1)print $1}')
@@ -62,4 +64,6 @@ fi
 cat /etc/iptables/rules.v4 | iptables-restore
 service networking restart
 systemctl restart networking.service
-systemctl restart ndpresponder.service
+if [ -f "/usr/local/bin/ndpresponder" ]; then
+    systemctl restart ndpresponder.service
+fi
