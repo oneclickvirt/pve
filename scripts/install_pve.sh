@@ -37,6 +37,11 @@ fi
 
 ########## 备份配置文件
 
+if [ -f "/etc/resolv.conf" ]; then
+    if [ ! -f /etc/resolv.conf.bak ]; then
+        cp /etc/resolv.conf /etc/resolv.conf.bak
+    fi
+fi
 if [ -f /etc/network/interfaces ]; then
     if [ ! -f /etc/network/interfaces.bak ]; then
         cp /etc/network/interfaces /etc/network/interfaces.bak
