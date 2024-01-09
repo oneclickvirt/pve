@@ -408,16 +408,11 @@ fix_interfaces_ipv6_auto_type() {
     while IFS= read -r line; do
         # 检测以 "iface" 开头且包含 "inet6 auto" 的行
         if [[ $line == *"inet6 auto"* ]]; then
-            if [ ! -f /usr/local/bin/pve_maximum_subset ]; then
-                sed -i '/^iface.*inet6 auto\s*$/d' /etc/network/interfaces
-            else
-                # 将 "auto" 替换为 "static"
-                modified_line="${line/auto/static}"
-                echo "$modified_line"
-                # 添加静态IPv6配置信息
-                echo "    address ${ipv6_address}/${ipv6_prefixlen}"
-                echo "    gateway ${ipv6_gateway}"
-            fi
+            modified_line="${line/auto/static}"
+            echo "$modified_line"
+            # 添加静态IPv6配置信息
+            echo "    address ${ipv6_address}/${ipv6_prefixlen}"
+            echo "    gateway ${ipv6_gateway}"
         else
             echo "$line"
         fi
