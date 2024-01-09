@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/spiritLHLS/pve
-# 2023.11.26
+# 2024.01.09
 
 # 用颜色输出信息
 _red() { echo -e "\033[31m\033[01m$@\033[0m"; }
@@ -42,7 +42,7 @@ if ! command -v sipcalc >/dev/null 2>&1; then
 fi
 
 check_config() {
-    _green "The machine configuration should meet the minimum requirements of at least 2 cores 2G RAM 20G hard drive"
+    _blue "The machine configuration should meet the minimum requirements of at least 2 cores 2G RAM 20G hard drive"
     _green "本机配置应当满足至少2核2G内存20G硬盘的最低要求"
 
     # 检查硬盘大小
@@ -129,6 +129,7 @@ is_private_ipv6() {
 
 check_ipv6() {
     IPV6=$(ip -6 addr show | grep global | awk '{print length, $2}' | sort -nr | head -n 1 | awk '{print $2}' | cut -d '/' -f1)
+    # ip a | grep -oP 'inet6 .*global.*mngtmpaddr' | awk '{print $2}'
     if [ ! -f /usr/local/bin/pve_last_ipv6 ] || [ ! -s /usr/local/bin/pve_last_ipv6 ] || [ "$(sed -e '/^[[:space:]]*$/d' /usr/local/bin/pve_last_ipv6)" = "" ]; then
         ipv6_list=$(ip -6 addr show | grep global | awk '{print length, $2}' | sort -nr | awk '{print $2}')
         line_count=$(echo "$ipv6_list" | wc -l)
@@ -141,7 +142,7 @@ check_ipv6() {
             if [ "${last_ipv6_prefix}" = "${ipv6_gateway%:*}:" ]; then
                 echo $last_ipv6 >/usr/local/bin/pve_last_ipv6
             fi
-            _green "The local machine is bound to more than one IPV6 address"
+            _blue "The local machine is bound to more than one IPV6 address"
             _green "本机绑定了不止一个IPV6地址"
         fi
     fi
@@ -209,7 +210,7 @@ check_interface() {
 version=$(lsb_release -cs)
 case $version in
 stretch | buster | bullseye | bookworm)
-    _green "The recognized system is $version"
+    _blue "The recognized system is $version"
     _green "识别到的系统为 $version"
     ;;
 *)
@@ -296,11 +297,37 @@ if command -v lshw >/dev/null 2>&1; then
         # fi
         ipv6_address=$(cat /usr/local/bin/pve_check_ipv6)
         ipv6_gateway=$(cat /usr/local/bin/pve_ipv6_gateway)
-        _green "The following IPV6 information is detected for this machine:"
+        _blue "The following IPV6 information is detected for this machine:"
         _green "检测到本机的IPV6信息如下："
         _green "ipv6_address: ${ipv6_address}"
         _green "ipv6_prefixlen: ${ipv6_prefixlen}"
         _green "ipv6_gateway: ${ipv6_gateway}"
+    fi
+    mac_address=$(ip a | grep -oP 'link/ether \K[0-9a-f:]+')
+    mac_end_suffix=$(echo $mac_address | awk -F: '{print $4$5}')
+    ipv6_end_suffix=${ipv6_address##*:}
+    slaac_status=false
+    if [[ $ipv6_address == *"ff:fe"* ]]; then
+        _blue "Since the IPV6 address contains the ff:fe block, the probability is that the IPV6 address assigned out through SLAAC"
+        _green "由于IPV6地址含有ff:fe块，大概率通过SLAAC分配出的IPV6地址"
+        slaac_status=true
+    elif [[ $ipv6_gateway == "fe80"* ]]; then
+        _blue "Since IPV6 gateways begin with fe80, it is generally assumed that IPV6 addresses assigned through the SLAAC"
+        _green "由于IPV6的网关是fe80开头，一般认为通过SLAAC分配出的IPV6地址"
+        slaac_status=true
+    elif [[ $ipv6_end_suffix == $mac_end_suffix ]]; then
+        _blue "Since IPV6 addresses have the same suffix as mac addresses, the probability is that the IPV6 address assigned through the SLAAC"
+        _green "由于IPV6的地址和mac地址后缀相同，大概率通过SLAAC分配出的IPV6地址"
+        slaac_status=true
+    fi
+    if [[ $slaac_status == true ]] && [ ! -f /usr/local/bin/pve_slaac_status ]; then
+        _blue "Since IPV6 addresses are assigned via SLAAC, the subsequent one-click script installation process needs to determine whether to use the largest subnet"
+        _blue "If using the largest subnet make sure that the host is assigned an entire subnet and not just an IPV6 address"
+        _blue "It is not possible to determine within the host computer how large a subnet the upstream has given to this machine, please ask the upstream technician for details."
+        _green "由于是通过SLAAC分配出IPV6地址，所以后续一键脚本安装过程中需要判断是否使用最大子网"
+        _green "若使用最大子网请确保宿主机被分配的是整个子网而不是仅一个IPV6地址"
+        _green "无法在宿主机内部判断上游给了本机多大的子网，详情请询问上游技术人员"
+        echo "" >/usr/local/bin/pve_slaac_status
     fi
 fi
 

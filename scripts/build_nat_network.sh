@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/spiritLHLS/pve
-# 2023.12.21
+# 2024.01.09
 
 ########## 预设部分输出和部分中间变量
 
@@ -392,6 +392,7 @@ if grep -q "vmbr0" "/etc/network/interfaces"; then
     _blue "vmbr0 already exists in /etc/network/interfaces"
     _blue "vmbr0 已存在在 /etc/network/interfaces"
 else
+    # 没有IPV6地址
     if [ -z "$ipv6_address" ] || [ -z "$ipv6_prefixlen" ] || [ -z "$ipv6_gateway" ] && [ ! -f /usr/local/bin/pve_last_ipv6 ]; then
         cat <<EOF | sudo tee -a /etc/network/interfaces
 auto vmbr0
@@ -402,7 +403,8 @@ iface vmbr0 inet static
     bridge_stp off
     bridge_fd 0
 EOF
-    elif [ -f "/usr/local/bin/iface_auto.txt" ] && [ ! -f /usr/local/bin/pve_last_ipv6 ]; then
+    # 有IPV6地址，只有一个IPV6地址，且后续仅使用一个IPV6地址
+    elif [ -f /usr/local/bin/pve_slaac_status ] && [ ! -f /usr/local/bin/pve_maximum_subset ] && [ ! -f /usr/local/bin/pve_last_ipv6 ]; then
         cat <<EOF | sudo tee -a /etc/network/interfaces
 auto vmbr0
 iface vmbr0 inet static
@@ -415,6 +417,7 @@ iface vmbr0 inet static
 iface vmbr0 inet6 auto
     bridge_ports $interface
 EOF
+    # 有IPV6地址，不只一个IPV6地址，一个用作网关，一个用作实际地址，二者不在同一子网内
     elif [ -f /usr/local/bin/pve_last_ipv6 ]; then
         last_ipv6=$(cat /usr/local/bin/pve_last_ipv6)
         cat <<EOF | sudo tee -a /etc/network/interfaces
@@ -433,7 +436,12 @@ iface vmbr0 inet6 static
 iface vmbr0 inet6 static
     address ${ipv6_address}/128
 EOF
+    # 有IPV6地址，只有一个IPV6地址，但后续使用最大IPV6子网范围
     else
+        # 选择使用最大IPV6子网范围需要改写IPV6获取方式为静态获取
+        if [ -f /usr/local/bin/pve_maximum_subset ]; then
+            sed -i '/^iface.*inet6 auto\s*$/d' /etc/network/interfaces
+        fi
         cat <<EOF | sudo tee -a /etc/network/interfaces
 auto vmbr0
 iface vmbr0 inet static
