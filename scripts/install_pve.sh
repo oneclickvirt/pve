@@ -409,7 +409,7 @@ fix_interfaces_ipv6_auto_type() {
         # 检测以 "iface" 开头且包含 "inet6 auto" 的行
         if [[ $line == *"inet6 auto"* ]]; then
             if [ ! -f /usr/local/bin/pve_maximum_subset ]; then
-                echo "$line"
+                sed -i '/^iface.*inet6 auto\s*$/d' /etc/network/interfaces
             else
                 # 将 "auto" 替换为 "static"
                 modified_line="${line/auto/static}"
@@ -1437,10 +1437,6 @@ iface vmbr0 inet6 static
 EOF
     # 有IPV6地址，只有一个IPV6地址，但后续使用最大IPV6子网范围
     else
-        # 选择使用最大IPV6子网范围需要改写IPV6获取方式为静态获取
-        if [ -f /usr/local/bin/pve_maximum_subset ]; then
-            sed -i '/^iface.*inet6 auto\s*$/d' /etc/network/interfaces
-        fi
         cat <<EOF | sudo tee -a /etc/network/interfaces
 auto vmbr0
 iface vmbr0 inet static
