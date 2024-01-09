@@ -393,17 +393,6 @@ rebuild_interfaces() {
 }
 
 fix_interfaces_ipv6_auto_type() {
-    if [ -f /usr/local/bin/pve_slaac_status ] && [ ! -f /usr/local/bin/pve_maximum_subset ] && [ ! -f /usr/local/bin/fix_interfaces_ipv6_auto_type ]; then
-        # 大概率由SLAAC动态分配，需要询问使用的子网范围 仅本机IPV6 或 最大子网
-        _blue "It is detected that IPV6 addresses are most likely to be dynamically assigned by SLAAC, and if there is no subsequent need to assign separate IPV6 addresses to VMs/containers, the following option is best selected n"
-        _green "检测到IPV6地址大概率由SLAAC动态分配，若后续不需要分配独立的IPV6地址给虚拟机/容器，则下面选项最好选 n"
-        _blue "Is the maximum subnet range feasible with IPV6 used?([n]/y)"
-        reading "是否使用IPV6可行的最大子网范围？([n]/y)" select_maximum_subset
-        if [ "$select_maximum_subset" = "y" ] || [ "$select_maximum_subset" = "Y" ]; then
-            echo "" >/usr/local/bin/pve_maximum_subset
-        fi
-        echo "" >/usr/local/bin/fix_interfaces_ipv6_auto_type
-    fi
     chattr -i /etc/network/interfaces
     while IFS= read -r line; do
         # 检测以 "iface" 开头且包含 "inet6 auto" 的行
@@ -981,27 +970,8 @@ ipv6_prefixlen=$(cat /usr/local/bin/pve_ipv6_prefixlen)
 # fi
 ipv6_address=$(cat /usr/local/bin/pve_check_ipv6)
 ipv6_gateway=$(cat /usr/local/bin/pve_ipv6_gateway)
-ipv6_address_without_last_segment="${ipv6_address%:*}:"
-if [[ $ipv6_address != *:: && $ipv6_address_without_last_segment != *:: ]]; then
-    # 重构IPV6地址，使用该IPV6子网内的0001结尾的地址
-    ipv6_address=$(sipcalc -i ${ipv6_address}/${ipv6_prefixlen} | grep "Subnet prefix (masked)" | cut -d ' ' -f 4 | cut -d '/' -f 1 | sed 's/:0:0:0:0:/::/' | sed 's/:0:0:0:/::/')
-    ipv6_address="${ipv6_address%:*}:1"
-    if [ "$ipv6_address" == "$ipv6_gateway" ]; then
-        ipv6_address="${ipv6_address%:*}:2"
-    fi
-    ipv6_address_without_last_segment="${ipv6_address%:*}:"
-    if ping -c 1 -6 -W 3 $ipv6_address >/dev/null 2>&1; then
-        check_ipv6
-        ipv6_address=$(cat /usr/local/bin/pve_check_ipv6)
-        echo "${ipv6_address}" >/usr/local/bin/pve_check_ipv6
-    fi
-elif [[ $ipv6_address == *:: ]]; then
-    ipv6_address="${ipv6_address}1"
-    if [ "$ipv6_address" == "$ipv6_gateway" ]; then
-        ipv6_address="${ipv6_address%:*}:2"
-    fi
-    echo "${ipv6_address}" >/usr/local/bin/pve_check_ipv6
-fi
+
+# 判断是否存在SLAAC机制
 mac_end_suffix=$(echo $mac_address | awk -F: '{print $4$5}')
 ipv6_end_suffix=${ipv6_address##*:}
 slaac_status=false
@@ -1026,6 +996,44 @@ if [[ $slaac_status == true ]] && [ ! -f /usr/local/bin/pve_slaac_status ]; then
     _green "若使用最大子网请确保宿主机被分配的是整个子网而不是仅一个IPV6地址"
     _green "无法在宿主机内部判断上游给了本机多大的子网，详情请询问上游技术人员"
     echo "" >/usr/local/bin/pve_slaac_status
+fi
+# 提示是否在SLAAC分配的情况下还使用最大IPV6子网范围
+if [ -f /usr/local/bin/pve_slaac_status ] && [ ! -f /usr/local/bin/pve_maximum_subset ] && [ ! -f /usr/local/bin/fix_interfaces_ipv6_auto_type ]; then
+    # 大概率由SLAAC动态分配，需要询问使用的子网范围 仅本机IPV6 或 最大子网
+    _blue "It is detected that IPV6 addresses are most likely to be dynamically assigned by SLAAC, and if there is no subsequent need to assign separate IPV6 addresses to VMs/containers, the following option is best selected n"
+    _green "检测到IPV6地址大概率由SLAAC动态分配，若后续不需要分配独立的IPV6地址给虚拟机/容器，则下面选项最好选 n"
+    _blue "Is the maximum subnet range feasible with IPV6 used?([n]/y)"
+    reading "是否使用IPV6可行的最大子网范围？([n]/y)" select_maximum_subset
+    if [ "$select_maximum_subset" = "y" ] || [ "$select_maximum_subset" = "Y" ]; then
+        echo "true" >/usr/local/bin/pve_maximum_subset
+    else
+        echo "false" >/usr/local/bin/pve_maximum_subset
+    fi
+    echo "" >/usr/local/bin/fix_interfaces_ipv6_auto_type
+fi
+# 不存在SLAAC机制的情况下或存在时使用最大IPV6子网范围，需要重构IPV6地址
+if [ ! -f /usr/local/bin/pve_maximum_subset ] || [ $(cat /usr/local/bin/pve_maximum_subset) = true ]; then
+    ipv6_address_without_last_segment="${ipv6_address%:*}:"
+    if [[ $ipv6_address != *:: && $ipv6_address_without_last_segment != *:: ]]; then
+        # 重构IPV6地址，使用该IPV6子网内的0001结尾的地址
+        ipv6_address=$(sipcalc -i ${ipv6_address}/${ipv6_prefixlen} | grep "Subnet prefix (masked)" | cut -d ' ' -f 4 | cut -d '/' -f 1 | sed 's/:0:0:0:0:/::/' | sed 's/:0:0:0:/::/')
+        ipv6_address="${ipv6_address%:*}:1"
+        if [ "$ipv6_address" == "$ipv6_gateway" ]; then
+            ipv6_address="${ipv6_address%:*}:2"
+        fi
+        ipv6_address_without_last_segment="${ipv6_address%:*}:"
+        if ping -c 1 -6 -W 3 $ipv6_address >/dev/null 2>&1; then
+            check_ipv6
+            ipv6_address=$(cat /usr/local/bin/pve_check_ipv6)
+            echo "${ipv6_address}" >/usr/local/bin/pve_check_ipv6
+        fi
+    elif [[ $ipv6_address == *:: ]]; then
+        ipv6_address="${ipv6_address}1"
+        if [ "$ipv6_address" == "$ipv6_gateway" ]; then
+            ipv6_address="${ipv6_address%:*}:2"
+        fi
+        echo "${ipv6_address}" >/usr/local/bin/pve_check_ipv6
+    fi
 fi
 
 # 检查50-cloud-init是否存在特定配置
@@ -1386,7 +1394,7 @@ if grep -q "vmbr0" "/etc/network/interfaces"; then
     _blue "vmbr0 already exists in /etc/network/interfaces"
     _blue "vmbr0 已存在在 /etc/network/interfaces"
 else
-    # 没有IPV6地址
+    # 没有IPV6地址，不存在slaac机制
     if [ -z "$ipv6_address" ] || [ -z "$ipv6_prefixlen" ] || [ -z "$ipv6_gateway" ] && [ ! -f /usr/local/bin/pve_last_ipv6 ]; then
         cat <<EOF | sudo tee -a /etc/network/interfaces
 auto vmbr0
@@ -1397,8 +1405,8 @@ iface vmbr0 inet static
     bridge_stp off
     bridge_fd 0
 EOF
-    # 有IPV6地址，只有一个IPV6地址，且后续仅使用一个IPV6地址
-    elif [ -f /usr/local/bin/pve_slaac_status ] && [ ! -f /usr/local/bin/pve_maximum_subset ] && [ ! -f /usr/local/bin/pve_last_ipv6 ]; then
+    # 有IPV6地址，只有一个IPV6地址，且后续仅使用一个IPV6地址，存在slaac机制
+    elif [ -f /usr/local/bin/pve_slaac_status ] && [ $(cat /usr/local/bin/pve_maximum_subset) = false ] && [ ! -f /usr/local/bin/pve_last_ipv6 ]; then
         cat <<EOF | sudo tee -a /etc/network/interfaces
 auto vmbr0
 iface vmbr0 inet static
@@ -1411,7 +1419,7 @@ iface vmbr0 inet static
 iface vmbr0 inet6 auto
     bridge_ports $interface
 EOF
-    # 有IPV6地址，不只一个IPV6地址，一个用作网关，一个用作实际地址，二者不在同一子网内
+    # 有IPV6地址，不只一个IPV6地址，一个用作网关，一个用作实际地址，二者不在同一子网内，不存在slaac机制
     elif [ -f /usr/local/bin/pve_last_ipv6 ]; then
         last_ipv6=$(cat /usr/local/bin/pve_last_ipv6)
         cat <<EOF | sudo tee -a /etc/network/interfaces
@@ -1430,7 +1438,7 @@ iface vmbr0 inet6 static
 iface vmbr0 inet6 static
     address ${ipv6_address}/128
 EOF
-    # 有IPV6地址，只有一个IPV6地址，但后续使用最大IPV6子网范围
+    # 有IPV6地址，只有一个IPV6地址，但后续使用最大IPV6子网范围，不存在slaac机制
     else
         cat <<EOF | sudo tee -a /etc/network/interfaces
 auto vmbr0
