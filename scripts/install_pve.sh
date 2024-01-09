@@ -408,7 +408,7 @@ fix_interfaces_ipv6_auto_type() {
     while IFS= read -r line; do
         # 检测以 "iface" 开头且包含 "inet6 auto" 的行
         if [[ $line == *"inet6 auto"* ]]; then
-            if [ -f /usr/local/bin/pve_maximum_subset ]; then
+            if [ ! -f /usr/local/bin/pve_maximum_subset ]; then
                 echo "$line"
             else
                 # 将 "auto" 替换为 "static"
