@@ -325,7 +325,9 @@ fe80_address=$(cat /usr/local/bin/pve_fe80_address)
 # if [ "$ipv6_prefixlen" -le 64 ]; then
 # if [ ! -z "$ipv6_address" ] && [ ! -z "$ipv6_prefixlen" ] && [ ! -z "$ipv6_gateway" ] && [ ! -z "$ipv6_address_without_last_segment" ]; then
 if [ ! -z "$ipv6_address" ] && [ ! -z "$ipv6_prefixlen" ] && [ ! -z "$ipv6_gateway" ]; then
-    if [ "$system_arch" = "x86" ]; then
+    if [ -f /usr/local/bin/pve_maximum_subset ] && [ $(cat /usr/local/bin/pve_maximum_subset) = false ]; then
+        _blue "No install ndpresponder"
+    elif [ "$system_arch" = "x86" ]; then
         wget ${cdn_success_url}https://github.com/spiritLHLS/pve/releases/download/ndpresponder_x86/ndpresponder -O /usr/local/bin/ndpresponder
         wget ${cdn_success_url}https://raw.githubusercontent.com/spiritLHLS/pve/main/extra_scripts/ndpresponder.service -O /etc/systemd/system/ndpresponder.service
         chmod 777 /usr/local/bin/ndpresponder
@@ -515,10 +517,11 @@ iface vmbr1 inet6 static
 EOF
 fi
 if [ -n "$ipv6_prefixlen" ] && [ "$((ipv6_prefixlen))" -le 64 ]; then
-    echo '*/1 * * * * curl -m 6 -s ipv6.ip.sb && curl -m 6 -s ipv6.ip.sb' | crontab -
     if grep -q "vmbr2" /etc/network/interfaces; then
         _blue "vmbr2 already exists in /etc/network/interfaces"
         _blue "vmbr2 已存在在 /etc/network/interfaces"
+    elif [ -f /usr/local/bin/pve_maximum_subset ] && [ $(cat /usr/local/bin/pve_maximum_subset) = false ]; then
+        _blue "No set vmbr2"
     elif [ "$status_he" = true ]; then
         chattr -i /etc/network/interfaces
         sudo tee -a /etc/network/interfaces <<EOF
@@ -547,6 +550,7 @@ EOF
         update_sysctl "net.ipv6.conf.vmbr1.proxy_ndp=1"
         update_sysctl "net.ipv6.conf.vmbr2.proxy_ndp=1"
     elif [ ! -z "$ipv6_address" ] && [ ! -z "$ipv6_prefixlen" ] && [ ! -z "$ipv6_gateway" ] && [ ! -z "$ipv6_address_without_last_segment" ]; then
+        echo '*/1 * * * * curl -m 6 -s ipv6.ip.sb && curl -m 6 -s ipv6.ip.sb' | crontab -
         cat <<EOF | sudo tee -a /etc/network/interfaces
 auto vmbr2
 iface vmbr2 inet6 static
