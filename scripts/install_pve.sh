@@ -397,8 +397,8 @@ fix_interfaces_ipv6_auto_type() {
         # 大概率由SLAAC动态分配，需要询问使用的子网范围 仅本机IPV6 或 最大子网
         _blue "It is detected that IPV6 addresses are most likely to be dynamically assigned by SLAAC, and if there is no subsequent need to assign separate IPV6 addresses to VMs/containers, the following option is best selected n"
         _green "检测到IPV6地址大概率由SLAAC动态分配，若后续不需要分配独立的IPV6地址给虚拟机/容器，则下面选项最好选 n"
-        _blue "Is the maximum subnet range feasible with IPV6 used?(n/[y])"
-        reading "是否使用IPV6可行的最大子网范围？(n/[y])" select_maximum_subset
+        _blue "Is the maximum subnet range feasible with IPV6 used?([n]/y)"
+        reading "是否使用IPV6可行的最大子网范围？([n]/y)" select_maximum_subset
         if [ "$select_maximum_subset" = "y" ] || [ "$select_maximum_subset" = "Y" ]; then
             echo "" >/usr/local/bin/pve_maximum_subset
         fi
