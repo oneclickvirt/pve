@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/spiritLHLS/pve
-# 2023.11.26
+# 2024.01.31
 # 自动选择要绑定的IPV6地址
 # ./buildvm_onlyv6.sh VMID 用户名 密码 CPU核数 内存 硬盘 系统 存储盘
 # ./buildvm_onlyv6.sh 152 test1 1234567 1 512 5 debian11 local
@@ -101,12 +101,6 @@ if [ -z "${system_arch}" ] || [ ! -v system_arch ]; then
 fi
 if [ "$system_arch" = "x86" ]; then
     file_path=""
-    # 新的自动修补的镜像
-    response=$(curl -s -m 6 -H "Accept: application/vnd.github.v3+json" "https://api.github.com/repos/oneclickvirt/pve_kvm_images/releases/tags/images")
-    new_images=($(echo "$response" | grep -oP '"name": "\K[^"]+' | grep 'qcow2' | awk '{print $1}'))
-    for ((i=0; i<${#new_images[@]}; i++)); do
-        new_images[i]=${new_images[i]%.qcow2}
-    done
     # 过去手动修补的镜像
     old_images=(
         "debian10"
@@ -126,8 +120,26 @@ if [ "$system_arch" = "x86" ]; then
         "rockylinux8"
         "centos8-stream"
     )
-    combined=($(echo "${old_images[@]}" "${new_images[@]}" | tr ' ' '\n' | sort -u))
-    systems=("${combined[@]}")
+    # 新的自动修补的镜像
+    response=$(curl -sSL -m 6 -H "Accept: application/vnd.github.v3+json" "https://api.github.com/repos/oneclickvirt/pve_kvm_images/releases/tags/images")
+    # 如果 https://api.github.com/ 请求失败，则使用 https://githubapi.spiritlhl.workers.dev/ ，此时可能宿主机无IPV4网络
+    if [ -z "$response" ]; then
+        response=$(curl -sSL -m 6 -H "Accept: application/vnd.github.v3+json" "https://githubapi.spiritlhl.workers.dev/repos/oneclickvirt/pve_kvm_images/releases/tags/images")
+    fi
+    # 如果 https://githubapi.spiritlhl.workers.dev/ 请求失败，则使用 https://githubapi.spiritlhl.top/ ，此时可能宿主机在国内
+    if [ -z "$response" ]; then
+        response=$(curl -sSL -m 6 -H "Accept: application/vnd.github.v3+json" "https://githubapi.spiritlhl.top/repos/oneclickvirt/pve_kvm_images/releases/tags/images")
+    fi
+    if [[ -n "$response" ]]; then
+        new_images=($(echo "$response" | grep -oP '"name": "\K[^"]+' | grep 'qcow2' | awk '{print $1}'))
+        for ((i=0; i<${#new_images[@]}; i++)); do
+            new_images[i]=${new_images[i]%.qcow2}
+        done
+        combined=($(echo "${old_images[@]}" "${new_images[@]}" | tr ' ' '\n' | sort -u))
+        systems=("${combined[@]}")
+    else
+        systems=("${old_images[@]}")
+    fi
     for sys in ${systems[@]}; do
         if [[ "$system" == "$sys" ]]; then
             file_path="/root/qcow/${system}.qcow2"
@@ -143,14 +155,16 @@ if [ "$system_arch" = "x86" ]; then
         check_cdn_file
         ver=""
         # 使用新镜像，自动修补版本
-        for image in "${new_images[@]}"; do
-            if [[ " ${image} " == *" $system "* ]]; then
-                ver="auto_build"
-                url="${cdn_success_url}https://github.com/oneclickvirt/pve_kvm_images/releases/download/images/${image}.qcow2"
-                curl -Lk -o "$file_path" "$url"
-                break
-            fi
-        done
+        if [[ -n "$new_images" ]]; then
+            for image in "${new_images[@]}"; do
+                if [[ " ${image} " == *" $system "* ]]; then
+                    ver="auto_build"
+                    url="${cdn_success_url}https://github.com/oneclickvirt/pve_kvm_images/releases/download/images/${image}.qcow2"
+                    curl -Lk -o "$file_path" "$url"
+                    break
+                fi
+            done
+        fi
         # 使用旧镜像，手动修补版本
         if [[ -z "$ver" ]]; then
             v20=("fedora34" "almalinux8" "debian11" "debian12" "ubuntu18" "ubuntu20" "ubuntu22" "centos7" "alpinelinux_edge" "alpinelinux_stable" "rockylinux8")
