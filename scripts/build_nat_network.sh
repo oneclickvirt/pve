@@ -628,7 +628,7 @@ systemctl start check-dns.service
 
 # 检测ndppd服务是否启动了
 service_status=$(systemctl is-active ndpresponder.service)
-if [ "$service_status" == "active" ]; then
+if [ "$service_status" == "active" || "$service_status" == "activating" ]; then
     _green "The ndpresponder service started successfully and is running, and the host can open a service with a separate IPV6 address."
     _green "ndpresponder服务启动成功且正在运行，宿主机可开设带独立IPV6地址的服务。"
 else
@@ -637,11 +637,7 @@ else
 fi
 
 # 打印信息
-# _green "Although the gateway has been set automatically, I am not sure if it has been applied successfully, please check in Datacenter-->pve-->System-->Network in PVE"
-# _green "If vmbr0 and vmbr1 are displayed properly and the Apply Configuration button is grayed out, there is no need to reboot"
-# _green "If the above scenario is different, click on the Apply Configuration button, wait a few minutes and reboot the system to ensure that the gateway has been successfully applied"
+_green "It is recommended to restart the server once to apply the new configuration."
+_green "推荐重启一次服务器，以应用新配置"
 _green "you can test open a virtual machine or container to see if the actual network has been applied successfully"
-# _green "虽然已自动设置网关，但不确定是否已成功应用，请查看PVE中的 Datacenter-->pve-->System-->Network"
-# _green "如果 vmbr0 和 vmbr1 已正常显示且 Apply Configuration 这个按钮是灰色的，则不用执行 reboot 重启系统"
-# _green "上述情形如果有不同的，请点击 Apply Configuration 这个按钮，等待几分钟后重启系统，确保网关已成功应用"
 _green "你可以测试开一个虚拟机或者容器看看就知道是不是实际网络已应用成功了"

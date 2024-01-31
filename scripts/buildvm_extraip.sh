@@ -89,7 +89,14 @@ if [ -z "${system_arch}" ] || [ ! -v system_arch ]; then
 fi
 if [ "$system_arch" = "x86" ]; then
     file_path=""
-    systems=(
+    # 新的自动修补的镜像
+    response=$(curl -s -m 6 -H "Accept: application/vnd.github.v3+json" "https://api.github.com/repos/oneclickvirt/pve_kvm_images/releases/tags/images")
+    new_images=($(echo "$response" | grep -oP '"name": "\K[^"]+' | grep 'qcow2' | awk '{print $1}'))
+    for ((i=0; i<${#new_images[@]}; i++)); do
+        new_images[i]=${new_images[i]%.qcow2}
+    done
+    # 过去手动修补的镜像
+    old_images=(
         "debian10"
         "debian11"
         "debian12"
@@ -107,6 +114,8 @@ if [ "$system_arch" = "x86" ]; then
         "rockylinux8"
         "centos8-stream"
     )
+    combined=($(echo "${old_images[@]}" "${new_images[@]}" | tr ' ' '\n' | sort -u))
+    systems=("${combined[@]}")
     for sys in ${systems[@]}; do
         if [[ "$system" == "$sys" ]]; then
             file_path="/root/qcow/${system}.qcow2"
@@ -121,31 +130,43 @@ if [ "$system_arch" = "x86" ]; then
     if [ ! -f "$file_path" ]; then
         check_cdn_file
         ver=""
-        v20=("fedora34" "almalinux8" "debian11" "debian12" "ubuntu18" "ubuntu20" "ubuntu22" "centos7" "alpinelinux_edge" "alpinelinux_stable" "rockylinux8")
-        v11=("ubuntu18" "ubuntu20" "ubuntu22" "debian10" "debian11")
-        v10=("almalinux8" "archlinux" "fedora33" "opensuse-leap-15" "ubuntu18" "ubuntu20" "ubuntu22" "debian10" "debian11")
-        ver_list=(v20 v11 v10)
-        ver_name_list=("v2.0" "v1.1" "v1.0")
-        for ver in "${ver_list[@]}"; do
-            array_name="${ver}[@]"
-            array=("${!array_name}")
-            if [[ " ${array[*]} " == *" $system "* ]]; then
-                index=$(echo ${ver_list[*]} | tr -s ' ' '\n' | grep -n "$ver" | cut -d':' -f1)
-                ver="${ver_name_list[$((index - 1))]}"
+        # 使用新镜像，自动修补版本
+        for image in "${new_images[@]}"; do
+            if [[ " ${image} " == *" $system "* ]]; then
+                ver="auto_build"
+                url="${cdn_success_url}https://github.com/oneclickvirt/pve_kvm_images/releases/download/images/${image}.qcow2"
+                curl -Lk -o "$file_path" "$url"
                 break
             fi
         done
-        if [[ "$system" == "centos8-stream" ]]; then
-            url="https://api.ilolicon.com/centos8-stream.qcow2"
-            curl -Lk -o "$file_path" "$url"
-        else
-            if [[ -n "$ver" ]]; then
-                url="${cdn_success_url}https://github.com/oneclickvirt/kvm_images/releases/download/${ver}/${system}.qcow2"
+        # 使用旧镜像，手动修补版本
+        if [[ -z "$ver" ]]; then
+            v20=("fedora34" "almalinux8" "debian11" "debian12" "ubuntu18" "ubuntu20" "ubuntu22" "centos7" "alpinelinux_edge" "alpinelinux_stable" "rockylinux8")
+            v11=("ubuntu18" "ubuntu20" "ubuntu22" "debian10" "debian11")
+            v10=("almalinux8" "archlinux" "fedora33" "opensuse-leap-15" "ubuntu18" "ubuntu20" "ubuntu22" "debian10" "debian11")
+            ver_list=(v20 v11 v10)
+            ver_name_list=("v2.0" "v1.1" "v1.0")
+            for ver in "${ver_list[@]}"; do
+                array_name="${ver}[@]"
+                array=("${!array_name}")
+                if [[ " ${array[*]} " == *" $system "* ]]; then
+                    index=$(echo ${ver_list[*]} | tr -s ' ' '\n' | grep -n "$ver" | cut -d':' -f1)
+                    ver="${ver_name_list[$((index - 1))]}"
+                    break
+                fi
+            done
+            if [[ "$system" == "centos8-stream" ]]; then
+                url="https://api.ilolicon.com/centos8-stream.qcow2"
                 curl -Lk -o "$file_path" "$url"
             else
-                _red "Unable to install corresponding system, please check https://github.com/oneclickvirt/kvm_images/ for supported system images "
-                _red "无法安装对应系统，请查看 https://github.com/oneclickvirt/kvm_images/ 支持的系统镜像 "
-                exit 1
+                if [[ -n "$ver" ]]; then
+                    url="${cdn_success_url}https://github.com/oneclickvirt/kvm_images/releases/download/${ver}/${system}.qcow2"
+                    curl -Lk -o "$file_path" "$url"
+                else
+                    _red "Unable to install corresponding system, please check https://github.com/oneclickvirt/kvm_images/ for supported system images "
+                    _red "无法安装对应系统，请查看 https://github.com/oneclickvirt/kvm_images/ 支持的系统镜像 "
+                    exit 1
+                fi
             fi
         fi
     fi
