@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/spiritLHLS/pve
-# 2024.01.09
+# 2024.02.02
 
 ########## 预设部分输出和部分中间变量
 
@@ -228,6 +228,9 @@ if ! command -v crontab >/dev/null 2>&1; then
     apt-get install -y cron 
 fi
 apt-get install -y net-tools
+
+# 请求一次IPV6网络避免未加载配置
+curl -m 5 ipv6.ip.sb || curl -m 5 ipv6.ip.sb
 
 # cdn检测
 cdn_urls=("https://cdn0.spiritlhl.top/" "http://cdn3.spiritlhl.net/" "http://cdn1.spiritlhl.net/" "https://ghproxy.com/" "http://cdn2.spiritlhl.net/")
@@ -625,7 +628,7 @@ if [ -f "/etc/network/interfaces.new" ]; then
     rm -rf /etc/network/interfaces.new
 fi
 systemctl start check-dns.service
-
+sleep 3
 # 检测ndppd服务是否启动了
 service_status=$(systemctl is-active ndpresponder.service)
 if [ "$service_status" == "active" || "$service_status" == "activating" ]; then
