@@ -636,7 +636,9 @@ if [ "$service_status" == "active" || "$service_status" == "activating" ]; then
     _green "ndpresponder服务启动成功且正在运行，宿主机可开设带独立IPV6地址的服务。"
 else
     _green "The status of the ndpresponder service is abnormal and the host may not open a service with a separate IPV6 address."
-    _green "ndpresponder服务状态异常，宿主机不可开设带独立IPV6地址的服务。"
+    _green "ndpresponder服务状态异常，宿主机可能不可开设带独立IPV6地址的服务。"
+    _green "Restarting the server may resolve this issue."
+    _green "重启服务器可能解决此问题。"
 fi
 
 # 打印信息
