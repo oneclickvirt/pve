@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/spiritLHLS/pve
-# 2024.01.09
+# 2024.02.04
 
 # 用颜色输出信息
 _red() { echo -e "\033[31m\033[01m$@\033[0m"; }
@@ -261,13 +261,13 @@ if command -v lshw >/dev/null 2>&1; then
     fi
     if [ ! -f /usr/local/bin/pve_ipv6_prefixlen ]; then
         ipv6_prefixlen=""
-        output=$(ifconfig ${interface} | grep -oP 'inet6 [^f][^e][^8][^0].*prefixlen \K\d+')
+        output=$(ifconfig ${interface} | grep -oP 'inet6 (?!fe80:).*prefixlen \K\d+')
         num_lines=$(echo "$output" | wc -l)
         if [ $num_lines -ge 2 ]; then
             ipv6_prefixlen=$(echo "$output" | sort -n | head -n 1)
         else
             ipv6_prefixlen=$(echo "$output" | head -n 1)
-        fi 
+        fi
         if [ -z "$ipv6_prefixlen" ]; then
             ipv6_prefixlen=$(ifconfig eth0 | grep -oP 'prefixlen \K\d+' | head -n 1)
         fi

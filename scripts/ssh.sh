@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/spiritLHLS/pve
-# 2023.12.21
+# 2024.02.04
 
 if [ -f "/etc/resolv.conf" ]; then
     cp /etc/resolv.conf /etc/resolv.conf.bak
@@ -124,7 +124,7 @@ install_required_modules() {
         fi
     done
     if command -v apt-get >/dev/null 2>&1; then
-        ${PACKAGE_INSTALL[int]} cron 
+        ${PACKAGE_INSTALL[int]} cron
     else
         ${PACKAGE_INSTALL[int]} cronie
     fi
@@ -143,6 +143,7 @@ fi
 checkupdate
 install_required_modules
 if [ -f "/etc/motd" ]; then
+    echo '' >/etc/motd
     echo 'Related repo https://github.com/spiritLHLS/pve' >>/etc/motd
     echo '--by https://t.me/spiritlhl' >>/etc/motd
 fi

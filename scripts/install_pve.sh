@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/spiritLHLS/pve
-# 2024.01.09
+# 2024.02.04
 
 ########## 预设部分输出和部分中间变量
 
@@ -85,7 +85,6 @@ if [ -d "/run/network/interfaces.d/" ]; then
         fi
     fi
 fi
-
 
 ########## 定义部分需要使用的函数
 
@@ -944,7 +943,7 @@ ipv6_address=$(cat /usr/local/bin/pve_check_ipv6)
 fe80_address=$(cat /usr/local/bin/pve_fe80_address)
 if [ ! -f /usr/local/bin/pve_ipv6_prefixlen ] || [ ! -s /usr/local/bin/pve_ipv6_prefixlen ] || [ "$(sed -e '/^[[:space:]]*$/d' /usr/local/bin/pve_ipv6_prefixlen)" = "" ]; then
     ipv6_prefixlen=""
-    output=$(ifconfig ${interface} | grep -oP 'inet6 [^f][^e][^8][^0].*prefixlen \K\d+')
+    output=$(ifconfig ${interface} | grep -oP 'inet6 (?!fe80:).*prefixlen \K\d+')
     num_lines=$(echo "$output" | wc -l)
     if [ $num_lines -ge 2 ]; then
         ipv6_prefixlen=$(echo "$output" | sort -n | head -n 1)
