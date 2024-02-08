@@ -189,7 +189,7 @@ else
                 if [ ! -f "/var/lib/vz/template/cache/${system_name}" ]; then
                     curl -o "/var/lib/vz/template/cache/${system_name}" "${cdn_success_url}https://github.com/oneclickvirt/pve_lxc_images/releases/download/${en_system}/${system_name}"
                     if [ $? -ne 0 ]; then
-                        echo "Failed to download ${system_name}"
+                        _red "Failed to download ${system_name}"
                         fixed_system=false
                         rm -rf "${system_name}"
                     fi

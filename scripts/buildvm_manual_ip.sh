@@ -178,8 +178,15 @@ if [ "$system_arch" = "x86" ]; then
                     ver="auto_build"
                     url="${cdn_success_url}https://github.com/oneclickvirt/pve_kvm_images/releases/download/images/${image}.qcow2"
                     curl -Lk -o "$file_path" "$url"
-                    _blue "Use auto-fixed image: ${image}"
-                    break
+                    if [ $? -ne 0 ]; then
+                        _red "Failed to download $file_path"
+                        ver=""
+                        rm -rf "$file_path"
+                        break
+                    else
+                        _blue "Use auto-fixed image: ${image}"
+                        break
+                    fi
                 fi
             done
         fi
@@ -202,12 +209,28 @@ if [ "$system_arch" = "x86" ]; then
             if [[ "$system" == "centos8-stream" ]]; then
                 url="https://api.ilolicon.com/centos8-stream.qcow2"
                 curl -Lk -o "$file_path" "$url"
-                _blue "Use manual-fixed image: ${system}"
+                if [ $? -ne 0 ]; then
+                    _red "Unable to download corresponding system, please check https://github.com/oneclickvirt/kvm_images/ for supported system images "
+                    _red "无法下载对应系统，请查看 https://github.com/oneclickvirt/kvm_images/ 支持的系统镜像 "
+                    rm -rf "$file_path"
+                    exit 1
+                else
+                    _blue "Use manual-fixed image: ${system}"
+                    break
+                fi
             else
                 if [[ -n "$ver" ]]; then
                     url="${cdn_success_url}https://github.com/oneclickvirt/kvm_images/releases/download/${ver}/${system}.qcow2"
                     curl -Lk -o "$file_path" "$url"
-                    _blue "Use manual-fixed image: ${system}"
+                    if [ $? -ne 0 ]; then
+                        _red "Unable to download corresponding system, please check https://github.com/oneclickvirt/kvm_images/ for supported system images "
+                        _red "无法下载对应系统，请查看 https://github.com/oneclickvirt/kvm_images/ 支持的系统镜像 "
+                        rm -rf "$file_path"
+                        exit 1
+                    else
+                        _blue "Use manual-fixed image: ${system}"
+                        break
+                    fi
                 else
                     _red "Unable to install corresponding system, please check https://github.com/oneclickvirt/kvm_images/ for supported system images "
                     _red "无法安装对应系统，请查看 https://github.com/oneclickvirt/kvm_images/ 支持的系统镜像 "
