@@ -83,6 +83,8 @@ rm -rf "ct$name"
 en_system=$(echo "$system_ori" | sed 's/[0-9]*//g')
 num_system=$(echo "$system_ori" | sed 's/[a-zA-Z]*//g')
 system="$en_system-$num_system"
+cdn_urls=("https://cdn0.spiritlhl.top/" "http://cdn3.spiritlhl.net/" "http://cdn1.spiritlhl.net/" "https://ghproxy.com/" "http://cdn2.spiritlhl.net/")
+check_cdn_file
 if [ "$system_arch" = "arch" ]; then
     if [ "$en_system" = "ubuntu" ]; then
         case "$system_ori" in
@@ -155,9 +157,9 @@ if [ "$system_arch" = "arch" ]; then
     fi
 else
     system_name=""
+    system_names=()
     fixed_system=false
     system="${en_system}-${num_system}"
-    system_names=()
     response=$(curl -sSL -H "Accept: application/vnd.github.v3+json" "https://api.github.com/repos/oneclickvirt/pve_lxc_images/releases/tags/${en_system}" | grep -oP '"name": "\K[^"]+\.zst' | awk 'NR%2==1')
     # 如果 https://api.github.com/ 请求失败，则使用 https://githubapi.spiritlhl.workers.dev/ ，此时可能宿主机无IPV4网络
     if [ -z "$response" ]; then
@@ -170,17 +172,26 @@ else
     if [ $? -eq 0 ] && [ -n "$response" ]; then
         system_names+=($(echo "$response"))
     fi
-    for sy in "${system_names[@]}"; do
-        if [[ $sy == "${system}"* ]]; then
-            system_name="$sy"
-            fixed_system=true
-            if [ ! -f "/var/lib/vz/template/cache/${system_name}" ]; then
-                curl -o "/var/lib/vz/template/cache/${system_name}" "https://github.com/oneclickvirt/pve_lxc_images/releases/download/${en_system}/${system_name}"
+    if [ ${#system_names[@]} -eq 0 ]; then
+        echo "No suitable system names found."
+    else
+        for sy in "${system_names[@]}"; do
+            if [[ $sy == "${system}"* ]]; then
+                system_name="$sy"
+                fixed_system=true
+                if [ ! -f "/var/lib/vz/template/cache/${system_name}" ]; then
+                    curl -o "/var/lib/vz/template/cache/${system_name}" "${cdn_success_url}https://github.com/oneclickvirt/pve_lxc_images/releases/download/${en_system}/${system_name}"
+                    if [ $? -ne 0 ]; then
+                        echo "Failed to download ${system_name}"
+                        fixed_system=false
+                        rm -rf "${system_name}"
+                    fi
+                fi
+                _blue "Use self-fixed image: ${system_name}"
+                break
             fi
-            _blue "Use self-fixed image: ${system_name}"
-            break
-        fi
-    done
+        done
+    fi
     if [ "$fixed_system" = false ] && [ -z "$system_nam" ]; then
         system_name=$(pveam available --section system | grep "$system" | awk '{print $2}' | head -n1)
         if ! pveam available --section system | grep "$system" >/dev/null; then
@@ -215,9 +226,6 @@ check_cdn_file() {
         _yellow "No CDN available, no use CDN"
     fi
 }
-
-cdn_urls=("https://cdn0.spiritlhl.top/" "http://cdn3.spiritlhl.net/" "http://cdn1.spiritlhl.net/" "https://ghproxy.com/" "http://cdn2.spiritlhl.net/")
-check_cdn_file
 
 first_digit=${CTID:0:1}
 second_digit=${CTID:1:1}
