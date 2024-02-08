@@ -19,6 +19,7 @@
 - 修复镜像在下载后重复使用可能重复下载的问题
 - 增加适配 alpine fedora archlinux 待适配 devuan opensuse gentoo
 - 大幅缩短LXC容器开设时间(在使用自修补镜像时)
+- 增加下载镜像失败时的错误处理
 
 [更新日志](CHANGELOG.md)
 
