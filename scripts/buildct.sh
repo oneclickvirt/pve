@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/spiritLHLS/pve
-# 2023.12.20
+# 2024.02.08
 
 # ./buildct.sh CTID 密码 CPU核数 内存 硬盘 SSH端口 80端口 443端口 外网端口起 外网端口止 系统 存储盘 独立IPV6
 # ./buildct.sh 102 1234567 1 512 5 20001 20002 20003 30000 30025 debian11 local N
@@ -138,7 +138,9 @@ if [ "$system_arch" = "arch" ]; then
         version=${num_system}
     fi
     if [[ -z "${CN}" || "${CN}" != true ]]; then
-        curl -o "/var/lib/vz/template/cache/${en_system}-arm64-${version}-cloud.tar.xz" "https://jenkins.linuxcontainers.org/view/LXC/job/image-${en_system}/architecture=arm64,release=${version},variant=cloud/lastSuccessfulBuild/artifact/rootfs.tar.xz"
+        if [ ! -f "/var/lib/vz/template/cache/${en_system}-arm64-${version}-cloud.tar.xz" ]; then
+            curl -o "/var/lib/vz/template/cache/${en_system}-arm64-${version}-cloud.tar.xz" "https://jenkins.linuxcontainers.org/view/LXC/job/image-${en_system}/architecture=arm64,release=${version},variant=cloud/lastSuccessfulBuild/artifact/rootfs.tar.xz"
+        fi
     else
         # https://mirror.tuna.tsinghua.edu.cn/lxc-images/images/
         URL="https://mirror.tuna.tsinghua.edu.cn/lxc-images/images/${en_system}/${version}/arm64/cloud/"
@@ -147,17 +149,49 @@ if [ "$system_arch" = "arch" ]; then
         sorted_links=$(echo "$folder_links_dates" | sort -k2 -r)
         latest_folder_link=$(echo "$sorted_links" | head -n 1 | awk '{print $1}')
         latest_folder_url="${URL}${latest_folder_link}"
-        curl -o "/var/lib/vz/template/cache/${en_system}-arm64-${version}-cloud.tar.xz" "${latest_folder_url}/rootfs.tar.xz"
+        if [ ! -f "/var/lib/vz/template/cache/${en_system}-arm64-${version}-cloud.tar.xz" ]; then
+            curl -o "/var/lib/vz/template/cache/${en_system}-arm64-${version}-cloud.tar.xz" "${latest_folder_url}/rootfs.tar.xz"
+        fi
     fi
 else
-    system_name=$(pveam available --section system | grep "$system" | awk '{print $2}' | head -n1)
-    if ! pveam available --section system | grep "$system" >/dev/null; then
-        _red "No such system"
-        exit
-    else
-        _green "Use $system_name"
+    system_name=""
+    fixed_system=false
+    system="${en_system}-${num_system}"
+    response=$(curl -sSL -H "Accept: application/vnd.github.v3+json" "https://api.github.com/repos/oneclickvirt/pve_lxc_images/releases/tags/${en_system}" | grep -oP '"name": "\K[^"]+\.zst' | awk 'NR%2==1')
+    # 如果 https://api.github.com/ 请求失败，则使用 https://githubapi.spiritlhl.workers.dev/ ，此时可能宿主机无IPV4网络
+    if [ -z "$response" ]; then
+        response=$(curl -sSL -H "Accept: application/vnd.github.v3+json" "https://githubapi.spiritlhl.workers.dev/repos/oneclickvirt/pve_lxc_images/releases/tags/${en_system}" | grep -oP '"name": "\K[^"]+\.zst' | awk 'NR%2==1')
     fi
-    pveam download local $system_name
+    # 如果 https://githubapi.spiritlhl.workers.dev/ 请求失败，则使用 https://githubapi.spiritlhl.top/ ，此时可能宿主机在国内
+    if [ -z "$response" ]; then
+        response=$(curl -sSL -H "Accept: application/vnd.github.v3+json" "https://githubapi.spiritlhl.top/repos/oneclickvirt/pve_lxc_images/releases/tags/${en_system}" | grep -oP '"name": "\K[^"]+\.zst' | awk 'NR%2==1')
+    fi
+    if [ $? -eq 0 ] && [ -n "$response" ]; then
+        system_names=(echo "$response")
+    fi
+    for sy in "${system_names[@]}"; do
+        if [[ $sy == "$system"* ]]; then
+            system_name="$sy"
+            fixed_system=true
+            if [ ! -f "/var/lib/vz/template/cache/${system_name}" ]; then
+                curl -o "/var/lib/vz/template/cache/${system_name}" "https://github.com/oneclickvirt/pve_lxc_images/releases/download/${en_system}/${system_name}"
+            fi
+            _blue "Use self-fixed image: ${system_name}"
+            break
+        fi
+    done
+    if [ "$fixed_system" = false ] && [ -z "$system_nam" ]; then
+        system_name=$(pveam available --section system | grep "$system" | awk '{print $2}' | head -n1)
+        if ! pveam available --section system | grep "$system" >/dev/null; then
+            _red "No such system"
+            exit 1
+        else
+            _green "Use $system_name"
+        fi
+        if [ ! -f "/var/lib/vz/template/cache/${system_name}" ]; then
+            pveam download local $system_name
+        fi
+    fi
 fi
 
 check_cdn() {
@@ -245,7 +279,11 @@ fi
 
 user_ip="172.16.1.${num}"
 if [ "$system_arch" = "x86" ]; then
-    pct create $CTID ${storage}:vztmpl/$system_name -cores $core -cpuunits 1024 -memory $memory -swap 128 -rootfs ${storage}:${disk} -onboot 1 -password $password -features nesting=1
+    if [ "$fixed_system" = true ]; then
+        pct create $CTID /var/lib/vz/template/cache/$system_name -cores $core -cpuunits 1024 -memory $memory -swap 128 -rootfs ${storage}:${disk} -onboot 1 -password $password -features nesting=1
+    else
+        pct create $CTID ${storage}:vztmpl/$system_name -cores $core -cpuunits 1024 -memory $memory -swap 128 -rootfs ${storage}:${disk} -onboot 1 -password $password -features nesting=1
+    fi
 else
     temp_system_name="${en_system}-arm64-${version}-cloud.tar.xz"
     pct create $CTID ${storage}:vztmpl/${temp_system_name} -cores $core -cpuunits 1024 -memory $memory -swap 128 -rootfs ${storage}:${disk} -onboot 1 -password $password -features nesting=1
@@ -271,48 +309,101 @@ else
 fi
 if [ "$independent_ipv6_status" == "N" ]; then
     # if [ -z "$ipv6_address" ] || [ -z "$ipv6_prefixlen" ] || [ -z "$ipv6_gateway" ] || [ "$ipv6_prefixlen" -gt 112 ]; then
-        pct set $CTID --net0 name=eth0,ip=${user_ip}/24,bridge=vmbr1,gw=172.16.1.1
-        pct set $CTID --nameserver 1.1.1.1
-        pct set $CTID --searchdomain local
+    pct set $CTID --net0 name=eth0,ip=${user_ip}/24,bridge=vmbr1,gw=172.16.1.1
+    pct set $CTID --nameserver 1.1.1.1
+    pct set $CTID --searchdomain local
     # else
     #     pct set $CTID --net0 name=eth0,ip=${user_ip}/24,bridge=vmbr1,gw=172.16.1.1,ip6=${ipv6_address}/${ipv6_prefixlen},gw6=${ipv6_gateway}
     #     pct set $CTID --nameserver 8.8.8.8,2001:4860:4860::8888 --nameserver 8.8.4.4,2001:4860:4860::8844
     # fi
 fi
 sleep 3
-if echo "$system" | grep -qiE "centos|almalinux|rockylinux"; then
-    pct exec $CTID -- yum install -y curl
+if [ "$fixed_system" = true ]; then
     if [[ -z "${CN}" || "${CN}" != true ]]; then
-        pct exec $CTID -- yum update -y 
-        pct exec $CTID -- yum update
-        pct exec $CTID -- yum install -y dos2unix curl
+        sleep 1
     else
-        pct exec $CTID -- yum install -y curl
         pct exec $CTID -- curl -lk https://gitee.com/SuperManito/LinuxMirrors/raw/main/ChangeMirrors.sh -o ChangeMirrors.sh
         pct exec $CTID -- chmod 777 ChangeMirrors.sh
         pct exec $CTID -- ./ChangeMirrors.sh --source mirrors.tuna.tsinghua.edu.cn --web-protocol http --intranet false --close-firewall true --backup true --updata-software false --clean-cache false --ignore-backup-tips
         pct exec $CTID -- rm -rf ChangeMirrors.sh
-        pct exec $CTID -- yum install -y dos2unix
     fi
+    pct exec $CTID -- service ssh restart
+    pct exec $CTID -- service sshd restart
+    pct exec $CTID -- systemctl restart sshd
+    pct exec $CTID -- systemctl restart ssh
 else
-    if [[ -z "${CN}" || "${CN}" != true ]]; then
-        pct exec $CTID -- apt-get update -y
-        pct exec $CTID -- dpkg --configure -a
-        pct exec $CTID -- apt-get update
-        pct exec $CTID -- apt-get install dos2unix curl -y
+    if echo "$system" | grep -qiE "centos|almalinux|rockylinux" >/dev/null 2>&1; then
+        if [[ -z "${CN}" || "${CN}" != true ]]; then
+            pct exec $CTID -- yum update -y
+            pct exec $CTID -- yum install -y dos2unix curl
+        else
+            pct exec $CTID -- yum install -y curl
+            pct exec $CTID -- curl -lk https://gitee.com/SuperManito/LinuxMirrors/raw/main/ChangeMirrors.sh -o ChangeMirrors.sh
+            pct exec $CTID -- chmod 777 ChangeMirrors.sh
+            pct exec $CTID -- ./ChangeMirrors.sh --source mirrors.tuna.tsinghua.edu.cn --web-protocol http --intranet false --close-firewall true --backup true --updata-software false --clean-cache false --ignore-backup-tips
+            pct exec $CTID -- rm -rf ChangeMirrors.sh
+            pct exec $CTID -- yum install -y dos2unix
+        fi
+    elif echo "$system" | grep -qiE "fedora" >/dev/null 2>&1; then
+        if [[ -z "${CN}" || "${CN}" != true ]]; then
+            pct exec $CTID -- dnf update -y
+            pct exec $CTID -- dnf install -y dos2unix curl
+        else
+            pct exec $CTID -- dnf install -y curl
+            pct exec $CTID -- curl -lk https://gitee.com/SuperManito/LinuxMirrors/raw/main/ChangeMirrors.sh -o ChangeMirrors.sh
+            pct exec $CTID -- chmod 777 ChangeMirrors.sh
+            pct exec $CTID -- ./ChangeMirrors.sh --source mirrors.tuna.tsinghua.edu.cn --web-protocol http --intranet false --close-firewall true --backup true --updata-software false --clean-cache false --ignore-backup-tips
+            pct exec $CTID -- rm -rf ChangeMirrors.sh
+            pct exec $CTID -- dnf install -y dos2unix
+        fi
+    elif echo "$system" | grep -qiE "opensuse" >/dev/null 2>&1; then
+        if [[ -z "${CN}" || "${CN}" != true ]]; then
+            pct exec $CTID -- zypper update -y
+            pct exec $CTID -- zypper --non-interactive install dos2unix curl
+        else
+            pct exec $CTID -- zypper --non-interactive install curl
+            pct exec $CTID -- curl -lk https://gitee.com/SuperManito/LinuxMirrors/raw/main/ChangeMirrors.sh -o ChangeMirrors.sh
+            pct exec $CTID -- chmod 777 ChangeMirrors.sh
+            pct exec $CTID -- ./ChangeMirrors.sh --source mirrors.tuna.tsinghua.edu.cn --web-protocol http --intranet false --close-firewall true --backup true --updata-software false --clean-cache false --ignore-backup-tips
+            pct exec $CTID -- rm -rf ChangeMirrors.sh
+            pct exec $CTID -- zypper --non-interactive install dos2unix
+        fi
+    elif echo "$system" | grep -qiE "alpine|archlinux" >/dev/null 2>&1; then
+        if [[ -z "${CN}" || "${CN}" != true ]]; then
+            sleep 1
+        else
+            pct exec $CTID -- wget https://gitee.com/SuperManito/LinuxMirrors/raw/main/ChangeMirrors.sh
+            pct exec $CTID -- chmod 777 ChangeMirrors.sh
+            pct exec $CTID -- ./ChangeMirrors.sh --source mirrors.tuna.tsinghua.edu.cn --web-protocol http --intranet false --close-firewall true --backup true --updata-software false --clean-cache false --ignore-backup-tips
+            pct exec $CTID -- rm -rf ChangeMirrors.sh
+        fi
+    elif echo "$system" | grep -qiE "ubuntu|debian|devuan" >/dev/null 2>&1; then
+        if [[ -z "${CN}" || "${CN}" != true ]]; then
+            pct exec $CTID -- apt-get update -y
+            pct exec $CTID -- dpkg --configure -a
+            pct exec $CTID -- apt-get update
+            pct exec $CTID -- apt-get install dos2unix curl -y
+        else
+            pct exec $CTID -- apt-get install curl -y --fix-missing
+            pct exec $CTID -- curl -lk https://gitee.com/SuperManito/LinuxMirrors/raw/main/ChangeMirrors.sh -o ChangeMirrors.sh
+            pct exec $CTID -- chmod 777 ChangeMirrors.sh
+            pct exec $CTID -- ./ChangeMirrors.sh --source mirrors.tuna.tsinghua.edu.cn --web-protocol http --intranet false --close-firewall true --backup true --updata-software false --clean-cache false --ignore-backup-tips
+            pct exec $CTID -- rm -rf ChangeMirrors.sh
+            pct exec $CTID -- apt-get install dos2unix -y
+        fi
+    fi
+    if echo "$system" | grep -qiE "alpine|archlinux|gentoo|openwrt" >/dev/null 2>&1; then
+        pct exec $CTID -- curl -L ${cdn_success_url}https://raw.githubusercontent.com/spiritLHLS/pve/main/scripts/ssh_sh.sh -o ssh_sh.sh
+        pct exec $CTID -- chmod 777 ssh_sh.sh
+        pct exec $CTID -- dos2unix ssh_sh.sh
+        pct exec $CTID -- bash ssh_sh.sh
     else
-        pct exec $CTID -- apt-get install curl -y --fix-missing
-        pct exec $CTID -- curl -lk https://gitee.com/SuperManito/LinuxMirrors/raw/main/ChangeMirrors.sh -o ChangeMirrors.sh
-        pct exec $CTID -- chmod 777 ChangeMirrors.sh
-        pct exec $CTID -- ./ChangeMirrors.sh --source mirrors.tuna.tsinghua.edu.cn --web-protocol http --intranet false --close-firewall true --backup true --updata-software false --clean-cache false --ignore-backup-tips
-        pct exec $CTID -- rm -rf ChangeMirrors.sh
-        pct exec $CTID -- apt-get install dos2unix -y
+        pct exec $CTID -- curl -L ${cdn_success_url}https://raw.githubusercontent.com/spiritLHLS/pve/main/scripts/ssh_bash.sh -o ssh_bash.sh
+        pct exec $CTID -- chmod 777 ssh_bash.sh
+        pct exec $CTID -- dos2unix ssh_bash.sh
+        pct exec $CTID -- bash ssh_bash.sh
     fi
 fi
-pct exec $CTID -- curl -L ${cdn_success_url}https://raw.githubusercontent.com/spiritLHLS/pve/main/scripts/ssh.sh -o ssh.sh
-pct exec $CTID -- chmod 777 ssh.sh
-pct exec $CTID -- dos2unix ssh.sh
-pct exec $CTID -- bash ssh.sh
 if [ "$independent_ipv6_status" == "Y" ]; then
     pct exec $CTID -- echo '*/1 * * * * curl -m 6 -s ipv6.ip.sb && curl -m 6 -s ipv6.ip.sb' | crontab -
 fi

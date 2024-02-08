@@ -1,15 +1,15 @@
 #!/bin/bash
 # from
 # https://github.com/spiritLHLS/pve
-# 2024.02.04
+# 2024.02.08
 
 if [ -f "/etc/resolv.conf" ]; then
     cp /etc/resolv.conf /etc/resolv.conf.bak
     echo "nameserver 8.8.8.8" | tee -a /etc/resolv.conf >/dev/null
     echo "nameserver 8.8.4.4" | tee -a /etc/resolv.conf >/dev/null
 fi
-
 temp_file_apt_fix="/tmp/apt_fix.txt"
+# devuan opensuse
 REGEX=("debian|astra" "ubuntu" "centos|red hat|kernel|oracle linux|alma|rocky" "'amazon linux'" "fedora" "arch" "freebsd")
 RELEASE=("Debian" "Ubuntu" "CentOS" "CentOS" "Fedora" "Arch" "FreeBSD")
 PACKAGE_UPDATE=("! apt-get update && apt-get --fix-broken install -y && apt-get update" "apt-get update" "yum -y update" "yum -y update" "yum -y update" "pacman -Sy" "pkg update")

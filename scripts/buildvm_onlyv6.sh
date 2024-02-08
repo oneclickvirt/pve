@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/spiritLHLS/pve
-# 2024.01.31
+# 2024.02.08
 # 自动选择要绑定的IPV6地址
 # ./buildvm_onlyv6.sh VMID 用户名 密码 CPU核数 内存 硬盘 系统 存储盘
 # ./buildvm_onlyv6.sh 152 test1 1234567 1 512 5 debian11 local
@@ -161,6 +161,7 @@ if [ "$system_arch" = "x86" ]; then
                     ver="auto_build"
                     url="${cdn_success_url}https://github.com/oneclickvirt/pve_kvm_images/releases/download/images/${image}.qcow2"
                     curl -Lk -o "$file_path" "$url"
+                    _blue "Use auto-fixed image: ${image}"
                     break
                 fi
             done
@@ -184,10 +185,12 @@ if [ "$system_arch" = "x86" ]; then
             if [[ "$system" == "centos8-stream" ]]; then
                 url="https://api.ilolicon.com/centos8-stream.qcow2"
                 curl -Lk -o "$file_path" "$url"
+                _blue "Use manual-fixed image: ${system}"
             else
                 if [[ -n "$ver" ]]; then
                     url="${cdn_success_url}https://github.com/oneclickvirt/kvm_images/releases/download/${ver}/${system}.qcow2"
                     curl -Lk -o "$file_path" "$url"
+                    _blue "Use manual-fixed image: ${system}"
                 else
                     _red "Unable to install corresponding system, please check https://github.com/oneclickvirt/kvm_images/ for supported system images "
                     _red "无法安装对应系统，请查看 https://github.com/oneclickvirt/kvm_images/ 支持的系统镜像 "
@@ -210,7 +213,7 @@ elif [ "$system_arch" = "arch" ]; then
         _red "无法安装对应系统，请查看 http://cloud-images.ubuntu.com 支持的系统镜像 "
         exit 1
     fi
-    if [ -n "$file_path" ] && [ -f "$file_path" ]; then
+    if [ -n "$file_path" ] && [ ! -f "$file_path" ]; then
         case "$system" in
         ubuntu14)
             version="trusty"
