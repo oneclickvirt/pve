@@ -58,6 +58,28 @@ check_china() {
     fi
 }
 
+check_cdn() {
+    local o_url=$1
+    for cdn_url in "${cdn_urls[@]}"; do
+        if curl -sL -k "$cdn_url$o_url" --max-time 6 | grep -q "success" >/dev/null 2>&1; then
+            export cdn_success_url="$cdn_url"
+            return
+        fi
+        sleep 0.5
+    done
+    export cdn_success_url=""
+}
+
+check_cdn_file() {
+    check_cdn "https://raw.githubusercontent.com/spiritLHLS/ecs/main/back/test"
+    if [ -n "$cdn_success_url" ]; then
+        _yellow "CDN available, using CDN"
+    else
+        _yellow "No CDN available, no use CDN"
+    fi
+}
+
+
 get_system_arch
 check_china
 if [ -z "${system_arch}" ] || [ ! -v system_arch ]; then
@@ -205,27 +227,6 @@ else
         fi
     fi
 fi
-
-check_cdn() {
-    local o_url=$1
-    for cdn_url in "${cdn_urls[@]}"; do
-        if curl -sL -k "$cdn_url$o_url" --max-time 6 | grep -q "success" >/dev/null 2>&1; then
-            export cdn_success_url="$cdn_url"
-            return
-        fi
-        sleep 0.5
-    done
-    export cdn_success_url=""
-}
-
-check_cdn_file() {
-    check_cdn "https://raw.githubusercontent.com/spiritLHLS/ecs/main/back/test"
-    if [ -n "$cdn_success_url" ]; then
-        _yellow "CDN available, using CDN"
-    else
-        _yellow "No CDN available, no use CDN"
-    fi
-}
 
 first_digit=${CTID:0:1}
 second_digit=${CTID:1:1}
