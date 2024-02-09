@@ -284,6 +284,15 @@ if [ "$fixed_system" = true ]; then
         pct exec $CTID -- rm -rf ChangeMirrors.sh
     fi
     sleep 2
+    public_network_check_res=$(pct exec $CTID -- curl -lk -m 6 ${cdn_success_url}https://raw.githubusercontent.com/spiritLHLS/ecs/main/back/test)
+    if [[ $public_network_check_res == *"success"* ]]; then
+        echo "network is public"
+    else
+        echo "nameserver 8.8.8.8" | pct exec $CTID -- tee -a /etc/resolv.conf
+        sleep 1
+        pct exec $CTID -- curl -lk -m 6 ${cdn_success_url}https://raw.githubusercontent.com/spiritLHLS/ecs/main/back/test
+    fi
+    sleep 2
     ssh_check_res=$(pct exec $CTID -- lsof -i:22)
     if [[ $ssh_check_res == *"ssh"* ]]; then
         echo "ssh config correct"
@@ -293,12 +302,6 @@ if [ "$fixed_system" = true ]; then
         sleep 2
         pct exec $CTID -- systemctl restart sshd
         pct exec $CTID -- systemctl restart ssh
-    fi
-    public_network_check_res=$(pct exec $CTID -- curl -lk -m 6 ${cdn_success_url}https://raw.githubusercontent.com/spiritLHLS/ecs/main/back/test)
-    if [[ $public_network_check_res == *"success"* ]]; then
-        echo "network is public"
-    else
-        echo "nameserver 8.8.8.8" | pct exec $CTID -- tee -a /etc/resolv.conf
     fi
 else
     if echo "$system" | grep -qiE "centos|almalinux|rockylinux" >/dev/null 2>&1; then
