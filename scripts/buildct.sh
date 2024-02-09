@@ -182,15 +182,16 @@ else
     system_names=()
     fixed_system=false
     system="${en_system}-${num_system}"
-    response=$(curl -sSL -H "Accept: application/vnd.github.v3+json" "https://api.github.com/repos/oneclickvirt/pve_lxc_images/releases/tags/${en_system}" | grep -oP '"name": "\K[^"]+\.zst' | awk 'NR%2==1')
-    # 如果 https://api.github.com/ 请求失败，则使用 https://githubapi.spiritlhl.workers.dev/ ，此时可能宿主机无IPV4网络
-    if [ -z "$response" ]; then
-        response=$(curl -sSL -H "Accept: application/vnd.github.v3+json" "https://githubapi.spiritlhl.workers.dev/repos/oneclickvirt/pve_lxc_images/releases/tags/${en_system}" | grep -oP '"name": "\K[^"]+\.zst' | awk 'NR%2==1')
-    fi
-    # 如果 https://githubapi.spiritlhl.workers.dev/ 请求失败，则使用 https://githubapi.spiritlhl.top/ ，此时可能宿主机在国内
-    if [ -z "$response" ]; then
-        response=$(curl -sSL -H "Accept: application/vnd.github.v3+json" "https://githubapi.spiritlhl.top/repos/oneclickvirt/pve_lxc_images/releases/tags/${en_system}" | grep -oP '"name": "\K[^"]+\.zst' | awk 'NR%2==1')
-    fi
+    # response=$(curl -sSL -H "Accept: application/vnd.github.v3+json" "https://api.github.com/repos/oneclickvirt/pve_lxc_images/releases/tags/${en_system}" | grep -oP '"name": "\K[^"]+\.zst' | awk 'NR%2==1')
+    # # 如果 https://api.github.com/ 请求失败，则使用 https://githubapi.spiritlhl.workers.dev/ ，此时可能宿主机无IPV4网络
+    # if [ -z "$response" ]; then
+    #     response=$(curl -sSL -H "Accept: application/vnd.github.v3+json" "https://githubapi.spiritlhl.workers.dev/repos/oneclickvirt/pve_lxc_images/releases/tags/${en_system}" | grep -oP '"name": "\K[^"]+\.zst' | awk 'NR%2==1')
+    # fi
+    # # 如果 https://githubapi.spiritlhl.workers.dev/ 请求失败，则使用 https://githubapi.spiritlhl.top/ ，此时可能宿主机在国内
+    # if [ -z "$response" ]; then
+    #     response=$(curl -sSL -H "Accept: application/vnd.github.v3+json" "https://githubapi.spiritlhl.top/repos/oneclickvirt/pve_lxc_images/releases/tags/${en_system}" | grep -oP '"name": "\K[^"]+\.zst' | awk 'NR%2==1')
+    # fi
+    response=$(curl -slk -m 6 "${cdn_success_url}https://raw.githubusercontent.com/oneclickvirt/pve_lxc_images/main/fixed_images.txt")
     if [ $? -eq 0 ] && [ -n "$response" ]; then
         system_names+=($(echo "$response"))
     fi
