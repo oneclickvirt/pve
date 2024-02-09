@@ -15,6 +15,7 @@
 2024.02.09
 
 - 尝试适配 devuan opensuse 待适配 gentoo
+- 修复使用GitHub的API的Release存在缓存延迟的问题，切换使用raw链接获取文件名字
 
 [更新日志](CHANGELOG.md)
 
