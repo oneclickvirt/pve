@@ -284,11 +284,16 @@ if [ "$fixed_system" = true ]; then
         pct exec $CTID -- rm -rf ChangeMirrors.sh
     fi
     sleep 2
-    pct exec $CTID -- command -v service && service ssh restart
-    pct exec $CTID -- command -v service && service sshd restart
-    sleep 2
-    pct exec $CTID -- command -v systemctl && systemctl restart sshd
-    pct exec $CTID -- command -v systemctl && systemctl restart ssh
+    ssh_check_res=$(pct $CTID 102 -- lsof -i:22)
+    if [[ $ssh_check_res == *"ssh"* ]]; then
+        echo "ssh config correct"
+    else
+        pct exec $CTID -- service ssh restart
+        pct exec $CTID -- service sshd restart
+        sleep 2
+        pct exec $CTID -- systemctl restart sshd
+        pct exec $CTID -- systemctl restart ssh
+    fi
 else
     if echo "$system" | grep -qiE "centos|almalinux|rockylinux" >/dev/null 2>&1; then
         if [[ -z "${CN}" || "${CN}" != true ]]; then
