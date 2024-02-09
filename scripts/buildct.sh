@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/spiritLHLS/pve
-# 2024.02.08
+# 2024.02.09
 
 # ./buildct.sh CTID 密码 CPU核数 内存 硬盘 SSH端口 80端口 443端口 外网端口起 外网端口止 系统 存储盘 独立IPV6
 # ./buildct.sh 102 1234567 1 512 5 20001 20002 20003 30000 30025 debian11 local N
@@ -337,10 +337,12 @@ if [ "$fixed_system" = true ]; then
         pct exec $CTID -- ./ChangeMirrors.sh --source mirrors.tuna.tsinghua.edu.cn --web-protocol http --intranet false --close-firewall true --backup true --updata-software false --clean-cache false --ignore-backup-tips
         pct exec $CTID -- rm -rf ChangeMirrors.sh
     fi
-    pct exec $CTID -- service ssh restart
-    pct exec $CTID -- service sshd restart
-    pct exec $CTID -- systemctl restart sshd
-    pct exec $CTID -- systemctl restart ssh
+    sleep 2
+    pct exec $CTID -- command -v service && service ssh restart
+    pct exec $CTID -- command -v service && service sshd restart
+    sleep 2
+    pct exec $CTID -- command -v systemctl && systemctl restart sshd
+    pct exec $CTID -- command -v systemctl && systemctl restart ssh
 else
     if echo "$system" | grep -qiE "centos|almalinux|rockylinux" >/dev/null 2>&1; then
         if [[ -z "${CN}" || "${CN}" != true ]]; then

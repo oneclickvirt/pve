@@ -12,14 +12,9 @@
 
 ## 更新
 
-2024.02.08
+2024.02.09
 
-- LXC模板构建自定义的模板提前初始化好部分内容，避免原始模板过于干净导致初始化时间过长，优先级：自修补镜像 > 官方镜像
-- 已预先安装设置模板的容器仓库：[https://github.com/oneclickvirt/pve_lxc_images](https://github.com/oneclickvirt/pve_lxc_images)
-- 修复镜像在下载后重复使用可能重复下载的问题
-- 增加适配 alpine fedora archlinux 待适配 devuan opensuse gentoo
-- 大幅缩短LXC容器开设时间(在使用自修补镜像时)
-- 增加下载镜像失败时的错误处理
+- 尝试适配 devuan opensuse 待适配 gentoo
 
 [更新日志](CHANGELOG.md)
 
