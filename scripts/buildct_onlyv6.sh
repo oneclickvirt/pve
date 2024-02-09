@@ -284,7 +284,7 @@ if [ "$fixed_system" = true ]; then
         pct exec $CTID -- rm -rf ChangeMirrors.sh
     fi
     sleep 2
-    ssh_check_res=$(pct $CTID 102 -- lsof -i:22)
+    ssh_check_res=$(pct exec $CTID -- lsof -i:22)
     if [[ $ssh_check_res == *"ssh"* ]]; then
         echo "ssh config correct"
     else
