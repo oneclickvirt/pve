@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/spiritLHLS/pve
-# 2024.02.04
+# 2024.02.16
 
 ########## 预设部分输出和部分中间变量
 
@@ -1285,20 +1285,57 @@ if [ "$system_arch" = "x86" ]; then
         echo "$repo_url" >>/etc/apt/sources.list
     fi
 elif [ "$system_arch" = "arch" ]; then
+    arch_pve_urls=(
+    "https://global.mirrors.apqa.cn"
+    "https://mirrors.apqa.cn"
+    "https://hk.mirrors.apqa.cn"
+    "https://mirrors.lierfang.com"
+    "https://de.mirrors.apqa.cn"
+    )
+    min_ping=9999
+    min_ping_url=""
+    for url in "${arch_pve_urls[@]}"; do
+        url_without_protocol="${url#https://}"
+        ping_result=$(ping -c 3 -q "$url_without_protocol" | grep -oP '(?<=min/avg/max/mdev = )[0-9.]+')
+        avg_ping=$(echo "$ping_result" | cut -d '/' -f 2)
+        if [ ! -z "$avg_ping" ]; then
+            echo "Ping [$url_without_protocol]: $avg_ping ms"
+            if (( $(echo "$avg_ping < $min_ping" | bc -l) )); then
+            min_ping="$avg_ping"
+            min_ping_url="$url"
+            fi
+        else
+            _yellow "Unable to get ping [$url_without_protocol]"
+        fi
+    done
+    if [ -z "$min_ping_url" ]; then
+        _red "Unable to get ping value for any URL"
+        exit 1
+    fi
+    echo "Trying to fetch the page using curl from: $min_ping_url"
+    if curl -s -o /dev/null "$min_ping_url"; then
+        echo "curl succeeded, using the URL: $min_ping_url"
+    else
+        echo "curl failed with URL: $min_ping_url"
+        for url in "${arch_pve_urls[@]}"; do
+            if [ "$url" != "$min_ping_url" ]; then
+                echo "Trying the next URL: $url"
+                if curl -s -o /dev/null "$url"; then
+                    echo "curl succeeded, using the URL: $url"
+                    min_ping_url="$url"
+                    break
+                else
+                    echo "curl failed with URL: $url"
+                fi
+            fi
+        done
+    fi
     case $version in
     stretch | buster | bullseye)
-        if [[ -z "${CN}" || "${CN}" != true ]]; then
-            echo "deb https://global.mirrors.apqa.cn/proxmox/debian/pve bullseye port" >/etc/apt/sources.list.d/pveport.list
-        else
-            echo "deb https://mirrors.apqa.cn/proxmox/debian/pve bullseye port" >/etc/apt/sources.list.d/pveport.list
-        fi
+        echo "deb ${min_ping_url}/proxmox/debian/pve bullseye port" >/etc/apt/sources.list.d/pveport.list
         ;;
     bookworm)
-        if [[ -z "${CN}" || "${CN}" != true ]]; then
-            echo "deb https://global.mirrors.apqa.cn/proxmox/debian/pve bookworm port" >/etc/apt/sources.list.d/pveport.list
-        else
-            echo "deb https://mirrors.apqa.cn/proxmox/debian/pve bookworm port" >/etc/apt/sources.list.d/pveport.list
-        fi
+        echo "deb ${min_ping_url}/proxmox/debian/pve bookworm port" >/etc/apt/sources.list.d/pveport.list
         ;;
     *)
         _red "Error: Unsupported Debian version"
@@ -1308,14 +1345,10 @@ elif [ "$system_arch" = "arch" ]; then
         if [ "$confirm" != "y" ]; then
             exit 1
         fi
-        echo "deb https://global.mirrors.apqa.cn/proxmox/debian/pve bullseye port" >/etc/apt/sources.list.d/pveport.list
+        echo "deb ${min_ping_url}/proxmox/debian/pve bullseye port" >/etc/apt/sources.list.d/pveport.list
         ;;
     esac
-    if [[ -z "${CN}" || "${CN}" != true ]]; then
-        curl https://global.mirrors.apqa.cn/proxmox/debian/pveport.gpg -o /etc/apt/trusted.gpg.d/pveport.gpg
-    else
-        curl https://mirrors.apqa.cn/proxmox/debian/pveport.gpg -o /etc/apt/trusted.gpg.d/pveport.gpg
-    fi
+    curl "${min_ping_url}/proxmox/debian/pveport.gpg" -o /etc/apt/trusted.gpg.d/pveport.gpg
 fi
 rebuild_interfaces
 

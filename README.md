@@ -12,10 +12,9 @@
 
 ## 更新
 
-2024.02.09
+2024.02.16
 
-- 尝试适配 devuan opensuse 待适配 gentoo
-- 修复使用GitHub的API的Release存在缓存延迟的问题，切换使用raw链接获取文件名字
+- 修复ARM的服务器安装PVE时遇到的部分镜像链接不可用的情况，使用ping和curl双重检测确保链接的可用性
 
 [更新日志](CHANGELOG.md)
 
