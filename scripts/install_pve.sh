@@ -1332,7 +1332,10 @@ elif [ "$system_arch" = "arch" ]; then
         done
     fi
     case $version in
-    stretch | buster | bullseye)
+    stretch | buster)
+        echo "deb ${min_ping_url}/proxmox/debian/pve sid port" >/etc/apt/sources.list.d/pveport.list
+        ;;
+    bullseye)
         echo "deb ${min_ping_url}/proxmox/debian/pve bullseye port" >/etc/apt/sources.list.d/pveport.list
         ;;
     bookworm)
