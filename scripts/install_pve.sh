@@ -1286,6 +1286,7 @@ if [ "$system_arch" = "x86" ]; then
         echo "$repo_url" >>/etc/apt/sources.list
     fi
 elif [ "$system_arch" = "arch" ]; then
+    # https://github.com/jiangcuo/Proxmox-Port/wiki/Proxmox%E2%80%90Port--Repo-List
     arch_pve_urls=(
     "https://global.mirrors.apqa.cn"
     "https://mirrors.apqa.cn"
@@ -1333,15 +1334,17 @@ elif [ "$system_arch" = "arch" ]; then
     fi
     case $version in
     stretch | buster)
-        _yellow "Unable to install, no third-party source for Proxmox VE 6.x available at this time"
-        _yellow "无法安装，暂无 Proxmox VE 6.x 的第三方源"
-        exit 1
+        # https://gitlab.com/minkebox/pimox
+        curl https://gitlab.com/minkebox/pimox/-/raw/master/dev/KEY.gpg | apt-key add -
+        curl https://gitlab.com/minkebox/pimox/-/raw/master/dev/pimox.list > /etc/apt/sources.list.d/pimox.list
         ;;
     bullseye)
         echo "deb ${min_ping_url}/proxmox/debian/pve bullseye port" >/etc/apt/sources.list.d/pveport.list
+        curl "${min_ping_url}/proxmox/debian/pveport.gpg" -o /etc/apt/trusted.gpg.d/pveport.gpg
         ;;
     bookworm)
         echo "deb ${min_ping_url}/proxmox/debian/pve bookworm port" >/etc/apt/sources.list.d/pveport.list
+        curl "${min_ping_url}/proxmox/debian/pveport.gpg" -o /etc/apt/trusted.gpg.d/pveport.gpg
         ;;
     *)
         _red "Error: Unsupported Debian version"
@@ -1352,9 +1355,9 @@ elif [ "$system_arch" = "arch" ]; then
             exit 1
         fi
         echo "deb ${min_ping_url}/proxmox/debian/pve bullseye port" >/etc/apt/sources.list.d/pveport.list
+        curl "${min_ping_url}/proxmox/debian/pveport.gpg" -o /etc/apt/trusted.gpg.d/pveport.gpg
         ;;
     esac
-    curl "${min_ping_url}/proxmox/debian/pveport.gpg" -o /etc/apt/trusted.gpg.d/pveport.gpg
 fi
 rebuild_interfaces
 

@@ -233,14 +233,16 @@ if [ "$system_arch" = "arch" ]; then
     _green "架构：arch"
     case $version in
     stretch | buster)
-        _yellow "The recognized system is $version"
-        _yellow "识别到的系统为 $version"
-        _yellow "Please upgrade to use debian11 or debian12 system, otherwise you can't install pve by this script."
-        _yellow "请升级使用debian11或debian12系统，否则无法通过本脚本安装pve"
+        _blue "The recognized system is $version"
+        _green "识别到的系统为 $version"
+        _blue "Will use Pixmox for low version PVE installations"
+        _green "将使用 Pixmox 进行低版本的PVE安装"
         ;;
     bullseye | bookworm)
         _blue "The recognized system is $version"
         _green "识别到的系统为 $version"
+        _blue "Will use Proxmox-Port for PVE installation"
+        _green "将使用 Proxmox-Port 进行低版本的PVE安装"
         ;;
     *)
         _yellow "Error: Recognized as an unsupported version of Debian, but you can force an installation attempt or use the custom partitioning method to install the PVE"
