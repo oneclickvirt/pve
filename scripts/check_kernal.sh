@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/spiritLHLS/pve
-# 2024.02.04
+# 2024.02.16
 
 # 用颜色输出信息
 _red() { echo -e "\033[31m\033[01m$@\033[0m"; }
@@ -40,6 +40,25 @@ fi
 if ! command -v sipcalc >/dev/null 2>&1; then
     apt-get install sipcalc -y
 fi
+
+get_system_arch() {
+    local sysarch="$(uname -m)"
+    if [ "${sysarch}" = "unknown" ] || [ "${sysarch}" = "" ]; then
+        local sysarch="$(arch)"
+    fi
+    # 根据架构信息设置系统位数并下载文件,其余 * 包括了 x86_64
+    case "${sysarch}" in
+    "i386" | "i686" | "x86_64")
+        system_arch="x86"
+        ;;
+    "armv7l" | "armv8" | "armv8l" | "aarch64")
+        system_arch="arch"
+        ;;
+    *)
+        system_arch=""
+        ;;
+    esac
+}
 
 check_config() {
     _blue "The machine configuration should meet the minimum requirements of at least 2 cores 2G RAM 20G hard drive"
@@ -207,17 +226,44 @@ check_interface() {
 }
 
 # 检测系统是否支持
+get_system_arch
 version=$(lsb_release -cs)
-case $version in
-stretch | buster | bullseye | bookworm)
-    _blue "The recognized system is $version"
-    _green "识别到的系统为 $version"
-    ;;
-*)
-    _yellow "Error: Recognized as an unsupported version of Debian, but you can force an installation attempt or use the custom partitioning method to install the PVE"
-    _yellow "Error: 识别为不支持的Debian版本，但你可以强行安装尝试或使用自定义分区的方法安装PVE"
-    ;;
-esac
+if [ "$system_arch" = "arch" ]; then
+    _blue "system_arch: arch"
+    _green "架构：arch"
+    case $version in
+    stretch | buster)
+        _yellow "The recognized system is $version"
+        _yellow "识别到的系统为 $version"
+        _yellow "Please upgrade to use debian11 or debian12 system, otherwise you can't install pve by this script."
+        _yellow "请升级使用debian11或debian12系统，否则无法通过本脚本安装pve"
+        ;;
+    bullseye | bookworm)
+        _blue "The recognized system is $version"
+        _green "识别到的系统为 $version"
+        ;;
+    *)
+        _yellow "Error: Recognized as an unsupported version of Debian, but you can force an installation attempt or use the custom partitioning method to install the PVE"
+        _yellow "Error: 识别为不支持的Debian版本，但你可以强行安装尝试或使用自定义分区的方法安装PVE"
+        ;;
+    esac
+elif [ "$system_arch" = "x86" ]; then
+    _blue "system_arch: x86"
+    _green "架构：x86"
+    case $version in
+    stretch | buster | bullseye | bookworm)
+        _blue "The recognized system is $version"
+        _green "识别到的系统为 $version"
+        ;;
+    *)
+        _yellow "Error: Recognized as an unsupported version of Debian, but you can force an installation attempt or use the custom partitioning method to install the PVE"
+        _yellow "Error: 识别为不支持的Debian版本，但你可以强行安装尝试或使用自定义分区的方法安装PVE"
+        ;;
+    esac
+else
+    _yellow "Error: Recognized as an unsupported architecture, but you can force an installation attempt or use the custom partitioning method to install PVE"
+    _yellow "Error: 识别为不支持的架构，但你可以强行安装尝试或使用自定义分区的方法安装PVE"
+fi
 
 # 检测IPV6网络配置
 if command -v lshw >/dev/null 2>&1; then
