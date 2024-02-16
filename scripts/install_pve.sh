@@ -821,6 +821,7 @@ fi
 install_package wget
 install_package curl
 install_package sudo
+install_package ping
 install_package bc
 install_package iptables
 install_package lshw

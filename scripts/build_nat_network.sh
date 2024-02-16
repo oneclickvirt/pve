@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/spiritLHLS/pve
-# 2024.02.02
+# 2024.02.16
 
 ########## 预设部分输出和部分中间变量
 
@@ -635,10 +635,13 @@ if [ "$service_status" == "active" || "$service_status" == "activating" ]; then
     _green "The ndpresponder service started successfully and is running, and the host can open a service with a separate IPV6 address."
     _green "ndpresponder服务启动成功且正在运行，宿主机可开设带独立IPV6地址的服务。"
 else
-    _green "The status of the ndpresponder service is abnormal and the host may not open a service with a separate IPV6 address."
-    _green "ndpresponder服务状态异常，宿主机可能不可开设带独立IPV6地址的服务。"
-    _green "Restarting the server may resolve this issue."
-    _green "重启服务器可能解决此问题。"
+    if grep -q "vmbr2" /etc/network/interfaces; then
+        _green "Please perform reboot to reboot the server to load the IPV6 configuration, otherwise IPV6 is not available"
+        _green "请执行 reboot 重启服务器以加载IPV6配置，否则IPV6不可用"
+    else
+        _green "The status of the ndpresponder service is abnormal and the host can not open a service with a separate IPV6 address."
+        _green "ndpresponder服务状态异常，宿主机不可开设带独立IPV6地址的服务。"
+    fi
 fi
 
 # 打印信息
