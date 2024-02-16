@@ -79,7 +79,6 @@ check_cdn_file() {
     fi
 }
 
-
 get_system_arch
 check_china
 if [ -z "${system_arch}" ] || [ ! -v system_arch ]; then

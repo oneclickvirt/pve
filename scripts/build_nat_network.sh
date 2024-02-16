@@ -225,7 +225,7 @@ if ! command -v ovs-vsctl >/dev/null 2>&1; then
     apt-get install -y openvswitch-switch
 fi
 if ! command -v crontab >/dev/null 2>&1; then
-    apt-get install -y cron 
+    apt-get install -y cron
 fi
 apt-get install -y net-tools
 
@@ -460,7 +460,7 @@ EOF
 fi
 if [[ "${ipv6_gateway_fe80}" == "N" ]]; then
     chattr -i /etc/network/interfaces
-    echo "    up ip addr del $fe80_address dev $interface" >> /etc/network/interfaces
+    echo "    up ip addr del $fe80_address dev $interface" >>/etc/network/interfaces
     remove_duplicate_lines "/etc/network/interfaces"
     chattr -i /etc/network/interfaces
 fi

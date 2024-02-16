@@ -1241,9 +1241,9 @@ if [ "$system_arch" = "x86" ]; then
             wget http://download.proxmox.com/debian/proxmox-ve-release-4.x.gpg -O /etc/apt/trusted.gpg.d/proxmox-ve-release-4.x.gpg
             chmod +r /etc/apt/trusted.gpg.d/proxmox-ve-release-4.x.gpg
         fi
-        if [ ! -f "/etc/apt/trusted.gpg.d/proxmox-ve-release-6.x.gpg" ]; then
-            wget http://download.proxmox.com/debian/proxmox-ve-release-6.x.gpg -O /etc/apt/trusted.gpg.d/proxmox-ve-release-6.x.gpg
-            chmod +r /etc/apt/trusted.gpg.d/proxmox-ve-release-6.x.gpg
+        if [ ! -f "/etc/apt/trusted.gpg.d/proxmox-ve-release-5.x.gpg" ]; then
+            wget http://download.proxmox.com/debian/proxmox-ve-release-5.x.gpg -O /etc/apt/trusted.gpg.d/proxmox-ve-release-5.x.gpg
+            chmod +r /etc/apt/trusted.gpg.d/proxmox-ve-release-5.x.gpg
         fi
         ;;
     buster)
@@ -1288,11 +1288,11 @@ if [ "$system_arch" = "x86" ]; then
 elif [ "$system_arch" = "arch" ]; then
     # https://github.com/jiangcuo/Proxmox-Port/wiki/Proxmox%E2%80%90Port--Repo-List
     arch_pve_urls=(
-    "https://global.mirrors.apqa.cn"
-    "https://mirrors.apqa.cn"
-    "https://hk.mirrors.apqa.cn"
-    "https://mirrors.lierfang.com"
-    "https://de.mirrors.apqa.cn"
+        "https://global.mirrors.apqa.cn"
+        "https://mirrors.apqa.cn"
+        "https://hk.mirrors.apqa.cn"
+        "https://mirrors.lierfang.com"
+        "https://de.mirrors.apqa.cn"
     )
     min_ping=9999
     min_ping_url=""
@@ -1302,9 +1302,9 @@ elif [ "$system_arch" = "arch" ]; then
         avg_ping=$(echo "$ping_result" | cut -d '/' -f 2)
         if [ ! -z "$avg_ping" ]; then
             echo "Ping [$url_without_protocol]: $avg_ping ms"
-            if (( $(echo "$avg_ping < $min_ping" | bc -l) )); then
-            min_ping="$avg_ping"
-            min_ping_url="$url"
+            if (($(echo "$avg_ping < $min_ping" | bc -l))); then
+                min_ping="$avg_ping"
+                min_ping_url="$url"
             fi
         else
             _yellow "Unable to get ping [$url_without_protocol]"
@@ -1336,7 +1336,7 @@ elif [ "$system_arch" = "arch" ]; then
     stretch | buster)
         # https://gitlab.com/minkebox/pimox
         curl https://gitlab.com/minkebox/pimox/-/raw/master/dev/KEY.gpg | apt-key add -
-        curl https://gitlab.com/minkebox/pimox/-/raw/master/dev/pimox.list > /etc/apt/sources.list.d/pimox.list
+        curl https://gitlab.com/minkebox/pimox/-/raw/master/dev/pimox.list >/etc/apt/sources.list.d/pimox.list
         ;;
     bullseye)
         echo "deb ${min_ping_url}/proxmox/debian/pve bullseye port" >/etc/apt/sources.list.d/pveport.list
