@@ -1333,7 +1333,9 @@ elif [ "$system_arch" = "arch" ]; then
     fi
     case $version in
     stretch | buster)
-        echo "deb ${min_ping_url}/proxmox/debian/pve sid port" >/etc/apt/sources.list.d/pveport.list
+        _yellow "Unable to install, no third-party source for Proxmox VE 6.x available at this time"
+        _yellow "无法安装，暂无 Proxmox VE 6.x 的第三方源"
+        exit 1
         ;;
     bullseye)
         echo "deb ${min_ping_url}/proxmox/debian/pve bullseye port" >/etc/apt/sources.list.d/pveport.list
