@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/spiritLHLS/pve
-# 2024.02.09
+# 2024.02.17
 
 # ./buildct.sh CTID 密码 CPU核数 内存 硬盘 SSH端口 80端口 443端口 外网端口起 外网端口止 系统 存储盘 独立IPV6
 # ./buildct.sh 102 1234567 1 512 5 20001 20002 20003 30000 30025 debian11 local N
@@ -194,25 +194,30 @@ else
     if [ $? -eq 0 ] && [ -n "$response" ]; then
         system_names+=($(echo "$response"))
     fi
-    if [ ${#system_names[@]} -eq 0 ]; then
-        echo "No suitable system names found."
+    pve_version=$(pveversion)
+    if [[ $pve_version == pve-manager/5* ]]; then
+        _blue "Detected that PVE version is too low to use zst format images"
     else
-        for sy in "${system_names[@]}"; do
-            if [[ $sy == "${system}"* ]]; then
-                system_name="$sy"
-                fixed_system=true
-                if [ ! -f "/var/lib/vz/template/cache/${system_name}" ]; then
-                    curl -o "/var/lib/vz/template/cache/${system_name}" "${cdn_success_url}https://github.com/oneclickvirt/pve_lxc_images/releases/download/${en_system}/${system_name}"
-                    if [ $? -ne 0 ]; then
-                        _red "Failed to download ${system_name}"
-                        fixed_system=false
-                        rm -rf "${system_name}"
+        if [ ${#system_names[@]} -eq 0 ]; then
+            echo "No suitable system names found."
+        else
+            for sy in "${system_names[@]}"; do
+                if [[ $sy == "${system}"* ]]; then
+                    system_name="$sy"
+                    fixed_system=true
+                    if [ ! -f "/var/lib/vz/template/cache/${system_name}" ]; then
+                        curl -o "/var/lib/vz/template/cache/${system_name}" "${cdn_success_url}https://github.com/oneclickvirt/pve_lxc_images/releases/download/${en_system}/${system_name}"
+                        if [ $? -ne 0 ]; then
+                            _red "Failed to download ${system_name}"
+                            fixed_system=false
+                            rm -rf "${system_name}"
+                        fi
                     fi
+                    _blue "Use self-fixed image: ${system_name}"
+                    break
                 fi
-                _blue "Use self-fixed image: ${system_name}"
-                break
-            fi
-        done
+            done
+        fi
     fi
     if [ "$fixed_system" = false ] && [ -z "$system_nam" ]; then
         system_name=$(pveam available --section system | grep "$system" | awk '{print $2}' | head -n1)
