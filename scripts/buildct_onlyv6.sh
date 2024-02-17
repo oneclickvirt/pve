@@ -275,6 +275,8 @@ else
 fi
 pct start $CTID
 pct set $CTID --hostname $CTID
+# 删除原始配置避免重启容器后出现内网IPV4错配的情况
+pct exec $CTID -- sed -i '/auto eth0/,$d' /etc/network/interfaces
 # arm架构下纯IPV6开设有问题
 user_ip="172.16.1.${num}"
 pct set $CTID --net0 name=eth0,ip6="${ipv6_address_without_last_segment}${CTID}/128",bridge=vmbr2,gw6="${host_ipv6_address}"
