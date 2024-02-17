@@ -386,8 +386,8 @@ else
     fi
 fi
 pct exec $CTID -- echo '*/1 * * * * curl -m 6 -s ipv6.ip.sb && curl -m 6 -s ipv6.ip.sb' | crontab -
-# 禁止PVE自动修改网络接口设置
-pct exec $CTID -- touch /etc/network/.pve-ignore.interfaces
+# 启用PVE自动修改网络接口设置
+pct exec $CTID -- rm -rf /etc/network/.pve-ignore.interfaces
 # 禁止PVE自动修改DNS设置
 pct exec $CTID -- touch /etc/.pve-ignore.resolv.conf
 # 禁止PVE自动修改主机名设置
