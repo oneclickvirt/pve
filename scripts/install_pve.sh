@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/spiritLHLS/pve
-# 2024.02.16
+# 2024.02.18
 
 ########## 预设部分输出和部分中间变量
 
@@ -1335,8 +1335,11 @@ elif [ "$system_arch" = "arch" ]; then
     case $version in
     stretch | buster)
         # https://gitlab.com/minkebox/pimox
-        curl https://gitlab.com/minkebox/pimox/-/raw/master/dev/KEY.gpg | apt-key add -
-        curl https://gitlab.com/minkebox/pimox/-/raw/master/dev/pimox.list >/etc/apt/sources.list.d/pimox.list
+        # curl https://gitlab.com/minkebox/pimox/-/raw/master/dev/KEY.gpg | apt-key add -
+        # curl https://gitlab.com/minkebox/pimox/-/raw/master/dev/pimox.list >/etc/apt/sources.list.d/pimox.list
+        # https://github.com/pimox/pimox7
+        echo "deb https://raw.githubusercontent.com/pimox/pimox7/master/ dev/" > /etc/apt/sources.list.d/pimox.list
+        curl https://raw.githubusercontent.com/pimox/pimox7/master/KEY.gpg | apt-key add -
         ;;
     bullseye)
         echo "deb ${min_ping_url}/proxmox/debian/pve bullseye port" >/etc/apt/sources.list.d/pveport.list
