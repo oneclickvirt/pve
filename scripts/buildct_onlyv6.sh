@@ -115,74 +115,67 @@ system="$en_system-$num_system"
 cdn_urls=("https://cdn0.spiritlhl.top/" "http://cdn3.spiritlhl.net/" "http://cdn1.spiritlhl.net/" "https://ghproxy.com/" "http://cdn2.spiritlhl.net/")
 check_cdn_file
 if [ "$system_arch" = "arch" ]; then
+    system_names=()
+    response=$(curl -slk -m 6 "${cdn_success_url}https://raw.githubusercontent.com/oneclickvirt/lxc_arm_images/main/fixed_images.txt")
+    if [ $? -eq 0 ] && [ -n "$response" ]; then
+        system_names+=($(echo "$response"))
+    fi
+    ubuntu_versions=("16" "18" "20" "22" "23.04" "23.10" "24")
+    ubuntu_names=("xenial" "bionic" "focal" "jammy" "lunar" "mantic" "noble")
+    debian_versions=("10" "11" "12" "13" "sid")
+    debian_names=("buster" "bullseye" "bookworm" "trixie" "sid")
+    version=""
     if [ "$en_system" = "ubuntu" ]; then
-        case "$system_ori" in
-        ubuntu14)
-            version="trusty"
-            ;;
-        ubuntu16)
-            version="xenial"
-            ;;
-        ubuntu18)
-            version="bionic"
-            ;;
-        ubuntu20)
-            version="focal"
-            ;;
-        ubuntu22)
-            version="jammy"
-            ;;
-        *)
-            echo "Unsupported Ubuntu version."
-            exit 1
-            ;;
-        esac
+        for ((i=0; i<${#ubuntu_versions[@]}; i++)); do
+            if [ "${ubuntu_versions[$i]}" = "$num_system" ]; then
+                version="${ubuntu_names[$i]}"
+                break
+            fi
+        done
     elif [ "$en_system" = "debian" ]; then
-        case "$system_ori" in
-        debian6)
-            version="squeeze"
-            ;;
-        debian7)
-            version="wheezy"
-            ;;
-        debian8)
-            version="jessie"
-            ;;
-        debian9)
-            version="stretch"
-            ;;
-        debian10)
-            version="buster"
-            ;;
-        debian11)
-            version="bullseye"
-            ;;
-        debian12)
-            version="bookworm"
-            ;;
-        *)
-            echo "Unsupported Debian version."
-            exit 1
-            ;;
-        esac
+        for ((i=0; i<${#debian_versions[@]}; i++)); do
+            if [ "${debian_versions[$i]}" = "$num_system" ]; then
+                version="${debian_names[$i]}"
+                break
+            fi
+        done
     else
         version=${num_system}
     fi
-    if [[ -z "${CN}" || "${CN}" != true ]]; then
-        if [ ! -f "/var/lib/vz/template/cache/${en_system}-arm64-${version}-cloud.tar.xz" ]; then
-            curl -o "/var/lib/vz/template/cache/${en_system}-arm64-${version}-cloud.tar.xz" "https://jenkins.linuxcontainers.org/view/LXC/job/image-${en_system}/architecture=arm64,release=${version},variant=cloud/lastSuccessfulBuild/artifact/rootfs.tar.xz"
-        fi
+    system_fixed_name="${en_system}-${version}"
+    usable_system=false
+    if [ ${#system_names[@]} -eq 0 ]; then
+        _red "No suitable system names found."
+        exit 1
     else
-        # https://mirror.tuna.tsinghua.edu.cn/lxc-images/images/
-        URL="https://mirror.tuna.tsinghua.edu.cn/lxc-images/images/${en_system}/${version}/arm64/cloud/"
-        HTML=$(curl -s "$URL")
-        folder_links_dates=$(echo "$HTML" | grep -oE '<a href="([^"]+)".*date">([^<]+)' | sed -E 's/<a href="([^"]+)".*date">([^<]+)/\1 \2/')
-        sorted_links=$(echo "$folder_links_dates" | sort -k2 -r)
-        latest_folder_link=$(echo "$sorted_links" | head -n 1 | awk '{print $1}')
-        latest_folder_url="${URL}${latest_folder_link}"
-        if [ ! -f "/var/lib/vz/template/cache/${en_system}-arm64-${version}-cloud.tar.xz" ]; then
-            curl -o "/var/lib/vz/template/cache/${en_system}-arm64-${version}-cloud.tar.xz" "${latest_folder_url}/rootfs.tar.xz"
-        fi
+        for sy in "${system_names[@]}"; do
+            if [[ $sy == "${system_fixed_name}"* ]]; then
+                usable_system=true
+            fi
+        done
+    fi
+    if [ "$usable_system" = false ]; then
+        _red "Invalid system version."
+        exit 1
+    fi
+    if [ -n "version" ]; then
+        curl -o "/var/lib/vz/template/cache/${en_system}-arm64-${version}-cloud.tar.xz" "${cdn_success_url}https://github.com/oneclickvirt/lxc_arm_images/releases/download/${en_system}/${en_system}-arm64-${version}-cloud.tar.xz"
+        # if [[ -z "${CN}" || "${CN}" != true ]]; then
+        #     if [ ! -f "/var/lib/vz/template/cache/${en_system}-arm64-${version}-cloud.tar.xz" ]; then
+        #         # curl -o "/var/lib/vz/template/cache/${en_system}-arm64-${version}-cloud.tar.xz" "https://jenkins.linuxcontainers.org/view/LXC/job/image-${en_system}/architecture=arm64,release=${version},variant=cloud/lastSuccessfulBuild/artifact/rootfs.tar.xz"
+        #     fi
+        # else
+        #     # https://mirror.tuna.tsinghua.edu.cn/lxc-images/images/
+        #     URL="https://mirror.tuna.tsinghua.edu.cn/lxc-images/images/${en_system}/${version}/arm64/cloud/"
+        #     HTML=$(curl -s "$URL")
+        #     folder_links_dates=$(echo "$HTML" | grep -oE '<a href="([^"]+)".*date">([^<]+)' | sed -E 's/<a href="([^"]+)".*date">([^<]+)/\1 \2/')
+        #     sorted_links=$(echo "$folder_links_dates" | sort -k2 -r)
+        #     latest_folder_link=$(echo "$sorted_links" | head -n 1 | awk '{print $1}')
+        #     latest_folder_url="${URL}${latest_folder_link}"
+        #     if [ ! -f "/var/lib/vz/template/cache/${en_system}-arm64-${version}-cloud.tar.xz" ]; then
+        #         curl -o "/var/lib/vz/template/cache/${en_system}-arm64-${version}-cloud.tar.xz" "${latest_folder_url}/rootfs.tar.xz"
+        #     fi
+        # fi
     fi
 else
     system_name=""
@@ -265,6 +258,7 @@ if [ -f /usr/local/bin/pve_ipv6_gateway ]; then
     ipv6_gateway=$(cat /usr/local/bin/pve_ipv6_gateway)
 fi
 
+# 正式开设容器
 user_ip="172.16.1.${num}"
 if [ "$system_arch" = "x86" ]; then
     if [ "$fixed_system" = true ]; then
@@ -282,6 +276,8 @@ pct set $CTID --net0 name=eth0,ip6="${ipv6_address_without_last_segment}${CTID}/
 pct set $CTID --net1 name=eth1,ip=${user_ip}/24,bridge=vmbr1,gw=172.16.1.1
 pct set $CTID --nameserver 8.8.8.8,2001:4860:4860::8888 --nameserver 8.8.4.4,2001:4860:4860::8844
 sleep 3
+
+# 开始配置容器内部环境
 if [ "$fixed_system" = true ]; then
     if [[ -z "${CN}" || "${CN}" != true ]]; then
         sleep 1
