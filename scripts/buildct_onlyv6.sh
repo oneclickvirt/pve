@@ -142,7 +142,7 @@ if [ "$system_arch" = "arch" ]; then
     else
         version=${num_system}
     fi
-    system_fixed_name="${en_system}-${version}"
+    system_fixed_name="${en_system}-arm64-${version}-cloud.tar.xz"
     usable_system=false
     if [ ${#system_names[@]} -eq 0 ]; then
         _red "No suitable system names found."
