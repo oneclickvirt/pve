@@ -1335,13 +1335,14 @@ elif [ "$system_arch" = "arch" ]; then
     case $version in
     stretch | buster)
         # https://gitlab.com/minkebox/pimox
-        # curl https://gitlab.com/minkebox/pimox/-/raw/master/dev/KEY.gpg | apt-key add -
-        # curl https://gitlab.com/minkebox/pimox/-/raw/master/dev/pimox.list >/etc/apt/sources.list.d/pimox.list
-        # https://github.com/pimox/pimox7
-        echo "deb https://raw.githubusercontent.com/pimox/pimox7/master/ dev/" > /etc/apt/sources.list.d/pimox.list
-        curl https://raw.githubusercontent.com/pimox/pimox7/master/KEY.gpg | apt-key add -
+        curl https://gitlab.com/minkebox/pimox/-/raw/master/dev/KEY.gpg | apt-key add -
+        curl https://gitlab.com/minkebox/pimox/-/raw/master/dev/pimox.list >/etc/apt/sources.list.d/pimox.list
         ;;
     bullseye)
+        # https://github.com/pimox/pimox7
+        # echo "deb https://raw.githubusercontent.com/pimox/pimox7/master/ dev/" > /etc/apt/sources.list.d/pimox.list
+        # curl https://raw.githubusercontent.com/pimox/pimox7/master/KEY.gpg | apt-key add -
+        # https://github.com/jiangcuo/Proxmox-Port/wiki
         echo "deb ${min_ping_url}/proxmox/debian/pve bullseye port" >/etc/apt/sources.list.d/pveport.list
         curl "${min_ping_url}/proxmox/debian/pveport.gpg" -o /etc/apt/trusted.gpg.d/pveport.gpg
         ;;
