@@ -305,8 +305,6 @@ else
 fi
 pct start $CTID
 pct set $CTID --hostname $CTID
-# # 删除原始配置避免重启容器后出现内网IPV4错配的情况
-# pct exec $CTID -- sed -i '/auto eth0/,$d' /etc/network/interfaces
 if [ "$independent_ipv6" == "y" ]; then
     if [ ! -z "$host_ipv6_address" ] && [ ! -z "$ipv6_prefixlen" ] && [ ! -z "$ipv6_gateway" ] && [ ! -z "$ipv6_address_without_last_segment" ]; then
         if grep -q "vmbr2" /etc/network/interfaces; then

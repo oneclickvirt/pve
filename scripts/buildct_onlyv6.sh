@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/spiritLHLS/pve
-# 2024.02.17
+# 2024.02.18
 # ./buildct_onlyv6.sh CTID 密码 CPU核数 内存 硬盘 系统 存储盘
 # ./buildct_onlyv6.sh 102 1234567 1 512 5 debian11 local
 
@@ -263,6 +263,8 @@ fi
 if [ -f /usr/local/bin/pve_ipv6_gateway ]; then
     ipv6_gateway=$(cat /usr/local/bin/pve_ipv6_gateway)
 fi
+
+user_ip="172.16.1.${num}"
 if [ "$system_arch" = "x86" ]; then
     if [ "$fixed_system" = true ]; then
         pct create $CTID /var/lib/vz/template/cache/$system_name -cores $core -cpuunits 1024 -memory $memory -swap 128 -rootfs ${storage}:${disk} -onboot 1 -password $password -features nesting=1
@@ -275,10 +277,6 @@ else
 fi
 pct start $CTID
 pct set $CTID --hostname $CTID
-# # 删除原始配置避免重启容器后出现内网IPV4错配的情况
-# pct exec $CTID -- sed -i '/auto eth0/,$d' /etc/network/interfaces
-# arm架构下纯IPV6开设有问题
-user_ip="172.16.1.${num}"
 pct set $CTID --net0 name=eth0,ip6="${ipv6_address_without_last_segment}${CTID}/128",bridge=vmbr2,gw6="${host_ipv6_address}"
 pct set $CTID --net1 name=eth1,ip=${user_ip}/24,bridge=vmbr1,gw=172.16.1.1
 pct set $CTID --nameserver 8.8.8.8,2001:4860:4860::8888 --nameserver 8.8.4.4,2001:4860:4860::8844
