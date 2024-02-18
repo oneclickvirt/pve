@@ -2,6 +2,7 @@
 # from
 # https://github.com/spiritLHLS/pve
 
+sleep 3
 DNS_SERVER="8.8.8.8"
 RESOLV_CONF="/etc/resolv.conf"
 ipv6_address=$(cat /usr/local/bin/pve_check_ipv6)
