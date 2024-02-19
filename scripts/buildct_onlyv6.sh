@@ -115,7 +115,9 @@ system="$en_system-$num_system"
 cdn_urls=("https://cdn0.spiritlhl.top/" "http://cdn3.spiritlhl.net/" "http://cdn1.spiritlhl.net/" "https://ghproxy.com/" "http://cdn2.spiritlhl.net/")
 check_cdn_file
 if [ "$system_arch" = "arch" ]; then
+    system_name=""
     system_names=()
+    usable_system=false
     response=$(curl -slk -m 6 "${cdn_success_url}https://raw.githubusercontent.com/oneclickvirt/lxc_arm_images/main/fixed_images.txt")
     if [ $? -eq 0 ] && [ -n "$response" ]; then
         system_names+=($(echo "$response"))
@@ -154,8 +156,7 @@ if [ "$system_arch" = "arch" ]; then
     else
         system_name="${en_system}-arm64-${version}-cloud.tar.xz"
     fi
-    usable_system=false
-    if [ ${#system_names[@]} -eq 0 ]; then
+    if [ ${#system_names[@]} -eq 0 ] && [ -z "$system_name" ]; then
         _red "No suitable system names found."
         exit 1
     else

@@ -103,14 +103,13 @@ independent_ipv6=$(echo "$independent_ipv6" | tr '[:upper:]' '[:lower:]')
 rm -rf "ct$name"
 en_system=$(echo "$system_ori" | sed 's/[0-9]*//g')
 num_system=$(echo "$system_ori" | sed 's/[a-zA-Z]*//g')
-if [ -z $num_system ]; then
-    num_system=""
-fi
 system="$en_system-$num_system"
 cdn_urls=("https://cdn0.spiritlhl.top/" "http://cdn3.spiritlhl.net/" "http://cdn1.spiritlhl.net/" "https://ghproxy.com/" "http://cdn2.spiritlhl.net/")
 check_cdn_file
 if [ "$system_arch" = "arch" ]; then
+    system_name=""
     system_names=()
+    usable_system=false
     response=$(curl -slk -m 6 "${cdn_success_url}https://raw.githubusercontent.com/oneclickvirt/lxc_arm_images/main/fixed_images.txt")
     if [ $? -eq 0 ] && [ -n "$response" ]; then
         system_names+=($(echo "$response"))
@@ -149,8 +148,7 @@ if [ "$system_arch" = "arch" ]; then
     else
         system_name="${en_system}-arm64-${version}-cloud.tar.xz"
     fi
-    usable_system=false
-    if [ ${#system_names[@]} -eq 0 ]; then
+    if [ ${#system_names[@]} -eq 0 ] && [ -z "$system_name" ]; then
         _red "No suitable system names found."
         exit 1
     else
