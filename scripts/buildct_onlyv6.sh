@@ -250,15 +250,28 @@ else
         fi
     fi
     if [ "$fixed_system" = false ] && [ -z "$system_name" ]; then
-        system_name=$(pveam available --section system | grep "$system" | awk '{print $2}' | head -n1)
-        if ! pveam available --section system | grep "$system" >/dev/null; then
-            _red "No such system"
-            exit 1
+        if [ -z $num_system ]; then
+            system_name=$(pveam available --section system | grep "$en_system" | awk '{print $2}' | head -n1)
+            if ! pveam available --section system | grep "$en_system" >/dev/null; then
+                _red "No such system"
+                exit 1
+            else
+                _green "Use $system_name"
+            fi
+            if [ ! -f "/var/lib/vz/template/cache/${system_name}" ]; then
+                pveam download local $system_name
+            fi
         else
-            _green "Use $system_name"
-        fi
-        if [ ! -f "/var/lib/vz/template/cache/${system_name}" ]; then
-            pveam download local $system_name
+            system_name=$(pveam available --section system | grep "$system" | awk '{print $2}' | head -n1)
+            if ! pveam available --section system | grep "$system" >/dev/null; then
+                _red "No such system"
+                exit 1
+            else
+                _green "Use $system_name"
+            fi
+            if [ ! -f "/var/lib/vz/template/cache/${system_name}" ]; then
+                pveam download local $system_name
+            fi
         fi
     fi
 fi
