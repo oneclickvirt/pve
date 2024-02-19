@@ -249,7 +249,7 @@ else
             done
         fi
     fi
-    if [ "$fixed_system" = false ] && [ -z "$system_nam" ]; then
+    if [ "$fixed_system" = false ] && [ -z "$system_name" ]; then
         system_name=$(pveam available --section system | grep "$system" | awk '{print $2}' | head -n1)
         if ! pveam available --section system | grep "$system" >/dev/null; then
             _red "No such system"
