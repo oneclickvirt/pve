@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/spiritLHLS/pve
-# 2024.02.18
+# 2024.02.19
 # ./buildct_onlyv6.sh CTID 密码 CPU核数 内存 硬盘 系统 存储盘
 # ./buildct_onlyv6.sh 102 1234567 1 512 5 debian11 local
 
@@ -126,30 +126,41 @@ if [ "$system_arch" = "arch" ]; then
     debian_names=("buster" "bullseye" "bookworm" "trixie" "sid")
     version=""
     if [ "$en_system" = "ubuntu" ]; then
+        # 转换ubuntu系统的代号为对应名字
         for ((i=0; i<${#ubuntu_versions[@]}; i++)); do
             if [ "${ubuntu_versions[$i]}" = "$num_system" ]; then
                 version="${ubuntu_names[$i]}"
+                system_name="${en_system}-arm64-${version}-cloud.tar.xz"
                 break
             fi
         done
     elif [ "$en_system" = "debian" ]; then
+        # 转换debian系统的代号为对应名字
         for ((i=0; i<${#debian_versions[@]}; i++)); do
             if [ "${debian_versions[$i]}" = "$num_system" ]; then
                 version="${debian_names[$i]}"
+                system_name="${en_system}-arm64-${version}-cloud.tar.xz"
+                break
+            fi
+        done
+    elif [ -z $num_system ]; then
+        # 适配无指定版本的系统
+        for ((i=0; i<${#system_names[@]}; i++)); do
+            if [[ "${system_names[$i]}" == "${en_system}-arm64-"* ]]; then
+                system_name="${system_names[$i]}"
                 break
             fi
         done
     else
-        version=${num_system}
+        system_name="${en_system}-arm64-${version}-cloud.tar.xz"
     fi
-    system_fixed_name="${en_system}-arm64-${version}-cloud.tar.xz"
     usable_system=false
     if [ ${#system_names[@]} -eq 0 ]; then
         _red "No suitable system names found."
         exit 1
     else
         for sy in "${system_names[@]}"; do
-            if [[ $sy == "${system_fixed_name}"* ]]; then
+            if [[ $sy == "${system_name}"* ]]; then
                 usable_system=true
             fi
         done
@@ -158,8 +169,8 @@ if [ "$system_arch" = "arch" ]; then
         _red "Invalid system version."
         exit 1
     fi
-    if [ -n "version" ]; then
-        curl -o "/var/lib/vz/template/cache/${en_system}-arm64-${version}-cloud.tar.xz" "${cdn_success_url}https://github.com/oneclickvirt/lxc_arm_images/releases/download/${en_system}/${en_system}-arm64-${version}-cloud.tar.xz"
+    if [ -n "${system_name}" ]; then
+        curl -o "/var/lib/vz/template/cache/${system_name}" "${cdn_success_url}https://github.com/oneclickvirt/lxc_arm_images/releases/download/${system_name}"
         # if [[ -z "${CN}" || "${CN}" != true ]]; then
         #     if [ ! -f "/var/lib/vz/template/cache/${en_system}-arm64-${version}-cloud.tar.xz" ]; then
         #         # curl -o "/var/lib/vz/template/cache/${en_system}-arm64-${version}-cloud.tar.xz" "https://jenkins.linuxcontainers.org/view/LXC/job/image-${en_system}/architecture=arm64,release=${version},variant=cloud/lastSuccessfulBuild/artifact/rootfs.tar.xz"
@@ -201,6 +212,24 @@ else
     else
         if [ ${#system_names[@]} -eq 0 ]; then
             echo "No suitable system names found."
+        elif [ -z $num_system ]; then
+            # 适配无指定版本的系统
+            for ((i=0; i<${#system_names[@]}; i++)); do
+                if [[ "${system_names[$i]}" == "${en_system}-"* ]]; then
+                    system_name="${system_names[$i]}"
+                    fixed_system=true
+                    if [ ! -f "/var/lib/vz/template/cache/${system_name}" ]; then
+                        curl -o "/var/lib/vz/template/cache/${system_name}" "${cdn_success_url}https://github.com/oneclickvirt/pve_lxc_images/releases/download/${en_system}/${system_name}"
+                        if [ $? -ne 0 ]; then
+                            _red "Failed to download ${system_name}"
+                            fixed_system=false
+                            rm -rf "${system_name}"
+                        fi
+                    fi
+                    _blue "Use self-fixed image: ${system_name}"
+                    break
+                fi
+            done
         else
             for sy in "${system_names[@]}"; do
                 if [[ $sy == "${system}"* ]]; then
@@ -262,13 +291,12 @@ fi
 user_ip="172.16.1.${num}"
 if [ "$system_arch" = "x86" ]; then
     if [ "$fixed_system" = true ]; then
-        pct create $CTID /var/lib/vz/template/cache/$system_name -cores $core -cpuunits 1024 -memory $memory -swap 128 -rootfs ${storage}:${disk} -onboot 1 -password $password -features nesting=1
+        pct create $CTID /var/lib/vz/template/cache/${system_name} -cores $core -cpuunits 1024 -memory $memory -swap 128 -rootfs ${storage}:${disk} -onboot 1 -password $password -features nesting=1
     else
-        pct create $CTID ${storage}:vztmpl/$system_name -cores $core -cpuunits 1024 -memory $memory -swap 128 -rootfs ${storage}:${disk} -onboot 1 -password $password -features nesting=1
+        pct create $CTID ${storage}:vztmpl/${system_name} -cores $core -cpuunits 1024 -memory $memory -swap 128 -rootfs ${storage}:${disk} -onboot 1 -password $password -features nesting=1
     fi
 else
-    temp_system_name="${en_system}-arm64-${version}-cloud.tar.xz"
-    pct create $CTID ${storage}:vztmpl/${temp_system_name} -cores $core -cpuunits 1024 -memory $memory -swap 128 -rootfs ${storage}:${disk} -onboot 1 -password $password -features nesting=1
+    pct create $CTID ${storage}:vztmpl/${system_name} -cores $core -cpuunits 1024 -memory $memory -swap 128 -rootfs ${storage}:${disk} -onboot 1 -password $password -features nesting=1
 fi
 pct start $CTID
 pct set $CTID --hostname $CTID

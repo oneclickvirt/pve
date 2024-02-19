@@ -12,11 +12,9 @@
 
 ## 更新
 
-2024.02.18
+2024.02.19
 
-- 修复低版本PVE删除非企业订阅弹窗可能失效的问题
-- 使用 https://github.com/oneclickvirt/lxc_arm_images 归档的ARM架构的LXC镜像以支持可开设更多不同系统的ARM容器镜像，不再局限于Ubuntu和Debian系统
-- 修复ARM架构下纯IPV6的容器开设有问题
+- 优化CT创建的系统选择判断，支持宽泛的无指定具体版本的系统
 
 [更新日志](CHANGELOG.md)
 
