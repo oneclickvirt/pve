@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/spiritLHLS/pve
-# 2024.02.16
+# 2024.02.20
 
 # 用颜色输出信息
 _red() { echo -e "\033[31m\033[01m$@\033[0m"; }
@@ -350,32 +350,32 @@ if command -v lshw >/dev/null 2>&1; then
         _green "ipv6_address: ${ipv6_address}"
         _green "ipv6_prefixlen: ${ipv6_prefixlen}"
         _green "ipv6_gateway: ${ipv6_gateway}"
-    fi
-    mac_address=$(ip a | grep -oP 'link/ether \K[0-9a-f:]+')
-    mac_end_suffix=$(echo $mac_address | awk -F: '{print $4$5}')
-    ipv6_end_suffix=${ipv6_address##*:}
-    slaac_status=false
-    if [[ $ipv6_address == *"ff:fe"* ]]; then
-        _blue "Since the IPV6 address contains the ff:fe block, the probability is that the IPV6 address assigned out through SLAAC"
-        _green "由于IPV6地址含有ff:fe块，大概率通过SLAAC分配出的IPV6地址"
-        slaac_status=true
-    elif [[ $ipv6_gateway == "fe80"* ]]; then
-        _blue "Since IPV6 gateways begin with fe80, it is generally assumed that IPV6 addresses assigned through the SLAAC"
-        _green "由于IPV6的网关是fe80开头，一般认为通过SLAAC分配出的IPV6地址"
-        slaac_status=true
-    elif [[ $ipv6_end_suffix == $mac_end_suffix ]]; then
-        _blue "Since IPV6 addresses have the same suffix as mac addresses, the probability is that the IPV6 address assigned through the SLAAC"
-        _green "由于IPV6的地址和mac地址后缀相同，大概率通过SLAAC分配出的IPV6地址"
-        slaac_status=true
-    fi
-    if [[ $slaac_status == true ]] && [ ! -f /usr/local/bin/pve_slaac_status ]; then
-        _blue "Since IPV6 addresses are assigned via SLAAC, the subsequent one-click script installation process needs to determine whether to use the largest subnet"
-        _blue "If using the largest subnet make sure that the host is assigned an entire subnet and not just an IPV6 address"
-        _blue "It is not possible to determine within the host computer how large a subnet the upstream has given to this machine, please ask the upstream technician for details."
-        _green "由于是通过SLAAC分配出IPV6地址，所以后续一键脚本安装过程中需要判断是否使用最大子网"
-        _green "若使用最大子网请确保宿主机被分配的是整个子网而不是仅一个IPV6地址"
-        _green "无法在宿主机内部判断上游给了本机多大的子网，详情请询问上游技术人员"
-        echo "" >/usr/local/bin/pve_slaac_status
+        mac_address=$(ip a | grep -oP 'link/ether \K[0-9a-f:]+')
+        mac_end_suffix=$(echo $mac_address | awk -F: '{print $4$5}')
+        ipv6_end_suffix=${ipv6_address##*:}
+        slaac_status=false
+        if [[ $ipv6_address == *"ff:fe"* ]]; then
+            _blue "Since the IPV6 address contains the ff:fe block, the probability is that the IPV6 address assigned out through SLAAC"
+            _green "由于IPV6地址含有ff:fe块，大概率通过SLAAC分配出的IPV6地址"
+            slaac_status=true
+        elif [[ $ipv6_gateway == "fe80"* ]]; then
+            _blue "Since IPV6 gateways begin with fe80, it is generally assumed that IPV6 addresses assigned through the SLAAC"
+            _green "由于IPV6的网关是fe80开头，一般认为通过SLAAC分配出的IPV6地址"
+            slaac_status=true
+        elif [[ $ipv6_end_suffix == $mac_end_suffix ]]; then
+            _blue "Since IPV6 addresses have the same suffix as mac addresses, the probability is that the IPV6 address assigned through the SLAAC"
+            _green "由于IPV6的地址和mac地址后缀相同，大概率通过SLAAC分配出的IPV6地址"
+            slaac_status=true
+        fi
+        if [[ $slaac_status == true ]] && [ ! -f /usr/local/bin/pve_slaac_status ]; then
+            _blue "Since IPV6 addresses are assigned via SLAAC, the subsequent one-click script installation process needs to determine whether to use the largest subnet"
+            _blue "If using the largest subnet make sure that the host is assigned an entire subnet and not just an IPV6 address"
+            _blue "It is not possible to determine within the host computer how large a subnet the upstream has given to this machine, please ask the upstream technician for details."
+            _green "由于是通过SLAAC分配出IPV6地址，所以后续一键脚本安装过程中需要判断是否使用最大子网"
+            _green "若使用最大子网请确保宿主机被分配的是整个子网而不是仅一个IPV6地址"
+            _green "无法在宿主机内部判断上游给了本机多大的子网，详情请询问上游技术人员"
+            echo "" >/usr/local/bin/pve_slaac_status
+        fi
     fi
 fi
 
