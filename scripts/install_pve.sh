@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/spiritLHLS/pve
-# 2024.02.18
+# 2024.02.20
 
 ########## 预设部分输出和部分中间变量
 
@@ -971,68 +971,73 @@ ipv6_prefixlen=$(cat /usr/local/bin/pve_ipv6_prefixlen)
 ipv6_address=$(cat /usr/local/bin/pve_check_ipv6)
 ipv6_gateway=$(cat /usr/local/bin/pve_ipv6_gateway)
 
-# 判断是否存在SLAAC机制
-mac_end_suffix=$(echo $mac_address | awk -F: '{print $4$5}')
-ipv6_end_suffix=${ipv6_address##*:}
-slaac_status=false
-if [[ $ipv6_address == *"ff:fe"* ]]; then
-    _blue "Since the IPV6 address contains the ff:fe block, the probability is that the IPV6 address assigned out through SLAAC"
-    _green "由于IPV6地址含有ff:fe块，大概率通过SLAAC分配出的IPV6地址"
-    slaac_status=true
-elif [[ $ipv6_gateway == "fe80"* ]]; then
-    _blue "Since IPV6 gateways begin with fe80, it is generally assumed that IPV6 addresses assigned through the SLAAC"
-    _green "由于IPV6的网关是fe80开头，一般认为通过SLAAC分配出的IPV6地址"
-    slaac_status=true
-elif [[ $ipv6_end_suffix == $mac_end_suffix ]]; then
-    _blue "Since IPV6 addresses have the same suffix as mac addresses, the probability is that the IPV6 address assigned through the SLAAC"
-    _green "由于IPV6的地址和mac地址后缀相同，大概率通过SLAAC分配出的IPV6地址"
-    slaac_status=true
-fi
-if [[ $slaac_status == true ]] && [ ! -f /usr/local/bin/pve_slaac_status ]; then
-    _blue "Since IPV6 addresses are assigned via SLAAC, the subsequent one-click script installation process needs to determine whether to use the largest subnet"
-    _blue "If using the largest subnet make sure that the host is assigned an entire subnet and not just an IPV6 address"
-    _blue "It is not possible to determine within the host computer how large a subnet the upstream has given to this machine, please ask the upstream technician for details."
-    _green "由于是通过SLAAC分配出IPV6地址，所以后续一键脚本安装过程中需要判断是否使用最大子网"
-    _green "若使用最大子网请确保宿主机被分配的是整个子网而不是仅一个IPV6地址"
-    _green "无法在宿主机内部判断上游给了本机多大的子网，详情请询问上游技术人员"
+if [ -z "$ipv6_address" ] || [ -z "$ipv6_prefixlen" ] || [ -z "$ipv6_gateway" ]; then
     echo "" >/usr/local/bin/pve_slaac_status
-fi
-# 提示是否在SLAAC分配的情况下还使用最大IPV6子网范围
-if [ -f /usr/local/bin/pve_slaac_status ] && [ ! -f /usr/local/bin/pve_maximum_subset ] && [ ! -f /usr/local/bin/fix_interfaces_ipv6_auto_type ]; then
-    # 大概率由SLAAC动态分配，需要询问使用的子网范围 仅本机IPV6 或 最大子网
-    _blue "It is detected that IPV6 addresses are most likely to be dynamically assigned by SLAAC, and if there is no subsequent need to assign separate IPV6 addresses to VMs/containers, the following option is best selected n"
-    _green "检测到IPV6地址大概率由SLAAC动态分配，若后续不需要分配独立的IPV6地址给虚拟机/容器，则下面选项最好选 n"
-    _blue "Is the maximum subnet range feasible with IPV6 used?([n]/y)"
-    reading "是否使用IPV6可行的最大子网范围？([n]/y)" select_maximum_subset
-    if [ "$select_maximum_subset" = "y" ] || [ "$select_maximum_subset" = "Y" ]; then
-        echo "true" >/usr/local/bin/pve_maximum_subset
-    else
-        echo "false" >/usr/local/bin/pve_maximum_subset
-    fi
     echo "" >/usr/local/bin/fix_interfaces_ipv6_auto_type
-fi
-# 不存在SLAAC机制的情况下或存在时使用最大IPV6子网范围，需要重构IPV6地址
-if [ ! -f /usr/local/bin/pve_maximum_subset ] || [ $(cat /usr/local/bin/pve_maximum_subset) = true ]; then
-    ipv6_address_without_last_segment="${ipv6_address%:*}:"
-    if [[ $ipv6_address != *:: && $ipv6_address_without_last_segment != *:: ]]; then
-        # 重构IPV6地址，使用该IPV6子网内的0001结尾的地址
-        ipv6_address=$(sipcalc -i ${ipv6_address}/${ipv6_prefixlen} | grep "Subnet prefix (masked)" | cut -d ' ' -f 4 | cut -d '/' -f 1 | sed 's/:0:0:0:0:/::/' | sed 's/:0:0:0:/::/')
-        ipv6_address="${ipv6_address%:*}:1"
-        if [ "$ipv6_address" == "$ipv6_gateway" ]; then
-            ipv6_address="${ipv6_address%:*}:2"
+else
+    # 判断是否存在SLAAC机制
+    mac_end_suffix=$(echo $mac_address | awk -F: '{print $4$5}')
+    ipv6_end_suffix=${ipv6_address##*:}
+    slaac_status=false
+    if [[ $ipv6_address == *"ff:fe"* ]]; then
+        _blue "Since the IPV6 address contains the ff:fe block, the probability is that the IPV6 address assigned out through SLAAC"
+        _green "由于IPV6地址含有ff:fe块，大概率通过SLAAC分配出的IPV6地址"
+        slaac_status=true
+    elif [[ $ipv6_gateway == "fe80"* ]]; then
+        _blue "Since IPV6 gateways begin with fe80, it is generally assumed that IPV6 addresses assigned through the SLAAC"
+        _green "由于IPV6的网关是fe80开头，一般认为通过SLAAC分配出的IPV6地址"
+        slaac_status=true
+    elif [[ $ipv6_end_suffix == $mac_end_suffix ]]; then
+        _blue "Since IPV6 addresses have the same suffix as mac addresses, the probability is that the IPV6 address assigned through the SLAAC"
+        _green "由于IPV6的地址和mac地址后缀相同，大概率通过SLAAC分配出的IPV6地址"
+        slaac_status=true
+    fi
+    if [[ $slaac_status == true ]] && [ ! -f /usr/local/bin/pve_slaac_status ]; then
+        _blue "Since IPV6 addresses are assigned via SLAAC, the subsequent one-click script installation process needs to determine whether to use the largest subnet"
+        _blue "If using the largest subnet make sure that the host is assigned an entire subnet and not just an IPV6 address"
+        _blue "It is not possible to determine within the host computer how large a subnet the upstream has given to this machine, please ask the upstream technician for details."
+        _green "由于是通过SLAAC分配出IPV6地址，所以后续一键脚本安装过程中需要判断是否使用最大子网"
+        _green "若使用最大子网请确保宿主机被分配的是整个子网而不是仅一个IPV6地址"
+        _green "无法在宿主机内部判断上游给了本机多大的子网，详情请询问上游技术人员"
+        echo "" >/usr/local/bin/pve_slaac_status
+    fi
+    # 提示是否在SLAAC分配的情况下还使用最大IPV6子网范围
+    if [ -f /usr/local/bin/pve_slaac_status ] && [ ! -f /usr/local/bin/pve_maximum_subset ] && [ ! -f /usr/local/bin/fix_interfaces_ipv6_auto_type ]; then
+        # 大概率由SLAAC动态分配，需要询问使用的子网范围 仅本机IPV6 或 最大子网
+        _blue "It is detected that IPV6 addresses are most likely to be dynamically assigned by SLAAC, and if there is no subsequent need to assign separate IPV6 addresses to VMs/containers, the following option is best selected n"
+        _green "检测到IPV6地址大概率由SLAAC动态分配，若后续不需要分配独立的IPV6地址给虚拟机/容器，则下面选项最好选 n"
+        _blue "Is the maximum subnet range feasible with IPV6 used?([n]/y)"
+        reading "是否使用IPV6可行的最大子网范围？([n]/y)" select_maximum_subset
+        if [ "$select_maximum_subset" = "y" ] || [ "$select_maximum_subset" = "Y" ]; then
+            echo "true" >/usr/local/bin/pve_maximum_subset
+        else
+            echo "false" >/usr/local/bin/pve_maximum_subset
         fi
+        echo "" >/usr/local/bin/fix_interfaces_ipv6_auto_type
+    fi
+    # 不存在SLAAC机制的情况下或存在时使用最大IPV6子网范围，需要重构IPV6地址
+    if [ ! -f /usr/local/bin/pve_maximum_subset ] || [ $(cat /usr/local/bin/pve_maximum_subset) = true ]; then
         ipv6_address_without_last_segment="${ipv6_address%:*}:"
-        if ping -c 1 -6 -W 3 $ipv6_address >/dev/null 2>&1; then
-            check_ipv6
-            ipv6_address=$(cat /usr/local/bin/pve_check_ipv6)
+        if [[ $ipv6_address != *:: && $ipv6_address_without_last_segment != *:: ]]; then
+            # 重构IPV6地址，使用该IPV6子网内的0001结尾的地址
+            ipv6_address=$(sipcalc -i ${ipv6_address}/${ipv6_prefixlen} | grep "Subnet prefix (masked)" | cut -d ' ' -f 4 | cut -d '/' -f 1 | sed 's/:0:0:0:0:/::/' | sed 's/:0:0:0:/::/')
+            ipv6_address="${ipv6_address%:*}:1"
+            if [ "$ipv6_address" == "$ipv6_gateway" ]; then
+                ipv6_address="${ipv6_address%:*}:2"
+            fi
+            ipv6_address_without_last_segment="${ipv6_address%:*}:"
+            if ping -c 1 -6 -W 3 $ipv6_address >/dev/null 2>&1; then
+                check_ipv6
+                ipv6_address=$(cat /usr/local/bin/pve_check_ipv6)
+                echo "${ipv6_address}" >/usr/local/bin/pve_check_ipv6
+            fi
+        elif [[ $ipv6_address == *:: ]]; then
+            ipv6_address="${ipv6_address}1"
+            if [ "$ipv6_address" == "$ipv6_gateway" ]; then
+                ipv6_address="${ipv6_address%:*}:2"
+            fi
             echo "${ipv6_address}" >/usr/local/bin/pve_check_ipv6
         fi
-    elif [[ $ipv6_address == *:: ]]; then
-        ipv6_address="${ipv6_address}1"
-        if [ "$ipv6_address" == "$ipv6_gateway" ]; then
-            ipv6_address="${ipv6_address%:*}:2"
-        fi
-        echo "${ipv6_address}" >/usr/local/bin/pve_check_ipv6
     fi
 fi
 
