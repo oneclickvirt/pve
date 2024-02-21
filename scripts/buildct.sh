@@ -361,6 +361,7 @@ else
     pct create $CTID ${storage}:vztmpl/${system_name} -cores $core -cpuunits 1024 -memory $memory -swap 128 -rootfs ${storage}:${disk} -onboot 1 -password $password -features nesting=1
 fi
 pct start $CTID
+sleep 5
 pct set $CTID --hostname $CTID
 if [ "$independent_ipv6" == "y" ]; then
     if [ ! -z "$host_ipv6_address" ] && [ ! -z "$ipv6_prefixlen" ] && [ ! -z "$ipv6_gateway" ] && [ ! -z "$ipv6_address_without_last_segment" ]; then
