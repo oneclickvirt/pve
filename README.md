@@ -41,6 +41,8 @@
 
 [https://github.com/oneclickvirt/lxc_amd64_images](https://github.com/oneclickvirt/lxc_amd64_images)
 
+[https://github.com/oneclickvirt/pve_lxc_images](https://github.com/oneclickvirt/pve_lxc_images)
+
 [https://github.com/oneclickvirt/lxc_arm_images](https://github.com/oneclickvirt/lxc_arm_images)
 
 ## Introduce
@@ -52,6 +54,8 @@ Description of the Proxmox VE partition contents in the documentation
 Self-patching VM image sources:
 
 [https://github.com/oneclickvirt/pve_kvm_images](https://github.com/oneclickvirt/pve_kvm_images)
+
+[https://github.com/oneclickvirt/pve_lxc_images](https://github.com/oneclickvirt/pve_lxc_images)
 
 [https://github.com/oneclickvirt/kvm_images](https://github.com/oneclickvirt/kvm_images)
 
