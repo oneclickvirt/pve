@@ -166,55 +166,106 @@ if [ "$system_arch" = "arch" ]; then
         curl -o "/var/lib/vz/template/cache/${system_name}" "${cdn_success_url}https://github.com/oneclickvirt/lxc_arm_images/releases/download/${system_name}"
     fi
 else
+    fixed_system=false
+    # 使用自动修补的镜像
     system_name=""
     system_names=()
-    fixed_system=false
-    system="${en_system}-${num_system}"
-    response=$(curl -slk -m 6 "${cdn_success_url}https://raw.githubusercontent.com/oneclickvirt/pve_lxc_images/main/fixed_images.txt")
+    system="${en_system}_${num_system}"
+    response=$(curl -slk -m 6 "${cdn_success_url}https://raw.githubusercontent.com/oneclickvirt/lxc_amd64_images/main/fixed_images.txt")
     if [ $? -eq 0 ] && [ -n "$response" ]; then
         system_names+=($(echo "$response"))
     fi
-    pve_version=$(pveversion)
-    if [[ $pve_version == pve-manager/5* ]]; then
-        _blue "Detected that PVE version is too low to use zst format images"
-    else
-        if [ ${#system_names[@]} -eq 0 ]; then
-            echo "No suitable system names found."
-        elif [ -z $num_system ]; then
-            # 适配无指定版本的系统
-            for ((i=0; i<${#system_names[@]}; i++)); do
-                if [[ "${system_names[$i]}" == "${en_system}-"* ]]; then
-                    system_name="${system_names[$i]}"
-                    fixed_system=true
-                    if [ ! -f "/var/lib/vz/template/cache/${system_name}" ]; then
-                        curl -o "/var/lib/vz/template/cache/${system_name}" "${cdn_success_url}https://github.com/oneclickvirt/pve_lxc_images/releases/download/${en_system}/${system_name}"
-                        if [ $? -ne 0 ]; then
-                            _red "Failed to download ${system_name}"
-                            fixed_system=false
-                            rm -rf "${system_name}"
-                        fi
+    for image_name in "${self_fixed_images[@]}"; do
+        if [ -z "${num_system}" ]; then
+            # 若无版本号，则仅识别系统名字匹配第一个链接，放宽系统识别
+            if [[ "$image_name" == "${en_system}"* ]]; then
+                fixed_system=true
+                image_download_url="https://github.com/oneclickvirt/lxc_amd64_images/releases/download/${en_system}/${image_name}"
+                if [ ! -f "/var/lib/vz/template/cache/${image_name}" ]; then
+                    curl -o "/var/lib/vz/template/cache/${image_name}" "${cdn_success_url}${image_download_url}"
+                    if [ $? -ne 0 ]; then
+                        _red "Failed to download ${system_name}"
+                        fixed_system=false
+                        rm -rf "/var/lib/vz/template/cache/${system_name}"
                     fi
-                    _blue "Use self-fixed image: ${system_name}"
-                    break
                 fi
-            done
+                echo "A matching image exists and will be created using ${image_name}"
+                echo "匹配的镜像存在，将使用 ${image_name} 进行创建"
+                system_name="$image_name"
+                break
+            fi
         else
-            for sy in "${system_names[@]}"; do
-                if [[ $sy == "${system}"* ]]; then
-                    system_name="$sy"
-                    fixed_system=true
-                    if [ ! -f "/var/lib/vz/template/cache/${system_name}" ]; then
-                        curl -o "/var/lib/vz/template/cache/${system_name}" "${cdn_success_url}https://github.com/oneclickvirt/pve_lxc_images/releases/download/${en_system}/${system_name}"
-                        if [ $? -ne 0 ]; then
-                            _red "Failed to download ${system_name}"
-                            fixed_system=false
-                            rm -rf "${system_name}"
-                        fi
+            # 有版本号，精确识别系统
+            if [[ "$image_name" == "${en_system}_${num_system}"* ]]; then
+                fixed_system=true
+                image_download_url="https://github.com/oneclickvirt/lxc_amd64_images/releases/download/${en_system}/${image_name}"
+                if [ ! -f "/var/lib/vz/template/cache/${image_name}" ]; then
+                    curl -o "/var/lib/vz/template/cache/${image_name}" "${cdn_success_url}${image_download_url}"
+                    if [ $? -ne 0 ]; then
+                        _red "Failed to download ${system_name}"
+                        fixed_system=false
+                        rm -rf "/var/lib/vz/template/cache/${system_name}"
                     fi
-                    _blue "Use self-fixed image: ${system_name}"
-                    break
                 fi
-            done
+                echo "A matching image exists and will be created using ${image_name}"
+                echo "匹配的镜像存在，将使用 ${image_name} 进行创建"
+                system_name="$image_name"
+                break
+            fi
+        fi
+    done
+    # 使用手动修补的镜像
+    if [ "$fixed_system" = false ] && [ -z "$system_name" ]; then
+        system_name=""
+        system_names=()
+        system="${en_system}-${num_system}"
+        response=$(curl -slk -m 6 "${cdn_success_url}https://raw.githubusercontent.com/oneclickvirt/pve_lxc_images/main/fixed_images.txt")
+        if [ $? -eq 0 ] && [ -n "$response" ]; then
+            system_names+=($(echo "$response"))
+        fi
+        pve_version=$(pveversion)
+        if [[ $pve_version == pve-manager/5* ]]; then
+            _blue "Detected that PVE version is too low to use zst format images"
+        else
+            if [ ${#system_names[@]} -eq 0 ]; then
+                echo "No suitable system names found."
+            elif [ -z $num_system ]; then
+                # 适配无指定版本的系统
+                for ((i=0; i<${#system_names[@]}; i++)); do
+                    if [[ "${system_names[$i]}" == "${en_system}-"* ]]; then
+                        system_name="${system_names[$i]}"
+                        fixed_system=true
+                        if [ ! -f "/var/lib/vz/template/cache/${system_name}" ]; then
+                            curl -o "/var/lib/vz/template/cache/${system_name}" "${cdn_success_url}https://github.com/oneclickvirt/pve_lxc_images/releases/download/${en_system}/${system_name}"
+                            if [ $? -ne 0 ]; then
+                                _red "Failed to download ${system_name}"
+                                fixed_system=false
+                                rm -rf "/var/lib/vz/template/cache/${system_name}"
+                            fi
+                        fi
+                        _blue "Use self-fixed image: ${system_name}"
+                        break
+                    fi
+                done
+            else
+                # 适配指定版本的系统
+                for sy in "${system_names[@]}"; do
+                    if [[ $sy == "${system}"* ]]; then
+                        system_name="$sy"
+                        fixed_system=true
+                        if [ ! -f "/var/lib/vz/template/cache/${system_name}" ]; then
+                            curl -o "/var/lib/vz/template/cache/${system_name}" "${cdn_success_url}https://github.com/oneclickvirt/pve_lxc_images/releases/download/${en_system}/${system_name}"
+                            if [ $? -ne 0 ]; then
+                                _red "Failed to download ${system_name}"
+                                fixed_system=false
+                                rm -rf "/var/lib/vz/template/cache/${system_name}"
+                            fi
+                        fi
+                        _blue "Use self-fixed image: ${system_name}"
+                        break
+                    fi
+                done
+            fi
         fi
     fi
     if [ "$fixed_system" = false ] && [ -z "$system_name" ]; then
@@ -305,12 +356,8 @@ fi
 
 # 正式开设容器
 user_ip="172.16.1.${num}"
-if [ "$system_arch" = "x86" ]; then
-    if [ "$fixed_system" = true ]; then
-        pct create $CTID /var/lib/vz/template/cache/${system_name} -cores $core -cpuunits 1024 -memory $memory -swap 128 -rootfs ${storage}:${disk} -onboot 1 -password $password -features nesting=1
-    else
-        pct create $CTID ${storage}:vztmpl/${system_name} -cores $core -cpuunits 1024 -memory $memory -swap 128 -rootfs ${storage}:${disk} -onboot 1 -password $password -features nesting=1
-    fi
+if [ "$fixed_system" = true ]; then
+    pct create $CTID /var/lib/vz/template/cache/${system_name} -cores $core -cpuunits 1024 -memory $memory -swap 128 -rootfs ${storage}:${disk} -onboot 1 -password $password -features nesting=1
 else
     pct create $CTID ${storage}:vztmpl/${system_name} -cores $core -cpuunits 1024 -memory $memory -swap 128 -rootfs ${storage}:${disk} -onboot 1 -password $password -features nesting=1
 fi
