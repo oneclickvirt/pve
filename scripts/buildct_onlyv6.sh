@@ -183,7 +183,7 @@ else
     if [ $? -eq 0 ] && [ -n "$response" ]; then
         system_names+=($(echo "$response"))
     fi
-    for image_name in "${self_fixed_images[@]}"; do
+    for image_name in "${system_names[@]}"; do
         if [ -z "${num_system}" ]; then
             # 若无版本号，则仅识别系统名字匹配第一个链接，放宽系统识别
             if [[ "$image_name" == "${en_system}"* ]]; then

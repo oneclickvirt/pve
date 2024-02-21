@@ -167,15 +167,15 @@ if [ "$system_arch" = "arch" ]; then
     fi
 else
     fixed_system=false
+    system="${en_system}-${num_system}"
     # 使用自动修补的镜像
     system_name=""
     system_names=()
-    system="${en_system}_${num_system}"
     response=$(curl -slk -m 6 "${cdn_success_url}https://raw.githubusercontent.com/oneclickvirt/lxc_amd64_images/main/fixed_images.txt")
     if [ $? -eq 0 ] && [ -n "$response" ]; then
         system_names+=($(echo "$response"))
     fi
-    for image_name in "${self_fixed_images[@]}"; do
+    for image_name in "${system_names[@]}"; do
         if [ -z "${num_system}" ]; then
             # 若无版本号，则仅识别系统名字匹配第一个链接，放宽系统识别
             if [[ "$image_name" == "${en_system}"* ]]; then
@@ -218,7 +218,6 @@ else
     if [ "$fixed_system" = false ] && [ -z "$system_name" ]; then
         system_name=""
         system_names=()
-        system="${en_system}-${num_system}"
         response=$(curl -slk -m 6 "${cdn_success_url}https://raw.githubusercontent.com/oneclickvirt/pve_lxc_images/main/fixed_images.txt")
         if [ $? -eq 0 ] && [ -n "$response" ]; then
             system_names+=($(echo "$response"))
