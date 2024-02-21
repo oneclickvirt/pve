@@ -135,3 +135,32 @@ else
 fi
 
 user_ip="172.16.1.${num}"
+
+# 通过官方地址获取镜像源
+# if [[ -z "${CN}" || "${CN}" != true ]]; then
+#     if [ ! -f "/var/lib/vz/template/cache/${en_system}-arm64-${version}-cloud.tar.xz" ]; then
+#         # curl -o "/var/lib/vz/template/cache/${en_system}-arm64-${version}-cloud.tar.xz" "https://jenkins.linuxcontainers.org/view/LXC/job/image-${en_system}/architecture=arm64,release=${version},variant=cloud/lastSuccessfulBuild/artifact/rootfs.tar.xz"
+#     fi
+# else
+#     # https://mirror.tuna.tsinghua.edu.cn/lxc-images/images/
+#     URL="https://mirror.tuna.tsinghua.edu.cn/lxc-images/images/${en_system}/${version}/arm64/cloud/"
+#     HTML=$(curl -s "$URL")
+#     folder_links_dates=$(echo "$HTML" | grep -oE '<a href="([^"]+)".*date">([^<]+)' | sed -E 's/<a href="([^"]+)".*date">([^<]+)/\1 \2/')
+#     sorted_links=$(echo "$folder_links_dates" | sort -k2 -r)
+#     latest_folder_link=$(echo "$sorted_links" | head -n 1 | awk '{print $1}')
+#     latest_folder_url="${URL}${latest_folder_link}"
+#     if [ ! -f "/var/lib/vz/template/cache/${en_system}-arm64-${version}-cloud.tar.xz" ]; then
+#         curl -o "/var/lib/vz/template/cache/${en_system}-arm64-${version}-cloud.tar.xz" "${latest_folder_url}/rootfs.tar.xz"
+#     fi
+# fi
+
+# LXC容器通过API获取镜像地址
+# response=$(curl -sSL -H "Accept: application/vnd.github.v3+json" "https://api.github.com/repos/oneclickvirt/pve_lxc_images/releases/tags/${en_system}" | grep -oP '"name": "\K[^"]+\.zst' | awk 'NR%2==1')
+# # 如果 https://api.github.com/ 请求失败，则使用 https://githubapi.spiritlhl.workers.dev/ ，此时可能宿主机无IPV4网络
+# if [ -z "$response" ]; then
+#     response=$(curl -sSL -H "Accept: application/vnd.github.v3+json" "https://githubapi.spiritlhl.workers.dev/repos/oneclickvirt/pve_lxc_images/releases/tags/${en_system}" | grep -oP '"name": "\K[^"]+\.zst' | awk 'NR%2==1')
+# fi
+# # 如果 https://githubapi.spiritlhl.workers.dev/ 请求失败，则使用 https://githubapi.spiritlhl.top/ ，此时可能宿主机在国内
+# if [ -z "$response" ]; then
+#     response=$(curl -sSL -H "Accept: application/vnd.github.v3+json" "https://githubapi.spiritlhl.top/repos/oneclickvirt/pve_lxc_images/releases/tags/${en_system}" | grep -oP '"name": "\K[^"]+\.zst' | awk 'NR%2==1')
+# fi

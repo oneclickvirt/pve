@@ -12,25 +12,55 @@
 
 ## 更新
 
-2024.02.20
+2024.02.21
 
-- 优化环境检测脚本，IPV6不可用时不检测SLAAC配置
+- 增加LXC容器开设的自修补镜像源：https://github.com/oneclickvirt/lxc_amd64_images
+- LXC容器开设的源优先级：自修补 > 手动修补 > 官方源
 
 [更新日志](CHANGELOG.md)
 
 ## 说明文档
 
-国内(China)：
+国内：
 
 [https://virt.spiritlhl.net/](https://virt.spiritlhl.net/)
 
-国际(Global)：
+国际：
 
 [https://www.spiritlhl.net/en/](https://www.spiritlhl.net/en/)
 
 说明文档中 Proxmox VE 分区内容
 
-[https://github.com/oneclickvirt/kvm_images](https://github.com/oneclickvirt/kvm_images) 为对应虚拟机镜像仓库
+自修补虚拟机镜像源：
+
+[https://github.com/oneclickvirt/pve_kvm_images](https://github.com/oneclickvirt/pve_kvm_images)
+
+[https://github.com/oneclickvirt/kvm_images](https://github.com/oneclickvirt/kvm_images)
+
+自修补容器镜像源：
+
+[https://github.com/oneclickvirt/lxc_amd64_images](https://github.com/oneclickvirt/lxc_amd64_images)
+
+[https://github.com/oneclickvirt/lxc_arm_images](https://github.com/oneclickvirt/lxc_arm_images)
+
+## Introduce
+
+[https://www.spiritlhl.net/en/](https://www.spiritlhl.net/en/)
+
+Description of the Proxmox VE partition contents in the documentation
+
+Self-patching VM image sources:
+
+[https://github.com/oneclickvirt/pve_kvm_images](https://github.com/oneclickvirt/pve_kvm_images)
+
+[https://github.com/oneclickvirt/kvm_images](https://github.com/oneclickvirt/kvm_images)
+
+Self-patching container image source:
+
+[https://github.com/oneclickvirt/lxc_amd64_images](https://github.com/oneclickvirt/lxc_amd64_images)
+
+[https://github.com/oneclickvirt/lxc_arm_images](https://github.com/oneclickvirt/lxc_arm_images)
+
 
 ## Stargazers over time
 
