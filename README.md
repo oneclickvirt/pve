@@ -21,11 +21,11 @@
 
 ## 说明文档
 
-国内：
+国内(China Docs)：
 
 [https://virt.spiritlhl.net/](https://virt.spiritlhl.net/)
 
-国际：
+国际(English Docs)：
 
 [https://www.spiritlhl.net/en/](https://www.spiritlhl.net/en/)
 
@@ -47,9 +47,11 @@
 
 ## Introduce
 
+English Docs:
+
 [https://www.spiritlhl.net/en/](https://www.spiritlhl.net/en/)
 
-Description of the Proxmox VE partition contents in the documentation
+Description of the **Proxmox VE** partition contents in the documentation
 
 Self-patching VM image sources:
 
