@@ -22,7 +22,8 @@ if [ "$(cat /etc/os-release | grep -E '^ID=' | cut -d '=' -f 2 | tr -d '"')" == 
     chattr -i /etc/ssh/sshd_config
     sed -i '/^#PermitRootLogin\|PermitRootLogin/c PermitRootLogin yes' /etc/ssh/sshd_config
     sed -i "s/^#\?PasswordAuthentication.*/PasswordAuthentication yes/g" /etc/ssh/sshd_config
-    sed -i '/^#ListenAddress\|ListenAddress/c ListenAddress 0.0.0.0' /etc/ssh/sshd_config
+    sed -i 's/#ListenAddress 0.0.0.0/ListenAddress 0.0.0.0/' /etc/ssh/sshd_config
+    sed -i 's/#ListenAddress ::/ListenAddress ::/' /etc/ssh/sshd_config
     sed -i '/^#AddressFamily\|AddressFamily/c AddressFamily any' /etc/ssh/sshd_config
     sed -i "s/^#\?\(Port\).*/\1 22/" /etc/ssh/sshd_config
     sed -i -E 's/^#?(Port).*/\1 22/' /etc/ssh/sshd_config
