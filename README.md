@@ -69,7 +69,7 @@ Self-patching container image source:
 
 ## Stargazers over time
 
-[![Stargazers over time](https://starchart.cc/spiritLHLS/pve.svg)](https://starchart.cc/spiritLHLS/pve)
+[![Stargazers over time](https://starchart.cc/oneclickvirt/pve.svg)](https://starchart.cc/oneclickvirt/pve)
 
 ## 友链
 
