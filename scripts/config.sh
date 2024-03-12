@@ -1,6 +1,7 @@
 #!/bin/bash
 # from
-# https://github.com/spiritLHLS/pve
+# https://github.com/oneclickvirt/pve
+# 2024.03.12
 
 divert_install_script() {
   local package_name=$1

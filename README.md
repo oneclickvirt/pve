@@ -12,10 +12,9 @@
 
 ## 更新
 
-2024.02.21
+2024.03.12
 
-- 增加LXC容器开设的自修补镜像源：https://github.com/oneclickvirt/lxc_amd64_images
-- LXC容器开设的源优先级：自修补 > 手动修补 > 官方源
+- 迁移仓库至于组织仓库，方便协同维护
 
 [更新日志](CHANGELOG.md)
 

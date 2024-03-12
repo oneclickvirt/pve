@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
-# https://github.com/spiritLHLS/pve
-# 2023.07.31
+# https://github.com/oneclickvirt/pve
+# 2024.03.12
 
 # 安装ifupdown2
 apt-get install -y ifupdown2

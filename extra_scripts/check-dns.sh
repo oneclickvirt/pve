@@ -1,6 +1,7 @@
 #!/bin/bash
 # from
-# https://github.com/spiritLHLS/pve
+# https://github.com/oneclickvirt/pve
+# 2024.03.12
 
 sleep 3
 DNS_SERVER="8.8.8.8"

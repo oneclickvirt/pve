@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
-# https://github.com/spiritLHLS/pve
-# 2024.02.20
+# https://github.com/oneclickvirt/pve
+# 2024.03.12
 
 ########## 预设部分输出和部分中间变量
 
@@ -516,8 +516,8 @@ check_cdn_file() {
 
 prebuild_ifupdown2() {
     if [ ! -f "/usr/local/bin/ifupdown2_installed.txt" ]; then
-        wget ${cdn_success_url}https://raw.githubusercontent.com/spiritLHLS/pve/main/extra_scripts/install_ifupdown2.sh -O /usr/local/bin/install_ifupdown2.sh
-        wget ${cdn_success_url}https://raw.githubusercontent.com/spiritLHLS/pve/main/extra_scripts/ifupdown2-install.service -O /etc/systemd/system/ifupdown2-install.service
+        wget ${cdn_success_url}https://raw.githubusercontent.com/oneclickvirt/pve/main/extra_scripts/install_ifupdown2.sh -O /usr/local/bin/install_ifupdown2.sh
+        wget ${cdn_success_url}https://raw.githubusercontent.com/oneclickvirt/pve/main/extra_scripts/ifupdown2-install.service -O /etc/systemd/system/ifupdown2-install.service
         chmod 777 /usr/local/bin/install_ifupdown2.sh
         chmod 777 /etc/systemd/system/ifupdown2-install.service
         if [ -f "/usr/local/bin/install_ifupdown2.sh" ]; then
@@ -741,8 +741,8 @@ fi
 systemctl restart networking
 if [ $? -ne 0 ] && [ -e "/etc/systemd/system/networking.service" ]; then
     if [ ! -f "/usr/local/bin/clear_interface_route_cache.sh" ]; then
-        wget ${cdn_success_url}https://raw.githubusercontent.com/spiritLHLS/pve/main/extra_scripts/clear_interface_route_cache.sh -O /usr/local/bin/clear_interface_route_cache.sh
-        wget ${cdn_success_url}https://raw.githubusercontent.com/spiritLHLS/pve/main/extra_scripts/clear_interface_route_cache.service -O /etc/systemd/system/clear_interface_route_cache.service
+        wget ${cdn_success_url}https://raw.githubusercontent.com/oneclickvirt/pve/main/extra_scripts/clear_interface_route_cache.sh -O /usr/local/bin/clear_interface_route_cache.sh
+        wget ${cdn_success_url}https://raw.githubusercontent.com/oneclickvirt/pve/main/extra_scripts/clear_interface_route_cache.service -O /etc/systemd/system/clear_interface_route_cache.service
         chmod +x /usr/local/bin/clear_interface_route_cache.sh
         chmod +x /etc/systemd/system/clear_interface_route_cache.service
         systemctl daemon-reload
@@ -768,8 +768,8 @@ if [ "$system_arch" = "arch" ]; then
     systemctl stop NetworkManager
 fi
 if [ ! -f "/usr/local/bin/check-dns.sh" ]; then
-    wget ${cdn_success_url}https://raw.githubusercontent.com/spiritLHLS/pve/main/extra_scripts/check-dns.sh -O /usr/local/bin/check-dns.sh
-    wget ${cdn_success_url}https://raw.githubusercontent.com/spiritLHLS/pve/main/extra_scripts/check-dns.service -O /etc/systemd/system/check-dns.service
+    wget ${cdn_success_url}https://raw.githubusercontent.com/oneclickvirt/pve/main/extra_scripts/check-dns.sh -O /usr/local/bin/check-dns.sh
+    wget ${cdn_success_url}https://raw.githubusercontent.com/oneclickvirt/pve/main/extra_scripts/check-dns.service -O /etc/systemd/system/check-dns.service
     chmod +x /usr/local/bin/check-dns.sh
     chmod +x /etc/systemd/system/check-dns.service
     systemctl daemon-reload

@@ -1,5 +1,10 @@
 # 更新日志
 
+2024.02.21
+
+- 增加LXC容器开设的自修补镜像源：https://github.com/oneclickvirt/lxc_amd64_images
+- LXC容器开设的源优先级：自修补 > 手动修补 > 官方源
+
 2024.02.20
 
 - 优化环境检测脚本，IPV6不可用时不检测SLAAC配置

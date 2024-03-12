@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
-# https://github.com/spiritLHLS/pve
-# 2023.12.31
+# https://github.com/oneclickvirt/pve
+# 2024.03.12
 
 # cd /root
 
@@ -74,7 +74,7 @@ pre_check() {
         apt-get install dos2unix -y
     fi
     if [ ! -f "buildct.sh" ]; then
-        curl -L ${cdn_success_url}https://raw.githubusercontent.com/spiritLHLS/pve/main/scripts/buildct.sh -o buildct.sh && chmod +x buildct.sh
+        curl -L ${cdn_success_url}https://raw.githubusercontent.com/oneclickvirt/pve/main/scripts/buildct.sh -o buildct.sh && chmod +x buildct.sh
         dos2unix buildct.sh
     fi
 }

@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
-# https://github.com/spiritLHLS/pve
-# 2024.02.09
+# https://github.com/oneclickvirt/pve
+# 2024.03.12
 # 手动指定要绑定的IPV4地址
 
 # ./buildvm_manual_ip.sh VMID 用户名 密码 CPU核数 内存 硬盘 系统 存储盘 IPV4地址 是否附加IPV6(默认为N)

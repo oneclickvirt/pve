@@ -1,5 +1,5 @@
 #!/bin/bash
-#from https://github.com/spiritLHLS/pve
+#from https://github.com/oneclickvirt/pve
 
 for vmid in $(qm list | awk '{if(NR>1) print $1}'); do qm stop $vmid; qm destroy $vmid; rm -rf /var/lib/vz/images/$vmid*; done
 iptables -t nat -F

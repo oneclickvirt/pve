@@ -1,5 +1,5 @@
 #!/bin/bash
-#from https://github.com/spiritLHLS/pve
+#from https://github.com/oneclickvirt/pve
 
 
 ## China_IP

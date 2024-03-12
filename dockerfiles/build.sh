@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
-# https://github.com/spiritLHLS/pve
-# 2023.08.15
+# https://github.com/oneclickvirt/pve
+# 2024.03.12
 
 ########## 预设部分输出和部分中间变量
 
@@ -253,5 +253,5 @@ fi
 # Dockerfile_aarch64_7
 tag="x86_64_7"
 docker_file_name="Dockerfile_x86_64_7"
-curl -Lk "${cdn_success_url}https://raw.githubusercontent.com/spiritLHLS/pve/main/dockerfiles/${docker_file_name}" -o /root/Dockerfile
+curl -Lk "${cdn_success_url}https://raw.githubusercontent.com/oneclickvirt/pve/main/dockerfiles/${docker_file_name}" -o /root/Dockerfile
 docker build -t "spiritlhl/proxmoxve:${tag}" -f /root/Dockerfile .

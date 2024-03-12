@@ -1,7 +1,7 @@
 #!/bin/sh
 # from
-# https://github.com/spiritLHLS/pve
-# 2024.02.08
+# https://github.com/oneclickvirt/pve
+# 2024.03.12
 
 if [ -f "/etc/resolv.conf" ]; then
     cp /etc/resolv.conf /etc/resolv.conf.bak

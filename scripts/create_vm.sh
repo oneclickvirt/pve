@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
-# https://github.com/spiritLHLS/pve
-# 2023.12.31
+# https://github.com/oneclickvirt/pve
+# 2024.03.12
 
 # cd /root
 
@@ -74,7 +74,7 @@ pre_check() {
         apt-get install dos2unix -y
     fi
     if [ ! -f "buildvm.sh" ]; then
-        curl -L ${cdn_success_url}https://raw.githubusercontent.com/spiritLHLS/pve/main/scripts/buildvm.sh -o buildvm.sh && chmod +x buildvm.sh
+        curl -L ${cdn_success_url}https://raw.githubusercontent.com/oneclickvirt/pve/main/scripts/buildvm.sh -o buildvm.sh && chmod +x buildvm.sh
         dos2unix buildvm.sh
     fi
 }

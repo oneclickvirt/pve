@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
-# https://github.com/spiritLHLS/pve
-# 2024.02.21
+# https://github.com/oneclickvirt/pve
+# 2024.03.12
 # ./buildct_onlyv6.sh CTID 密码 CPU核数 内存 硬盘 系统 存储盘
 # ./buildct_onlyv6.sh 102 1234567 1 512 5 debian11 local
 
@@ -434,12 +434,12 @@ else
         fi
     fi
     if echo "$system" | grep -qiE "alpine|archlinux|gentoo|openwrt" >/dev/null 2>&1; then
-        pct exec $CTID -- curl -L ${cdn_success_url}https://raw.githubusercontent.com/spiritLHLS/pve/main/scripts/ssh_sh.sh -o ssh_sh.sh
+        pct exec $CTID -- curl -L ${cdn_success_url}https://raw.githubusercontent.com/oneclickvirt/pve/main/scripts/ssh_sh.sh -o ssh_sh.sh
         pct exec $CTID -- chmod 777 ssh_sh.sh
         pct exec $CTID -- dos2unix ssh_sh.sh
         pct exec $CTID -- bash ssh_sh.sh
     else
-        pct exec $CTID -- curl -L ${cdn_success_url}https://raw.githubusercontent.com/spiritLHLS/pve/main/scripts/ssh_bash.sh -o ssh_bash.sh
+        pct exec $CTID -- curl -L ${cdn_success_url}https://raw.githubusercontent.com/oneclickvirt/pve/main/scripts/ssh_bash.sh -o ssh_bash.sh
         pct exec $CTID -- chmod 777 ssh_bash.sh
         pct exec $CTID -- dos2unix ssh_bash.sh
         pct exec $CTID -- bash ssh_bash.sh

@@ -1,5 +1,5 @@
 #!/bin/bash
-#from https://github.com/spiritLHLS/pve
+#from https://github.com/oneclickvirt/pve
 # pve 6 to pve 7
 
 # 打印信息

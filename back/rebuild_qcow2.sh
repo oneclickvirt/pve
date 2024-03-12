@@ -1,5 +1,5 @@
 #!/bin/bash
-# from https://github.com/spiritLHLS/pve
+# from https://github.com/oneclickvirt/pve
 
 if ! command -v virt-customize &> /dev/null
 then
@@ -21,7 +21,7 @@ if [[ "$qcow_file" == *"debian"* || "$qcow_file" == *"ubuntu"* || "$qcow_file" =
     virt-customize -a $qcow_file --run-command "sed -i 's/ssh_pwauth:[[:space:]]*0/ssh_pwauth: 1/g' /etc/cloud/cloud.cfg"
     virt-customize -a $qcow_file --run-command "echo '' > /etc/motd"
     virt-customize -a $qcow_file --run-command "echo 'Modified from https://github.com/oneclickvirt/kvm_images' >> /etc/motd"
-    virt-customize -a $qcow_file --run-command "echo 'Related repo https://github.com/spiritLHLS/pve' >> /etc/motd"
+    virt-customize -a $qcow_file --run-command "echo 'Related repo https://github.com/oneclickvirt/pve' >> /etc/motd"
     virt-customize -a $qcow_file --run-command "echo '--by https://t.me/spiritlhl' >> /etc/motd"
     echo "启用SSH功能..."
     virt-customize -a $qcow_file --run-command "systemctl enable ssh"
@@ -63,7 +63,7 @@ elif [[ "$qcow_file" == *"almalinux9"* || "$qcow_file" == *"rockylinux"* ]]; the
     virt-customize -a $qcow_file --run-command "sed -i 's/ssh_pwauth:[[:space:]]*0/ssh_pwauth: 1/g' /etc/cloud/cloud.cfg"
     virt-customize -a $qcow_file --run-command "echo '' > /etc/motd"
     virt-customize -a $qcow_file --run-command "echo 'Modified from https://github.com/oneclickvirt/kvm_images' >> /etc/motd"
-    virt-customize -a $qcow_file --run-command "echo 'Related repo https://github.com/spiritLHLS/pve' >> /etc/motd"
+    virt-customize -a $qcow_file --run-command "echo 'Related repo https://github.com/oneclickvirt/pve' >> /etc/motd"
     virt-customize -a $qcow_file --run-command "echo '--by https://t.me/spiritlhl' >> /etc/motd"
     echo "启用SSH功能..."
     virt-customize -a $qcow_file --run-command "systemctl enable ssh"
@@ -91,7 +91,7 @@ elif [[ "$qcow_file" == *"almalinux8"* || "$qcow_file" == *"centos9-stream"* || 
     virt-customize -a $qcow_file --run-command "sed -i 's/ssh_pwauth:[[:space:]]*0/ssh_pwauth: 1/g' /etc/cloud/cloud.cfg"
     virt-customize -a $qcow_file --run-command "echo '' > /etc/motd"
     virt-customize -a $qcow_file --run-command "echo 'Modified from https://github.com/oneclickvirt/kvm_images' >> /etc/motd"
-    virt-customize -a $qcow_file --run-command "echo 'Related repo https://github.com/spiritLHLS/pve' >> /etc/motd"
+    virt-customize -a $qcow_file --run-command "echo 'Related repo https://github.com/oneclickvirt/pve' >> /etc/motd"
     virt-customize -a $qcow_file --run-command "echo '--by https://t.me/spiritlhl' >> /etc/motd"
     echo "启用SSH功能..."
     virt-customize -a $qcow_file --run-command "systemctl enable ssh"
@@ -119,7 +119,7 @@ else
     virt-customize -a $qcow_file --run-command "sed -i 's/ssh_pwauth:[[:space:]]*0/ssh_pwauth: 1/g' /etc/cloud/cloud.cfg"
     virt-customize -a $qcow_file --run-command "echo '' > /etc/motd"
     virt-customize -a $qcow_file --run-command "echo 'Modified from https://github.com/oneclickvirt/kvm_images' >> /etc/motd"
-    virt-customize -a $qcow_file --run-command "echo 'Related repo https://github.com/spiritLHLS/pve' >> /etc/motd"
+    virt-customize -a $qcow_file --run-command "echo 'Related repo https://github.com/oneclickvirt/pve' >> /etc/motd"
     virt-customize -a $qcow_file --run-command "echo '--by https://t.me/spiritlhl' >> /etc/motd"
     echo "启用SSH功能..."
     virt-customize -a $qcow_file --run-command "systemctl enable ssh"

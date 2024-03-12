@@ -6,7 +6,7 @@
 自测中，勿要使用，未完成
 
 ```
-curl -L https://raw.githubusercontent.com/spiritLHLS/pve/main/pve6_to_pve7.sh -o pve6_to_pve7.sh && chmod +x pve6_to_pve7.sh && bash pve6_to_pve7.sh
+curl -L https://raw.githubusercontent.com/oneclickvirt/pve/main/pve6_to_pve7.sh -o pve6_to_pve7.sh && chmod +x pve6_to_pve7.sh && bash pve6_to_pve7.sh
 ```
 
 ### 加载系统模板
@@ -15,13 +15,13 @@ curl -L https://raw.githubusercontent.com/spiritLHLS/pve/main/pve6_to_pve7.sh -o
 - 加载完成后请web端查看 pve > local(pve) > ISO Images/CT Templates 刷新一下记录，直接去创建虚拟机是可能看不到已加载的
 
 ```
-curl -L https://raw.githubusercontent.com/spiritLHLS/pve/main/install_iso.sh -o install_iso.sh && chmod +x install_iso.sh && bash install_iso.sh
+curl -L https://raw.githubusercontent.com/oneclickvirt/pve/main/install_iso.sh -o install_iso.sh && chmod +x install_iso.sh && bash install_iso.sh
 ```
 
 ### 替换qcow2
 
 ```
-curl -L https://raw.githubusercontent.com/spiritLHLS/pve/main/back/rebuild.sh -o rebuild.sh && chmod +x rebuild.sh && bash rebuild.sh
+curl -L https://raw.githubusercontent.com/oneclickvirt/pve/main/back/rebuild.sh -o rebuild.sh && chmod +x rebuild.sh && bash rebuild.sh
 ```
 
 ```
@@ -63,7 +63,7 @@ rm -rf vm*
 尝试失败，因为已自动替换过为PVE的内核，如需卸载需要先替换为原生内核
 
 ```
-curl -L https://raw.githubusercontent.com/spiritLHLS/pve/main/back/uninstallpve.sh -o uninstallpve.sh && chmod +x uninstallpve.sh && bash uninstallpve.sh
+curl -L https://raw.githubusercontent.com/oneclickvirt/pve/main/back/uninstallpve.sh -o uninstallpve.sh && chmod +x uninstallpve.sh && bash uninstallpve.sh
 ```
 
 ### PVE基础安装说明
@@ -128,13 +128,13 @@ curl -L https://raw.githubusercontent.com/spiritLHLS/pve/main/back/uninstallpve.
 - 不可嵌套虚拟化KVM类型的服务器也可以开LXC虚拟化的服务器，但不推荐安装PVE，不如使用[LXD](https://github.com/spiritLHLS/lxc)
 
 ```
-bash <(wget -qO- --no-check-certificate https://raw.githubusercontent.com/spiritLHLS/pve/main/scripts/check_kernal.sh)
+bash <(wget -qO- --no-check-certificate https://raw.githubusercontent.com/oneclickvirt/pve/main/scripts/check_kernal.sh)
 ```
 
 国内：
 
 ```
-bash <(wget -qO- --no-check-certificate https://ghproxy.com/https://raw.githubusercontent.com/spiritLHLS/pve/main/scripts/check_kernal.sh)
+bash <(wget -qO- --no-check-certificate https://ghproxy.com/https://raw.githubusercontent.com/oneclickvirt/pve/main/scripts/check_kernal.sh)
 ```
 
 #### PVE基础安装说明
@@ -154,13 +154,13 @@ bash <(wget -qO- --no-check-certificate https://ghproxy.com/https://raw.githubus
 #### 一键安装PVE
 
 ```
-curl -L https://raw.githubusercontent.com/spiritLHLS/pve/main/scripts/install_pve.sh -o install_pve.sh && chmod +x install_pve.sh && bash install_pve.sh
+curl -L https://raw.githubusercontent.com/oneclickvirt/pve/main/scripts/install_pve.sh -o install_pve.sh && chmod +x install_pve.sh && bash install_pve.sh
 ```
 
 国内：
 
 ```
-curl -L https://ghproxy.com/https://raw.githubusercontent.com/spiritLHLS/pve/main/scripts/install_pve.sh -o install_pve.sh && chmod +x install_pve.sh && bash install_pve.sh
+curl -L https://ghproxy.com/https://raw.githubusercontent.com/oneclickvirt/pve/main/scripts/install_pve.sh -o install_pve.sh && chmod +x install_pve.sh && bash install_pve.sh
 ```
 
 ### 预配置环境
@@ -173,13 +173,13 @@ curl -L https://ghproxy.com/https://raw.githubusercontent.com/spiritLHLS/pve/mai
 - **执行完毕建议等待几分钟后再重启服务器**，执行```reboot```前需要等待后台任务执行完毕，一些宿主机的系统apt命令执行很慢，得等一会才能执行完毕
 
 ```
-bash <(wget -qO- --no-check-certificate https://raw.githubusercontent.com/spiritLHLS/pve/main/scripts/build_backend.sh)
+bash <(wget -qO- --no-check-certificate https://raw.githubusercontent.com/oneclickvirt/pve/main/scripts/build_backend.sh)
 ```
 
 国内
 
 ```
-bash <(wget -qO- --no-check-certificate https://ghproxy.com/https://raw.githubusercontent.com/spiritLHLS/pve/main/scripts/build_backend.sh)
+bash <(wget -qO- --no-check-certificate https://ghproxy.com/https://raw.githubusercontent.com/oneclickvirt/pve/main/scripts/build_backend.sh)
 ```
 
 ### 自动配置宿主机的网关
@@ -194,13 +194,13 @@ bash <(wget -qO- --no-check-certificate https://ghproxy.com/https://raw.githubus
 - 加载iptables并设置回源且允许NAT端口转发
 
 ```
-bash <(wget -qO- --no-check-certificate https://raw.githubusercontent.com/spiritLHLS/pve/main/scripts/build_nat_network.sh)
+bash <(wget -qO- --no-check-certificate https://raw.githubusercontent.com/oneclickvirt/pve/main/scripts/build_nat_network.sh)
 ```
 
 国内
 
 ```
-bash <(wget -qO- --no-check-certificate https://ghproxy.com/https://raw.githubusercontent.com/spiritLHLS/pve/main/scripts/build_nat_network.sh)
+bash <(wget -qO- --no-check-certificate https://ghproxy.com/https://raw.githubusercontent.com/oneclickvirt/pve/main/scripts/build_nat_network.sh)
 ```
 
 ## 一键生成KVM虚拟化的NAT服务器
@@ -232,13 +232,13 @@ bash <(wget -qO- --no-check-certificate https://ghproxy.com/https://raw.githubus
 - 虚拟机的相关信息将会存储到对应的虚拟机的NOTE中，可在WEB端查看
 
 ```
-curl -L https://raw.githubusercontent.com/spiritLHLS/pve/main/scripts/buildvm.sh -o buildvm.sh && chmod +x buildvm.sh
+curl -L https://raw.githubusercontent.com/oneclickvirt/pve/main/scripts/buildvm.sh -o buildvm.sh && chmod +x buildvm.sh
 ```
 
 国内
 
 ```
-curl -L https://ghproxy.com/https://raw.githubusercontent.com/spiritLHLS/pve/main/scripts/buildvm.sh -o buildvm.sh && chmod +x buildvm.sh
+curl -L https://ghproxy.com/https://raw.githubusercontent.com/oneclickvirt/pve/main/scripts/buildvm.sh -o buildvm.sh && chmod +x buildvm.sh
 ```
 
 #### 单个生成的使用方法
@@ -307,13 +307,13 @@ https://github.com/spiritLHLS/Images/releases/tag/v1.0
 #### 使用方法
 
 ```
-curl -L https://raw.githubusercontent.com/spiritLHLS/pve/main/scripts/create_vm.sh -o create_vm.sh && chmod +x create_vm.sh && bash create_vm.sh
+curl -L https://raw.githubusercontent.com/oneclickvirt/pve/main/scripts/create_vm.sh -o create_vm.sh && chmod +x create_vm.sh && bash create_vm.sh
 ```
 
 国内
 
 ```
-curl -L https://ghproxy.com/https://raw.githubusercontent.com/spiritLHLS/pve/main/scripts/create_vm.sh -o create_vm.sh && chmod +x create_vm.sh && bash create_vm.sh
+curl -L https://ghproxy.com/https://raw.githubusercontent.com/oneclickvirt/pve/main/scripts/create_vm.sh -o create_vm.sh && chmod +x create_vm.sh && bash create_vm.sh
 ```
 
 开设完毕可执行
@@ -355,13 +355,13 @@ PVE修改虚拟机配置前都得停机先，再修改配置，修改完再启�
 下载脚本
 
 ```
-curl -L https://raw.githubusercontent.com/spiritLHLS/pve/main/scripts/buildvm_extraip.sh -o buildvm_extraip.sh && chmod +x buildvm_extraip.sh
+curl -L https://raw.githubusercontent.com/oneclickvirt/pve/main/scripts/buildvm_extraip.sh -o buildvm_extraip.sh && chmod +x buildvm_extraip.sh
 ```
 
 国内下载
 
 ```
-curl -L https://ghproxy.com/https://raw.githubusercontent.com/spiritLHLS/pve/main/scripts/buildvm_extraip.sh -o buildvm_extraip.sh && chmod +x buildvm_extraip.sh
+curl -L https://ghproxy.com/https://raw.githubusercontent.com/oneclickvirt/pve/main/scripts/buildvm_extraip.sh -o buildvm_extraip.sh && chmod +x buildvm_extraip.sh
 ```
 
 示例创建
@@ -402,13 +402,13 @@ LXC虚拟化的容器-自带内外网映射
 - 容器的相关信息将会存储到对应的容器的NOTE中，可在WEB端查看
 
 ```
-curl -L https://raw.githubusercontent.com/spiritLHLS/pve/main/scripts/buildct.sh -o buildct.sh && chmod +x buildct.sh
+curl -L https://raw.githubusercontent.com/oneclickvirt/pve/main/scripts/buildct.sh -o buildct.sh && chmod +x buildct.sh
 ```
 
 国内
 
 ```
-curl -L https://ghproxy.com/https://raw.githubusercontent.com/spiritLHLS/pve/main/scripts/buildct.sh -o buildct.sh && chmod +x buildct.sh
+curl -L https://ghproxy.com/https://raw.githubusercontent.com/oneclickvirt/pve/main/scripts/buildct.sh -o buildct.sh && chmod +x buildct.sh
 ```
 
 #### 如何使用
@@ -472,13 +472,13 @@ systemctl restart networking.service
 - 容器的相关信息将会存储到对应的容器的NOTE中，可在WEB端查看
 
 ```
-curl -L https://raw.githubusercontent.com/spiritLHLS/pve/main/scripts/create_ct.sh -o create_ct.sh && chmod +x create_ct.sh && bash create_ct.sh
+curl -L https://raw.githubusercontent.com/oneclickvirt/pve/main/scripts/create_ct.sh -o create_ct.sh && chmod +x create_ct.sh && bash create_ct.sh
 ```
 
 国内
 
 ```
-curl -L https://ghproxy.com/https://raw.githubusercontent.com/spiritLHLS/pve/main/scripts/create_ct.sh -o create_ct.sh && chmod +x create_ct.sh && bash create_ct.sh
+curl -L https://ghproxy.com/https://raw.githubusercontent.com/oneclickvirt/pve/main/scripts/create_ct.sh -o create_ct.sh && chmod +x create_ct.sh && bash create_ct.sh
 ```
 
 开设完毕可执行

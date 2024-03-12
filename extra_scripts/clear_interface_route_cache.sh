@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
-# https://github.com/spiritLHLS/pve
-# 2023.09.16
+# https://github.com/oneclickvirt/pve
+# 2024.03.12
 
 # 清理路由缓存
 sleep 5

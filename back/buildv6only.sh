@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
-# https://github.com/spiritLHLS/pve
-# 2023.04.13
+# https://github.com/oneclickvirt/pve
+# 2024.03.12
 
 # ./buildv6only.sh VMID 用户名 密码 CPU核数 内存 硬盘 系统
 # ./buildv6only.sh 103 test2 1234567 1 512 5 debian11

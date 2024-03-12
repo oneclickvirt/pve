@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
-# https://github.com/spiritLHLS/pve
-# 2024.02.18
+# https://github.com/oneclickvirt/pve
+# 2024.03.12
 
 # 打印信息
 _red() { echo -e "\033[31m\033[01m$@\033[0m"; }

@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
-# https://github.com/spiritLHLS/pve
-# 2024.02.08
+# https://github.com/oneclickvirt/pve
+# 2024.03.12
 
 if [ -f "/etc/resolv.conf" ]; then
     cp /etc/resolv.conf /etc/resolv.conf.bak
@@ -143,7 +143,7 @@ checkupdate
 install_required_modules
 if [ -f "/etc/motd" ]; then
     echo '' >/etc/motd
-    echo 'Related repo https://github.com/spiritLHLS/pve' >>/etc/motd
+    echo 'Related repo https://github.com/oneclickvirt/pve' >>/etc/motd
     echo '--by https://t.me/spiritlhl' >>/etc/motd
 fi
 service iptables stop 2>/dev/null

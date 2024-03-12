@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
-# https://github.com/spiritLHLS/pve
-# 2023.06.25
+# https://github.com/oneclickvirt/pve
+# 2024.03.12
 
 # 检查是否存在 "iface eth0 inet6 auto" 行
 if ! grep -q "iface eth0 inet6 auto" /etc/network/interfaces; then
