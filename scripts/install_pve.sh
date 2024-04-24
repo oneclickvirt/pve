@@ -1597,6 +1597,9 @@ chattr +i /etc/network/interfaces
 install_package ufw
 ufw disable
 
+# 强制WEB面板使用IPV4地址
+echo LISTEN_IP="0.0.0.0" > /etc/default/pveproxy
+
 ########## 打印安装成功的信息
 
 # 查询公网IPV4
