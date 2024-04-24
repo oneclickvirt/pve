@@ -1197,6 +1197,12 @@ if [ "${hostname}" != "pve" ]; then
         echo "${main_ipv4} ${hostname}.localdomain ${hostname}" >>/etc/hosts
         echo "Added ${main_ipv4} ${hostname}.localdomain ${hostname} to /etc/hosts"
     fi
+    hostname_check=$(cat /etc/hosts)
+    if ! grep -q "pve$" /etc/hosts; then
+        if grep -q "^127\.0\.0\.1 localhost\.localdomain localhost$" /etc/hosts; then
+            sed -i 's/^127\.0\.0\.1 localhost\.localdomain localhost$/& pve/' /etc/hosts
+        fi
+    fi
     chattr +i /etc/hosts
 fi
 
