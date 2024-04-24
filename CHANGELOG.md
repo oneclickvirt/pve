@@ -1,5 +1,9 @@
 # 更新日志
 
+2024.03.12
+
+- 迁移仓库至于组织仓库，方便协同维护
+
 2024.02.21
 
 - 增加LXC容器开设的自修补镜像源：https://github.com/oneclickvirt/lxc_amd64_images
