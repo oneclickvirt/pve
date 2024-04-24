@@ -1199,9 +1199,7 @@ if [ "${hostname}" != "pve" ]; then
     fi
     hostname_check=$(cat /etc/hosts)
     if ! grep -q "pve$" /etc/hosts; then
-        if grep -q "^127\.0\.0\.1 localhost\.localdomain localhost$" /etc/hosts; then
-            sed -i 's/^127\.0\.0\.1 localhost\.localdomain localhost$/& pve/' /etc/hosts
-        fi
+        echo "${main_ipv4} pve.localdomain pve" >> /etc/hosts
     fi
     chattr +i /etc/hosts
 fi
