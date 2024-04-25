@@ -5,10 +5,11 @@
 # 手动指定要绑定的IPV4地址 额外的IPV4地址需要与本机的IPV4地址在不在同一个子网内，即前缀不一致
 # 此时开设出的虚拟机的网关为宿主机的IPV4地址，它充当透明网桥，并且不是路由路径的一部分。 
 # 这意味着到达路由器的数据包将具有开设出的虚拟机的源 MAC 地址。 
-# 如果路由器无法识别源 MAC 地址，流量将被标记为“滥用”，并可能导致服务器被阻止。
+# 如果路由器无法识别源 MAC 地址，流量将被标记为“滥用”，并“可能”导致服务器被阻止。(如果使用Hetzner务必提供防止被报告滥用)
 
-# ./buildvm_manual_ip.sh VMID 用户名 密码 CPU核数 内存 硬盘 系统 存储盘 IPV4地址 是否附加IPV6(默认为N)
-# ./buildvm_manual_ip.sh 152 test1 1234567 1 512 5 debian11 local a.b.c.d/24 N
+# ./buildvm_manual_ip.sh VMID 用户名 密码 CPU核数 内存 硬盘 系统 存储盘 IPV4地址 是否附加IPV6(默认为N) MAC地址(不提供时将不指定虚拟机的MAC地址)
+# 示例：
+# ./buildvm_manual_ip.sh 152 test1 oneclick123 1 512 5 debian11 local a.b.c.d/24 N 4c:52:62:0e:04:c6
 
 cd /root >/dev/null 2>&1
 # 创建独立IPV4地址的虚拟机
@@ -23,6 +24,7 @@ storage="${8:-local}"
 extra_ip="${9}"
 independent_ipv6="${10:-N}"
 independent_ipv6=$(echo "$independent_ipv6" | tr '[:upper:]' '[:lower:]')
+mac_address="${11}"
 rm -rf "vm$name"
 user_ip=""
 user_ip_range=""
@@ -411,10 +413,14 @@ else
         ipv6_gateway=$(cat /usr/local/bin/pve_ipv6_gateway)
     fi
 fi
-if [ "$independent_ipv6" == "n" ]; then
-    qm create $vm_num --agent 1 --scsihw virtio-scsi-single --serial0 socket --cores $core --sockets 1 --cpu host --net0 virtio,bridge=vmbr0,firewall=0
-else
-    qm create $vm_num --agent 1 --scsihw virtio-scsi-single --serial0 socket --cores $core --sockets 1 --cpu host --net0 virtio,bridge=vmbr0,firewall=0 --net1 virtio,bridge=vmbr2,firewall=0
+if [ "$independent_ipv6" = "n" ] && [ -n "$mac_address" ]; then
+    qm create "$vm_num" --agent 1 --scsihw virtio-scsi-single --serial0 socket --cores "$core" --sockets 1 --cpu host --net0 virtio,bridge=vmbr0,firewall=0,macaddr="$mac_address"
+elif [ "$independent_ipv6" = "n" ]; then
+    qm create "$vm_num" --agent 1 --scsihw virtio-scsi-single --serial0 socket --cores "$core" --sockets 1 --cpu host --net0 virtio,bridge=vmbr0,firewall=0
+elif [ "$independent_ipv6" = "y" ] && [ -n "$mac_address" ]; then
+    qm create "$vm_num" --agent 1 --scsihw virtio-scsi-single --serial0 socket --cores "$core" --sockets 1 --cpu host --net0 virtio,bridge=vmbr0,firewall=0,macaddr="$mac_address" --net1 virtio,bridge=vmbr2,firewall=0
+elif [ "$independent_ipv6" = "y" ]; then
+    qm create "$vm_num" --agent 1 --scsihw virtio-scsi-single --serial0 socket --cores "$core" --sockets 1 --cpu host --net0 virtio,bridge=vmbr0,firewall=0 --net1 virtio,bridge=vmbr2,firewall=0
 fi
 if [ "$system_arch" = "x86" ]; then
     qm importdisk $vm_num /root/qcow/${system}.qcow2 ${storage}
