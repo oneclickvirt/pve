@@ -355,7 +355,7 @@ done
 gateway=$(grep -E "iface $interface" -A 3 "/etc/network/interfaces" | grep "gateway" | awk '{print $2}' | head -n 1)
 if [ -z "$gateway" ]; then
     gateway=$(grep -E "iface vmbr0" -A 3 "/etc/network/interfaces" | grep "gateway" | awk '{print $2}' | head -n 1)
-    if [ -z "$user_main_ip_range" ]; then
+    if [ -z "$gateway" ]; then
         _red "Host gateway query failed"
         _red "宿主机网关查询失败"
         exit 1
