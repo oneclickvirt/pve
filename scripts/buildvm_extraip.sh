@@ -374,6 +374,17 @@ if [ -z "$user_ip_range" ]; then
 fi
 _green "The current IP to which the VM will be bound is: ${user_ip}"
 _green "当前虚拟机将绑定的IP为：${user_ip}"
+user_ip_prefix=$(echo "$user_ip" | awk -F '.' '{print $1"."$2"."$3}')
+user_main_ip_prefix=$(echo "$user_main_ip" | awk -F '.' '{print $1"."$2"."$3}')
+if [ "$user_ip_prefix" = "$user_main_ip_prefix" ]; then
+    _yellow "The IPV4 prefix of the host is the same as the IPV4 prefix of the virtual machine that will be provisioned."
+    _yellow "宿主机的IPV4前缀与将要开设的虚拟机的IPV4前缀相同。"
+else
+    _blue "The IPV4 prefix of the host machine is different from the IPV4 prefix of the virtual machine that will be opened."
+    _blue "Please use the script that requires you to manually specify the version of the IPV4 address."
+    _blue "宿主机的IPV4前缀与将要开设的虚拟机的IPV4前缀不同，请使用 需要手动指定IPV4地址的版本 的脚本"
+    exit 1
+fi
 
 if [ "$independent_ipv6" == "n" ]; then
     qm create $vm_num --agent 1 --scsihw virtio-scsi-single --serial0 socket --cores $core --sockets 1 --cpu host --net0 virtio,bridge=vmbr0,firewall=0

@@ -338,7 +338,7 @@ user_ip_prefix=$(echo "$user_ip" | awk -F '.' '{print $1"."$2"."$3}')
 user_main_ip_prefix=$(echo "$user_main_ip" | awk -F '.' '{print $1"."$2"."$3}')
 if [ "$user_ip_prefix" = "$user_main_ip_prefix" ]; then
     _yellow "The IPV4 prefix of the host is the same as the IPV4 prefix of the virtual machine that will be provisioned,"
-    _yellow "use the script that automatically selects the IPV4 address to bind to"
+    _yellow "Please use the script that automatically selects the IPV4 address to bind to."
     _yellow "宿主机的IPV4前缀与将要开设的虚拟机的IPV4前缀相同，请使用 自动选择要绑定的IPV4地址 的脚本"
     exit 1
 else
