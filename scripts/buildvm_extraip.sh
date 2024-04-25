@@ -3,6 +3,7 @@
 # https://github.com/oneclickvirt/pve
 # 2024.04.25
 # 自动选择要绑定的IPV4地址 额外的IPV4地址需要与本机的IPV4地址在同一个子网内，即前缀一致
+# 此时开设出的虚拟机的网关为宿主机的IPV4的网关，不需要强制约定MAC地址。 
 
 # ./buildvm_extraip.sh VMID 用户名 密码 CPU核数 内存 硬盘 系统 存储盘 是否附加IPV6(默认为N)
 # ./buildvm_extraip.sh 152 test1 1234567 1 512 5 debian11 local N
