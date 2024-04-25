@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/oneclickvirt/pve
-# 2024.03.12
+# 2024.04.25
 # 自动选择要绑定的IPV4地址
 # ./buildvm_extraip.sh VMID 用户名 密码 CPU核数 内存 硬盘 系统 存储盘 是否附加IPV6(默认为N)
 # ./buildvm_extraip.sh 152 test1 1234567 1 512 5 debian11 local N
@@ -317,9 +317,12 @@ fi
 interface=$(lshw -C network | awk '/logical name:/{print $3}' | head -1)
 user_main_ip_range=$(grep -A 1 "iface ${interface}" /etc/network/interfaces | grep "address" | awk '{print $2}' | head -n 1)
 if [ -z "$user_main_ip_range" ]; then
-    _red "Host available IP interval query failed"
-    _red "宿主机可用IP区间查询失败"
-    exit 1
+    user_main_ip_range=$(grep -A 1 "iface vmbr0" /etc/network/interfaces | grep "address" | awk '{print $2}' | head -n 1)
+    if [ -z "$user_main_ip_range" ]; then
+        _red "Host available IP interval query failed"
+        _red "宿主机可用IP区间查询失败"
+        exit 1
+    fi
 fi
 # 宿主机IP
 user_main_ip=$(echo "$user_main_ip_range" | cut -d'/' -f1)
@@ -349,9 +352,12 @@ done
 # 宿主机的网关
 gateway=$(grep -E "iface $interface" -A 3 "/etc/network/interfaces" | grep "gateway" | awk '{print $2}' | head -n 1)
 if [ -z "$gateway" ]; then
-    _red "Host gateway query failed"
-    _red "宿主机网关查询失败"
-    exit 1
+    gateway=$(grep -E "iface vmbr0" -A 3 "/etc/network/interfaces" | grep "gateway" | awk '{print $2}' | head -n 1)
+    if [ -z "$user_main_ip_range" ]; then
+        _red "Host gateway query failed"
+        _red "宿主机网关查询失败"
+        exit 1
+    fi
 fi
 # echo "ip=${user_ip}/${user_ip_range},gw=${gateway}"
 # 检查变量是否为空并执行相应操作
