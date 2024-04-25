@@ -2,7 +2,10 @@
 # from
 # https://github.com/oneclickvirt/pve
 # 2024.04.25
-# 手动指定要绑定的IPV4地址
+# 手动指定要绑定的IPV4地址 额外的IPV4地址需要与本机的IPV4地址在不在同一个子网内，即前缀不一致
+# 此时开设出的虚拟机的网关为宿主机的IPV4地址，它充当透明网桥，并且不是路由路径的一部分。 
+# 这意味着到达路由器的数据包将具有开设出的虚拟机的源 MAC 地址。 
+# 如果路由器无法识别源 MAC 地址，流量将被标记为“滥用”，并可能导致服务器被阻止。
 
 # ./buildvm_manual_ip.sh VMID 用户名 密码 CPU核数 内存 硬盘 系统 存储盘 IPV4地址 是否附加IPV6(默认为N)
 # ./buildvm_manual_ip.sh 152 test1 1234567 1 512 5 debian11 local a.b.c.d/24 N
@@ -331,6 +334,36 @@ if [ -z "$user_ip_range" ]; then
 fi
 _green "The current IP to which the VM will be bound is: ${user_ip}"
 _green "当前虚拟机将绑定的IP为：${user_ip}"
+user_ip_prefix=$(echo "$user_ip" | awk -F '.' '{print $1"."$2"."$3}')
+user_main_ip_prefix=$(echo "$user_main_ip" | awk -F '.' '{print $1"."$2"."$3}')
+if [ "$user_ip_prefix" = "$user_main_ip_prefix" ]; then
+    _yellow "The IPV4 prefix of the host is the same as the IPV4 prefix of the virtual machine that will be provisioned,"
+    _yellow "use the script that automatically selects the IPV4 address to bind to"
+    _yellow "宿主机的IPV4前缀与将要开设的虚拟机的IPV4前缀相同，请使用 自动选择要绑定的IPV4地址 的脚本"
+    exit 1
+else
+    _blue "The IPV4 prefix of the host machine is different from the IPV4 prefix of the virtual machine that will be opened,"
+    _blue "and the routes for the corresponding subnets will be appended automatically"
+    _blue "宿主机的IPV4前缀与将要开设的虚拟机的IPV4前缀不同，将自动附加对应子网的路由"
+fi
+# 检测是否需要添加路由到配置文件中
+if grep -q "iface vmbr0 inet static" /etc/network/interfaces && grep -q "post-up route add -net ${user_ip_prefix}.0/${user_ip_range} gw ${user_main_ip}" /etc/network/interfaces; then
+    _blue "The route for the new subnet already exists and does not need to be added additionally."
+    _blue "新的子网的路由已存在，无需额外添加"
+else
+    _blue "The route for the new subnet does not exist and is being added..."
+    _blue "新的子网的路由不存在，正在添加..."
+    line_number=$(grep -n "iface vmbr0 inet static" /etc/network/interfaces | cut -d: -f1)
+    line_number=$((line_number + 5))
+    chattr -i /etc/network/interfaces
+    sed -i "${line_number}i\post-up route add -net ${user_ip_prefix}.0/${user_ip_range} gw ${user_main_ip}" /etc/network/interfaces
+    chattr +i /etc/network/interfaces
+    _blue "Route added successfully, restarting network in progress..."
+    _blue "路由添加成功，正在重启网络..."
+    sleep 1
+    systemctl restart networking
+    sleep 1
+fi
 # 检测IPV6相关的信息
 if [ "$independent_ipv6" == "y" ]; then
     # 检测ndppd服务是否启动了
@@ -403,7 +436,7 @@ qm set $vm_num --ide2 ${storage}:cloudinit
 if [ "$independent_ipv6" == "y" ]; then
     if [ ! -z "$host_ipv6_address" ] && [ ! -z "$ipv6_prefixlen" ] && [ ! -z "$ipv6_gateway" ] && [ ! -z "$ipv6_address_without_last_segment" ]; then
         if grep -q "vmbr2" /etc/network/interfaces; then
-            qm set $vm_num --ipconfig0 ip=${user_ip}/${user_ip_range},gw=${gateway}
+            qm set $vm_num --ipconfig0 ip=${user_ip}/${user_ip_range},gw=${user_main_ip}
             qm set $vm_num --ipconfig1 ip6="${ipv6_address_without_last_segment}${vm_num}/128",gw6="${host_ipv6_address}"
             qm set $vm_num --nameserver 1.1.1.1
             # qm set $vm_num --nameserver 1.0.0.1
@@ -420,7 +453,7 @@ else
 fi
 if [ "$independent_ipv6_status" == "N" ]; then
     # if [ -z "$ipv6_address" ] || [ -z "$ipv6_prefixlen" ] || [ -z "$ipv6_gateway" ] || [ "$ipv6_prefixlen" -gt 112 ]; then
-        qm set $vm_num --ipconfig0 ip=${user_ip}/${user_ip_range},gw=${gateway}
+        qm set $vm_num --ipconfig0 ip=${user_ip}/${user_ip_range},gw=${user_main_ip}
         qm set $vm_num --nameserver 8.8.8.8
         # qm set $vm_num --nameserver 8.8.4.4
         qm set $vm_num --searchdomain local
