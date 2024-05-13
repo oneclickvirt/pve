@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/oneclickvirt/pve
-# 2024.03.12
+# 2024.05.13
 
 if [ -f "/etc/resolv.conf" ]; then
     cp /etc/resolv.conf /etc/resolv.conf.bak
@@ -178,6 +178,16 @@ if [ -f /etc/ssh/sshd_config.d/50-cloud-init.conf ]; then
     sed -i '/^AuthorizedKeysFile/s/^/#/' /etc/ssh/sshd_config.d/50-cloud-init.conf
 fi
 remove_duplicate_lines "/etc/ssh/sshd_config"
+config_dir="/etc/ssh/sshd_config.d/"
+for file in "$config_dir"*
+do
+    if [ -f "$file" ] && [ -r "$file" ]; then
+        if grep -q "PasswordAuthentication no" "$file"; then
+            sed -i 's/PasswordAuthentication no/PasswordAuthentication yes/g' "$file"
+            echo "File $file updated"
+        fi
+    fi
+done
 if command -v service >/dev/null 2>&1; then
     service ssh restart
     service sshd restart

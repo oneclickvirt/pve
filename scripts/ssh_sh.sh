@@ -8,6 +8,16 @@ if [ -f "/etc/resolv.conf" ]; then
     echo "nameserver 8.8.8.8" | tee -a /etc/resolv.conf >/dev/null
     echo "nameserver 8.8.4.4" | tee -a /etc/resolv.conf >/dev/null
 fi
+config_dir="/etc/ssh/sshd_config.d/"
+for file in "$config_dir"*
+do
+    if [ -f "$file" ] && [ -r "$file" ]; then
+        if grep -q "PasswordAuthentication no" "$file"; then
+            sed -i 's/PasswordAuthentication no/PasswordAuthentication yes/g' "$file"
+            echo "File $file updated"
+        fi
+    fi
+done
 if [ "$(cat /etc/os-release | grep -E '^ID=' | cut -d '=' -f 2 | tr -d '"')" == "alpine" ]; then
     apk update
     apk add --no-cache openssh-server
