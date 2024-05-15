@@ -8,9 +8,9 @@
 # 如果路由器无法识别源 MAC 地址，流量将被标记为“滥用”，并“可能”导致服务器被阻止。
 # (如果使用Hetzner的独立服务器务必提供附加IPV4地址对应的MAC地址防止被报告滥用)
 
-# ./buildvm_manual_ip.sh VMID 用户名 密码 CPU核数 内存 硬盘 系统 存储盘 IPV4地址 是否附加IPV6(默认为N) MAC地址(不提供时将不指定虚拟机的MAC地址)
+# ./buildvm_manual_ip.sh VMID 用户名 密码 CPU核数 内存 硬盘 系统 存储盘 IPV4地址(带子网掩码) 是否附加IPV6(默认为N) MAC地址(不提供时将不指定虚拟机的MAC地址)
 # 示例：
-# ./buildvm_manual_ip.sh 152 test1 oneclick123 1 512 5 debian11 local a.b.c.d/24 N 4c:52:62:0e:04:c6
+# ./buildvm_manual_ip.sh 152 test1 oneclick123 1 512 5 debian11 local a.b.c.d/32 N 4c:52:62:0e:04:c6
 
 cd /root >/dev/null 2>&1
 # 创建独立IPV4地址的虚拟机
@@ -444,7 +444,9 @@ qm set $vm_num --ide2 ${storage}:cloudinit
 if [ "$independent_ipv6" == "y" ]; then
     if [ ! -z "$host_ipv6_address" ] && [ ! -z "$ipv6_prefixlen" ] && [ ! -z "$ipv6_gateway" ] && [ ! -z "$ipv6_address_without_last_segment" ]; then
         if grep -q "vmbr2" /etc/network/interfaces; then
-            qm set $vm_num --ipconfig0 ip=${user_ip}/${user_ip_range},gw=${user_main_ip}
+            # qm set $vm_num --ipconfig0 ip=${user_ip}/${user_ip_range},gw=${user_main_ip}
+            _green "Use ${user_ip}/32 to set ipconfig0"
+            qm set $vm_num --ipconfig0 ip=${user_ip}/32,gw=${user_main_ip}
             qm set $vm_num --ipconfig1 ip6="${ipv6_address_without_last_segment}${vm_num}/128",gw6="${host_ipv6_address}"
             qm set $vm_num --nameserver 1.1.1.1
             # qm set $vm_num --nameserver 1.0.0.1
@@ -461,7 +463,9 @@ else
 fi
 if [ "$independent_ipv6_status" == "N" ]; then
     # if [ -z "$ipv6_address" ] || [ -z "$ipv6_prefixlen" ] || [ -z "$ipv6_gateway" ] || [ "$ipv6_prefixlen" -gt 112 ]; then
-        qm set $vm_num --ipconfig0 ip=${user_ip}/${user_ip_range},gw=${user_main_ip}
+        # qm set $vm_num --ipconfig0 ip=${user_ip}/${user_ip_range},gw=${user_main_ip}
+        _green "Use ${user_ip}/32 to set ipconfig0"
+        qm set $vm_num --ipconfig0 ip=${user_ip}/32,gw=${user_main_ip}
         qm set $vm_num --nameserver 8.8.8.8
         # qm set $vm_num --nameserver 8.8.4.4
         qm set $vm_num --searchdomain local
