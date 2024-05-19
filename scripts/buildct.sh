@@ -164,6 +164,7 @@ if [ "$system_arch" = "arch" ]; then
     fi
     if [ -n "${system_name}" ]; then
         curl -o "/var/lib/vz/template/cache/${system_name}" "${cdn_success_url}https://github.com/oneclickvirt/lxc_arm_images/releases/download/${system_name}"
+        fixed_system=true
     fi
 else
     fixed_system=false
