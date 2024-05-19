@@ -69,7 +69,7 @@ is_ipv4() {
     fi
 }
 
-if [[ -z "$extra_ip" ]]; then
+if [[ -z "$extranet_ipv4" ]]; then
     _yellow "No IPV4 address is manually assigned"
     _yellow "IPV4地址未手动指定"
     exit 1
