@@ -456,7 +456,7 @@ if [ "$independent_ipv6" == "y" ]; then
             _green "Use ${user_ip}/32 to set ipconfig0"
             if [ "$same_subnet_status" = true ]; then
                 # 同子网则虚拟机的网关同宿主机
-                qm set $vm_num --ipconfig0 ip=${user_ip}/32,gw=${gateway}
+                qm set $vm_num --ipconfig0 ip=${user_ip}/${user_ip_range},gw=${gateway}
             else
                 # 不同子网则虚拟机的网关为宿主机IP地址
                 qm set $vm_num --ipconfig0 ip=${user_ip}/32,gw=${user_main_ip}
@@ -481,7 +481,7 @@ if [ "$independent_ipv6_status" == "N" ]; then
         _green "Use ${user_ip}/32 to set ipconfig0"
         if [ "$same_subnet_status" = true ]; then
                 # 同子网则虚拟机的网关同宿主机
-                qm set $vm_num --ipconfig0 ip=${user_ip}/32,gw=${gateway}
+                qm set $vm_num --ipconfig0 ip=${user_ip}/${user_ip_range},gw=${gateway}
             else
                 # 不同子网则虚拟机的网关为宿主机IP地址
                 qm set $vm_num --ipconfig0 ip=${user_ip}/32,gw=${user_main_ip}
