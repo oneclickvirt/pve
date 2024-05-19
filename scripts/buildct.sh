@@ -163,7 +163,11 @@ if [ "$system_arch" = "arch" ]; then
         exit 1
     fi
     if [ -n "${system_name}" ]; then
-        curl -o "/var/lib/vz/template/cache/${system_name}" "${cdn_success_url}https://github.com/oneclickvirt/lxc_arm_images/releases/download/${system_name}"
+        if [ ! -f "/var/lib/vz/template/cache/${system_name}" ]; then
+            curl -o "/var/lib/vz/template/cache/${system_name}" "${cdn_success_url}https://github.com/oneclickvirt/lxc_arm_images/releases/download/${system_name}"
+        else
+            echo "File already exists: /var/lib/vz/template/cache/${system_name}"
+        fi
         fixed_system=true
     fi
 else
