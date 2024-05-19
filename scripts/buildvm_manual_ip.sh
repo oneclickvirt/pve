@@ -1,12 +1,15 @@
 #!/bin/bash
 # from
 # https://github.com/oneclickvirt/pve
-# 2024.04.25
-# 手动指定要绑定的IPV4地址 额外的IPV4地址需要与本机的IPV4地址在不在同一个子网内，即前缀不一致
+# 2024.05.19
+# 手动指定要绑定的IPV4地址 
+# 情况1: 额外的IPV4地址需要与本机的IPV4地址在不同的子网内，即前缀不一致
 # 此时开设出的虚拟机的网关为宿主机的IPV4地址，它充当透明网桥，并且不是路由路径的一部分。 
 # 这意味着到达路由器的数据包将具有开设出的虚拟机的源 MAC 地址。 
 # 如果路由器无法识别源 MAC 地址，流量将被标记为“滥用”，并“可能”导致服务器被阻止。
 # (如果使用Hetzner的独立服务器务必提供附加IPV4地址对应的MAC地址防止被报告滥用)
+# 情况2: 额外的IPV4地址需要与本机的IPV4地址在同一个子网内，即前缀一致
+# 此时自动识别，使用的网关将与宿主机的网关一致
 
 # ./buildvm_manual_ip.sh VMID 用户名 密码 CPU核数 内存 硬盘 系统 存储盘 IPV4地址(带子网掩码) 是否附加IPV6(默认为N) MAC地址(不提供时将不指定虚拟机的MAC地址)
 # 示例：
@@ -340,33 +343,38 @@ _green "The current IP to which the VM will be bound is: ${user_ip}"
 _green "当前虚拟机将绑定的IP为：${user_ip}"
 user_ip_prefix=$(echo "$user_ip" | awk -F '.' '{print $1"."$2"."$3}')
 user_main_ip_prefix=$(echo "$user_main_ip" | awk -F '.' '{print $1"."$2"."$3}')
+same_subnet_status=false
 if [ "$user_ip_prefix" = "$user_main_ip_prefix" ]; then
     _yellow "The IPV4 prefix of the host is the same as the IPV4 prefix of the virtual machine that will be provisioned,"
-    _yellow "Please use the script that automatically selects the IPV4 address to bind to."
-    _yellow "宿主机的IPV4前缀与将要开设的虚拟机的IPV4前缀相同，请使用 自动选择要绑定的IPV4地址 的脚本"
-    exit 1
+    _yellow "If the additional IP address you want to bind to is one that follows the host IP in sequence, "
+    _yellow "you may need to use the script that automatically selects the IPV4 address to bind to"
+    _yellow "宿主机的IPV4前缀与将要开设的虚拟机的IPV4前缀相同"
+    _yellow "如果你要绑定的额外IP地址是宿主机IP顺位后面的地址，你可能需要使用 自动选择要绑定的IPV4地址 的脚本"
+    sleep 3
+    same_subnet_status=true
 else
     _blue "The IPV4 prefix of the host machine is different from the IPV4 prefix of the virtual machine that will be opened,"
     _blue "and the routes for the corresponding subnets will be appended automatically"
     _blue "宿主机的IPV4前缀与将要开设的虚拟机的IPV4前缀不同，将自动附加对应子网的路由"
-fi
-# 检测是否需要添加路由到配置文件中
-if grep -q "iface vmbr0 inet static" /etc/network/interfaces && grep -q "post-up route add -net ${user_ip_prefix}.0/${user_ip_range} gw ${user_main_ip}" /etc/network/interfaces; then
-    _blue "The route for the new subnet already exists and does not need to be added additionally."
-    _blue "新的子网的路由已存在，无需额外添加"
-else
-    _blue "The route for the new subnet does not exist and is being added..."
-    _blue "新的子网的路由不存在，正在添加..."
-    line_number=$(grep -n "iface vmbr0 inet static" /etc/network/interfaces | cut -d: -f1)
-    line_number=$((line_number + 5))
-    chattr -i /etc/network/interfaces
-    sed -i "${line_number}i\post-up route add -net ${user_ip_prefix}.0/${user_ip_range} gw ${user_main_ip}" /etc/network/interfaces
-    chattr +i /etc/network/interfaces
-    _blue "Route added successfully, restarting network in progress..."
-    _blue "路由添加成功，正在重启网络..."
-    sleep 1
-    systemctl restart networking
-    sleep 1
+    same_subnet_status=false
+    # 检测是否需要添加路由到配置文件中
+    if grep -q "iface vmbr0 inet static" /etc/network/interfaces && grep -q "post-up route add -net ${user_ip_prefix}.0/${user_ip_range} gw ${user_main_ip}" /etc/network/interfaces; then
+        _blue "The route for the new subnet already exists and does not need to be added additionally."
+        _blue "新的子网的路由已存在，无需额外添加"
+    else
+        _blue "The route for the new subnet does not exist and is being added..."
+        _blue "新的子网的路由不存在，正在添加..."
+        line_number=$(grep -n "iface vmbr0 inet static" /etc/network/interfaces | cut -d: -f1)
+        line_number=$((line_number + 5))
+        chattr -i /etc/network/interfaces
+        sed -i "${line_number}i\post-up route add -net ${user_ip_prefix}.0/${user_ip_range} gw ${user_main_ip}" /etc/network/interfaces
+        chattr +i /etc/network/interfaces
+        _blue "Route added successfully, restarting network in progress..."
+        _blue "路由添加成功，正在重启网络..."
+        sleep 1
+        systemctl restart networking
+        sleep 1
+    fi
 fi
 # 检测IPV6相关的信息
 if [ "$independent_ipv6" == "y" ]; then
@@ -446,7 +454,13 @@ if [ "$independent_ipv6" == "y" ]; then
         if grep -q "vmbr2" /etc/network/interfaces; then
             # qm set $vm_num --ipconfig0 ip=${user_ip}/${user_ip_range},gw=${user_main_ip}
             _green "Use ${user_ip}/32 to set ipconfig0"
-            qm set $vm_num --ipconfig0 ip=${user_ip}/32,gw=${user_main_ip}
+            if [ "$same_subnet_status" = true ]; then
+                # 同子网则虚拟机的网关同宿主机
+                qm set $vm_num --ipconfig0 ip=${user_ip}/32,gw=${gateway}
+            else
+                # 不同子网则虚拟机的网关为宿主机IP地址
+                qm set $vm_num --ipconfig0 ip=${user_ip}/32,gw=${user_main_ip}
+            fi
             qm set $vm_num --ipconfig1 ip6="${ipv6_address_without_last_segment}${vm_num}/128",gw6="${host_ipv6_address}"
             qm set $vm_num --nameserver 1.1.1.1
             # qm set $vm_num --nameserver 1.0.0.1
@@ -465,7 +479,13 @@ if [ "$independent_ipv6_status" == "N" ]; then
     # if [ -z "$ipv6_address" ] || [ -z "$ipv6_prefixlen" ] || [ -z "$ipv6_gateway" ] || [ "$ipv6_prefixlen" -gt 112 ]; then
         # qm set $vm_num --ipconfig0 ip=${user_ip}/${user_ip_range},gw=${user_main_ip}
         _green "Use ${user_ip}/32 to set ipconfig0"
-        qm set $vm_num --ipconfig0 ip=${user_ip}/32,gw=${user_main_ip}
+        if [ "$same_subnet_status" = true ]; then
+                # 同子网则虚拟机的网关同宿主机
+                qm set $vm_num --ipconfig0 ip=${user_ip}/32,gw=${gateway}
+            else
+                # 不同子网则虚拟机的网关为宿主机IP地址
+                qm set $vm_num --ipconfig0 ip=${user_ip}/32,gw=${user_main_ip}
+            fi
         qm set $vm_num --nameserver 8.8.8.8
         # qm set $vm_num --nameserver 8.8.4.4
         qm set $vm_num --searchdomain local
