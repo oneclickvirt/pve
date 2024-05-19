@@ -122,17 +122,17 @@ if [ "$system_arch" = "arch" ]; then
     if [ $? -eq 0 ] && [ -n "$response" ]; then
         system_names+=($(echo "$response"))
     fi
-    ubuntu_versions=("16" "18" "20" "22" "23.04" "23.10" "24")
-    ubuntu_names=("xenial" "bionic" "focal" "jammy" "lunar" "mantic" "noble")
-    debian_versions=("10" "11" "12" "13" "sid")
-    debian_names=("buster" "bullseye" "bookworm" "trixie" "sid")
+    ubuntu_versions=("18.04" "20.04" "22.04" "23.04" "23.10" "24.04")
+    ubuntu_names=("bionic" "focal" "jammy" "lunar" "mantic" "noble")
+    debian_versions=("10" "11" "12" "13")
+    debian_names=("buster" "bullseye" "bookworm" "trixie")
     version=""
     if [ "$en_system" = "ubuntu" ]; then
         # 转换ubuntu系统的代号为对应名字
         for ((i=0; i<${#ubuntu_versions[@]}; i++)); do
             if [ "${ubuntu_versions[$i]}" = "$num_system" ]; then
                 version="${ubuntu_names[$i]}"
-                system_name="${en_system}-arm64-${version}-cloud.tar.xz"
+                system_name="${en_system}_${ubuntu_versions[$i]}_${ubuntu_names[$i]}_arm64_cloud.tar.xz"
                 break
             fi
         done
@@ -141,20 +141,20 @@ if [ "$system_arch" = "arch" ]; then
         for ((i=0; i<${#debian_versions[@]}; i++)); do
             if [ "${debian_versions[$i]}" = "$num_system" ]; then
                 version="${debian_names[$i]}"
-                system_name="${en_system}-arm64-${version}-cloud.tar.xz"
+                system_name="${en_system}_${debian_versions[$i]}_${debian_names[$i]}_arm64_cloud.tar.xz"
                 break
             fi
         done
     elif [ -z $num_system ]; then
         # 适配无指定版本的系统
         for ((i=0; i<${#system_names[@]}; i++)); do
-            if [[ "${system_names[$i]}" == "${en_system}-arm64-"* ]]; then
+            if [[ "${system_names[$i]}" == "${en_system}_"* ]]; then
                 system_name="${system_names[$i]}"
                 break
             fi
         done
     else
-        system_name="${en_system}-arm64-${version}-cloud.tar.xz"
+        system_name="${en_system}_${version}_${version}_arm64_cloud.tar.xz"
     fi
     if [ ${#system_names[@]} -eq 0 ] && [ -z "$system_name" ]; then
         _red "No suitable system names found."
