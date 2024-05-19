@@ -109,7 +109,7 @@ disk="${5:-5}"
 system_ori="${6:-debian11}"
 storage="${7:-local}"
 rm -rf "ct$name"
-en_system=$(echo "$system_ori" | sed 's/[0-9]*//g')
+en_system=$(echo "$system_ori" | sed 's/[0-9]*//g; s/\.$//')
 num_system=$(echo "$system_ori" | sed 's/[a-zA-Z]*//g')
 system="$en_system-$num_system"
 cdn_urls=("https://cdn0.spiritlhl.top/" "http://cdn3.spiritlhl.net/" "http://cdn1.spiritlhl.net/" "https://ghproxy.com/" "http://cdn2.spiritlhl.net/")

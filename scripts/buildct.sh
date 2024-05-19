@@ -101,7 +101,7 @@ storage="${12:-local}"
 independent_ipv6="${13:-N}"
 independent_ipv6=$(echo "$independent_ipv6" | tr '[:upper:]' '[:lower:]')
 rm -rf "ct$name"
-en_system=$(echo "$system_ori" | sed 's/[0-9]*//g')
+en_system=$(echo "$system_ori" | sed 's/[0-9]*//g; s/\.$//')
 num_system=$(echo "$system_ori" | sed 's/[a-zA-Z]*//g')
 system="$en_system-$num_system"
 cdn_urls=("https://cdn0.spiritlhl.top/" "http://cdn3.spiritlhl.net/" "http://cdn1.spiritlhl.net/" "https://ghproxy.com/" "http://cdn2.spiritlhl.net/")
