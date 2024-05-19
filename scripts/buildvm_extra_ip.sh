@@ -7,8 +7,8 @@
 # 此时附加的IPV4地址是宿主机目前的IPV4地址顺位后面的地址
 # 比如目前是 1.1.1.32 然后 1.1.1.33 已经有虚拟机了，那么本脚本附加IP地址为 1.1.1.34
 
-# ./buildvm_extraip.sh VMID 用户名 密码 CPU核数 内存 硬盘 系统 存储盘 是否附加IPV6(默认为N)
-# ./buildvm_extraip.sh 152 test1 1234567 1 512 5 debian11 local N
+# ./buildvm_extra_ip.sh VMID 用户名 密码 CPU核数 内存 硬盘 系统 存储盘 是否附加IPV6(默认为N)
+# ./buildvm_extra_ip.sh 152 test1 1234567 1 512 5 debian11 local N
 
 cd /root >/dev/null 2>&1
 # 创建独立IPV4地址的虚拟机
