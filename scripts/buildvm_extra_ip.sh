@@ -3,7 +3,7 @@
 # https://github.com/oneclickvirt/pve
 # 2024.05.19
 # 自动选择要绑定的IPV4地址 额外的IPV4地址需要与本机的IPV4地址在同一个子网内，即前缀一致
-# 此时开设出的虚拟机的网关为宿主机的IPV4的网关，不需要强制约定MAC地址。 
+# 此时开设出的虚拟机的网关为宿主机的IPV4的网关，不需要强制约定MAC地址。
 # 此时附加的IPV4地址是宿主机目前的IPV4地址顺位后面的地址
 # 比如目前是 1.1.1.32 然后 1.1.1.33 已经有虚拟机了，那么本脚本附加IP地址为 1.1.1.34
 
@@ -134,7 +134,7 @@ if [ "$system_arch" = "x86" ]; then
     # fi
     new_images=($(curl -slk -m 6 https://down.idc.wiki/Image/realServer-Template/current/qcow2/ | grep -o '<a href="[^"]*">' | awk -F'"' '{print $2}' | sed -n '/qcow2$/s#/Image/realServer-Template/current/qcow2/##p'))
     if [[ -n "$new_images" ]]; then
-        for ((i=0; i<${#new_images[@]}; i++)); do
+        for ((i = 0; i < ${#new_images[@]}; i++)); do
             new_images[i]=${new_images[i]%.qcow2}
         done
         combined=($(echo "${old_images[@]}" "${new_images[@]}" | tr ' ' '\n' | sort -u))
@@ -432,10 +432,10 @@ else
 fi
 if [ "$independent_ipv6_status" == "N" ]; then
     # if [ -z "$ipv6_address" ] || [ -z "$ipv6_prefixlen" ] || [ -z "$ipv6_gateway" ] || [ "$ipv6_prefixlen" -gt 112 ]; then
-        qm set $vm_num --ipconfig0 ip=${user_ip}/${user_ip_range},gw=${gateway}
-        qm set $vm_num --nameserver 8.8.8.8
-        # qm set $vm_num --nameserver 8.8.4.4
-        qm set $vm_num --searchdomain local
+    qm set $vm_num --ipconfig0 ip=${user_ip}/${user_ip_range},gw=${gateway}
+    qm set $vm_num --nameserver 8.8.8.8
+    # qm set $vm_num --nameserver 8.8.4.4
+    qm set $vm_num --searchdomain local
     # else
     #     qm set $vm_num --ipconfig0 ip=${user_ip}/${user_ip_range},gw=${gateway},ip6=${ipv6_address}/${ipv6_prefixlen},gw6=${ipv6_gateway}
     #     qm set $vm_num --nameserver 8.8.8.8,2001:4860:4860::8888

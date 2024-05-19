@@ -2,21 +2,16 @@
 # from
 # https://github.com/oneclickvirt/pve
 # 2024.05.19
-# 手动指定要绑定的IPV4地址
-# 情况1: 额外的IPV4地址需要与本机的IPV4地址在不同的子网内，即前缀不一致
-# 此时开设出的虚拟机的网关为宿主机的IPV4地址，它充当透明网桥，并且不是路由路径的一部分。
-# 这意味着到达路由器的数据包将具有开设出的虚拟机的源 MAC 地址。
-# 如果路由器无法识别源 MAC 地址，流量将被标记为“滥用”，并“可能”导致服务器被阻止。
-# (如果使用Hetzner的独立服务器务必提供附加IPV4地址对应的MAC地址防止被报告滥用)
-# 情况2: 额外的IPV4地址需要与本机的IPV4地址在同一个子网内，即前缀一致
-# 此时自动识别，使用的网关将与宿主机的网关一致
+# 创建NAT全端口映射的虚拟机
+# 前置条件：
+# 要用到的外网IPV4地址已绑定到vmbr0网卡上(手动附加时务必在PVE安装完毕且自动配置网关后再附加)，且宿主机的IPV4地址仍为顺序第一
+# 即 使用 curl ip.sb 仍显示宿主机原有IPV4地址，但 curl --interface a.b.c.d ip.sb 时显示 a.b.c.d 这个绑定的IPV4地址
 
-# ./buildvm_manual_ip.sh VMID 用户名 密码 CPU核数 内存 硬盘 系统 存储盘 IPV4地址(带子网掩码) 是否附加IPV6(默认为N) MAC地址(不提供时将不指定虚拟机的MAC地址)
+# ./buildvm_fullnat_ip.sh VMID 用户名 密码 CPU核数 内存 硬盘 系统 存储盘 外网IPV4地址 是否附加IPV6(默认为N)
 # 示例：
-# ./buildvm_manual_ip.sh 152 test1 oneclick123 1 512 5 debian11 local a.b.c.d/32 N 4c:52:62:0e:04:c6
+# ./buildvm_fullnat_ip.sh 152 test1 oneclick123 1 1024 10 debian11 local a.b.c.d N
 
 cd /root >/dev/null 2>&1
-# 创建独立IPV4地址的虚拟机
 vm_num="${1:-152}"
 user="${2:-test}"
 password="${3:-123456}"
@@ -25,14 +20,10 @@ memory="${5:-512}"
 disk="${6:-5}"
 system="${7:-ubuntu22}"
 storage="${8:-local}"
-extra_ip="${9}"
+extranet_ipv4="${9}"
 independent_ipv6="${10:-N}"
 independent_ipv6=$(echo "$independent_ipv6" | tr '[:upper:]' '[:lower:]')
-mac_address="${11}"
 rm -rf "vm$name"
-user_ip=""
-user_ip_range=""
-gateway=""
 
 _red() { echo -e "\033[31m\033[01m$@\033[0m"; }
 _green() { echo -e "\033[32m\033[01m$@\033[0m"; }
@@ -83,11 +74,9 @@ if [[ -z "$extra_ip" ]]; then
     _yellow "IPV4地址未手动指定"
     exit 1
 else
-    user_ip=$(echo "$extra_ip" | cut -d'/' -f1)
-    user_ip_range=$(echo "$extra_ip" | cut -d'/' -f2)
-    if is_ipv4 "$user_ip"; then
-        _green "This IPV4 address will be used: ${user_ip}"
-        _green "将使用此IPV4地址: ${user_ip}"
+    if is_ipv4 "$extranet_ipv4"; then
+        _green "This IPV4 address will be used: ${extranet_ipv4}"
+        _green "将使用此IPV4地址: ${extranet_ipv4}"
     else
         _yellow "IPV4 addresses do not conform to the rules"
         _yellow "IPV4地址不符合规则"
@@ -307,75 +296,8 @@ if ! command -v ping >/dev/null 2>&1; then
     apt-get install -y ping
 fi
 interface=$(lshw -C network | awk '/logical name:/{print $3}' | head -1)
-user_main_ip_range=$(grep -A 1 "iface ${interface}" /etc/network/interfaces | grep "address" | awk '{print $2}' | head -n 1)
-if [ -z "$user_main_ip_range" ]; then
-    user_main_ip_range=$(grep -A 1 "iface vmbr0" /etc/network/interfaces | grep "address" | awk '{print $2}' | head -n 1)
-    if [ -z "$user_main_ip_range" ]; then
-        _red "Host available IP interval query failed"
-        _red "宿主机可用IP区间查询失败"
-        exit 1
-    fi
-fi
-user_main_ip=$(echo "$user_main_ip_range" | cut -d'/' -f1)
-# 宿主机的网关
-gateway=$(grep -E "iface $interface" -A 3 "/etc/network/interfaces" | grep "gateway" | awk '{print $2}' | head -n 1)
-if [ -z "$gateway" ]; then
-    gateway=$(grep -E "iface vmbr0" -A 3 "/etc/network/interfaces" | grep "gateway" | awk '{print $2}' | head -n 1)
-    if [ -z "$gateway" ]; then
-        _red "Host gateway query failed"
-        _red "宿主机网关查询失败"
-        exit 1
-    fi
-fi
-# echo "ip=${user_ip}/${user_ip_range},gw=${gateway}"
-# 检查变量是否为空并执行相应操作
-if [ -z "$user_ip" ]; then
-    _red "Available IP match failed"
-    _red "可使用的IP匹配失败"
-    exit 1
-fi
-if [ -z "$user_ip_range" ]; then
-    _red "Available subnet size match failed"
-    _red "可使用的子网大小匹配失败"
-    exit 1
-fi
-_green "The current IP to which the VM will be bound is: ${user_ip}"
-_green "当前虚拟机将绑定的IP为：${user_ip}"
-user_ip_prefix=$(echo "$user_ip" | awk -F '.' '{print $1"."$2"."$3}')
-user_main_ip_prefix=$(echo "$user_main_ip" | awk -F '.' '{print $1"."$2"."$3}')
-same_subnet_status=false
-if [ "$user_ip_prefix" = "$user_main_ip_prefix" ]; then
-    _yellow "The IPV4 prefix of the host is the same as the IPV4 prefix of the virtual machine that will be provisioned,"
-    _yellow "If the additional IP address you want to bind to is one that follows the host IP in sequence, "
-    _yellow "you may need to use the script that automatically selects the IPV4 address to bind to"
-    _yellow "宿主机的IPV4前缀与将要开设的虚拟机的IPV4前缀相同"
-    _yellow "如果你要绑定的额外IP地址是宿主机IP顺位后面的地址，你可能需要使用 自动选择要绑定的IPV4地址 的脚本"
-    sleep 3
-    same_subnet_status=true
-else
-    _blue "The IPV4 prefix of the host machine is different from the IPV4 prefix of the virtual machine that will be opened,"
-    _blue "and the routes for the corresponding subnets will be appended automatically"
-    _blue "宿主机的IPV4前缀与将要开设的虚拟机的IPV4前缀不同，将自动附加对应子网的路由"
-    same_subnet_status=false
-    # 检测是否需要添加路由到配置文件中
-    if grep -q "iface vmbr0 inet static" /etc/network/interfaces && grep -q "post-up route add -net ${user_ip_prefix}.0/${user_ip_range} gw ${user_main_ip}" /etc/network/interfaces; then
-        _blue "The route for the new subnet already exists and does not need to be added additionally."
-        _blue "新的子网的路由已存在，无需额外添加"
-    else
-        _blue "The route for the new subnet does not exist and is being added..."
-        _blue "新的子网的路由不存在，正在添加..."
-        line_number=$(grep -n "iface vmbr0 inet static" /etc/network/interfaces | cut -d: -f1)
-        line_number=$((line_number + 5))
-        chattr -i /etc/network/interfaces
-        sed -i "${line_number}i\post-up route add -net ${user_ip_prefix}.0/${user_ip_range} gw ${user_main_ip}" /etc/network/interfaces
-        chattr +i /etc/network/interfaces
-        _blue "Route added successfully, restarting network in progress..."
-        _blue "路由添加成功，正在重启网络..."
-        sleep 1
-        systemctl restart networking
-        sleep 1
-    fi
-fi
+_green "The current IP to which the VM will be bound is: ${extranet_ipv4}"
+_green "当前虚拟机将绑定的IP为：${extranet_ipv4}"
 # 检测IPV6相关的信息
 if [ "$independent_ipv6" == "y" ]; then
     # 检测ndppd服务是否启动了
@@ -422,14 +344,22 @@ else
         ipv6_gateway=$(cat /usr/local/bin/pve_ipv6_gateway)
     fi
 fi
-if [ "$independent_ipv6" = "n" ] && [ -n "$mac_address" ]; then
-    qm create "$vm_num" --agent 1 --scsihw virtio-scsi-single --serial0 socket --cores "$core" --sockets 1 --cpu host --net0 virtio,bridge=vmbr0,firewall=0,macaddr="$mac_address"
-elif [ "$independent_ipv6" = "n" ]; then
-    qm create "$vm_num" --agent 1 --scsihw virtio-scsi-single --serial0 socket --cores "$core" --sockets 1 --cpu host --net0 virtio,bridge=vmbr0,firewall=0
-elif [ "$independent_ipv6" = "y" ] && [ -n "$mac_address" ]; then
-    qm create "$vm_num" --agent 1 --scsihw virtio-scsi-single --serial0 socket --cores "$core" --sockets 1 --cpu host --net0 virtio,bridge=vmbr0,firewall=0,macaddr="$mac_address" --net1 virtio,bridge=vmbr2,firewall=0
+first_digit=${vm_num:0:1}
+second_digit=${vm_num:1:1}
+third_digit=${vm_num:2:1}
+if [ $first_digit -le 2 ]; then
+    if [ $second_digit -eq 0 ]; then
+        num=$third_digit
+    else
+        num=$second_digit$third_digit
+    fi
+else
+    num=$((first_digit - 2))$second_digit$third_digit
+fi
+if [ "$independent_ipv6" = "n" ]; then
+    qm create "$vm_num" --agent 1 --scsihw virtio-scsi-single --serial0 socket --cores "$core" --sockets 1 --cpu host --net0 virtio,bridge=vmbr1,firewall=0
 elif [ "$independent_ipv6" = "y" ]; then
-    qm create "$vm_num" --agent 1 --scsihw virtio-scsi-single --serial0 socket --cores "$core" --sockets 1 --cpu host --net0 virtio,bridge=vmbr0,firewall=0 --net1 virtio,bridge=vmbr2,firewall=0
+    qm create "$vm_num" --agent 1 --scsihw virtio-scsi-single --serial0 socket --cores "$core" --sockets 1 --cpu host --net0 virtio,bridge=vmbr1,firewall=0 --net1 virtio,bridge=vmbr2,firewall=0
 fi
 if [ "$system_arch" = "x86" ]; then
     qm importdisk $vm_num /root/qcow/${system}.qcow2 ${storage}
@@ -449,18 +379,11 @@ qm set $vm_num --boot order=scsi0
 qm set $vm_num --memory $memory
 # --swap 256
 qm set $vm_num --ide2 ${storage}:cloudinit
+user_ip="172.16.1.${num}"
 if [ "$independent_ipv6" == "y" ]; then
     if [ ! -z "$host_ipv6_address" ] && [ ! -z "$ipv6_prefixlen" ] && [ ! -z "$ipv6_gateway" ] && [ ! -z "$ipv6_address_without_last_segment" ]; then
         if grep -q "vmbr2" /etc/network/interfaces; then
-            # qm set $vm_num --ipconfig0 ip=${user_ip}/${user_ip_range},gw=${user_main_ip}
-            _green "Use ${user_ip}/32 to set ipconfig0"
-            if [ "$same_subnet_status" = true ]; then
-                # 同子网则虚拟机的网关同宿主机
-                qm set $vm_num --ipconfig0 ip=${user_ip}/${user_ip_range},gw=${gateway}
-            else
-                # 不同子网则虚拟机的网关为宿主机IP地址
-                qm set $vm_num --ipconfig0 ip=${user_ip}/32,gw=${user_main_ip}
-            fi
+            qm set $vm_num --ipconfig0 ip=${user_ip}/24,gw=172.16.1.1
             qm set $vm_num --ipconfig1 ip6="${ipv6_address_without_last_segment}${vm_num}/128",gw6="${host_ipv6_address}"
             qm set $vm_num --nameserver 1.1.1.1
             # qm set $vm_num --nameserver 1.0.0.1
@@ -476,24 +399,11 @@ else
     independent_ipv6_status="N"
 fi
 if [ "$independent_ipv6_status" == "N" ]; then
-    # if [ -z "$ipv6_address" ] || [ -z "$ipv6_prefixlen" ] || [ -z "$ipv6_gateway" ] || [ "$ipv6_prefixlen" -gt 112 ]; then
-    # qm set $vm_num --ipconfig0 ip=${user_ip}/${user_ip_range},gw=${user_main_ip}
     _green "Use ${user_ip}/32 to set ipconfig0"
-    if [ "$same_subnet_status" = true ]; then
-        # 同子网则虚拟机的网关同宿主机
-        qm set $vm_num --ipconfig0 ip=${user_ip}/${user_ip_range},gw=${gateway}
-    else
-        # 不同子网则虚拟机的网关为宿主机IP地址
-        qm set $vm_num --ipconfig0 ip=${user_ip}/32,gw=${user_main_ip}
-    fi
+    qm set $vm_num --ipconfig0 ip=${user_ip}/24,gw=172.16.1.1
     qm set $vm_num --nameserver 8.8.8.8
     # qm set $vm_num --nameserver 8.8.4.4
     qm set $vm_num --searchdomain local
-    # else
-    #     qm set $vm_num --ipconfig0 ip=${user_ip}/${user_ip_range},gw=${gateway},ip6=${ipv6_address}/${ipv6_prefixlen},gw6=${ipv6_gateway}
-    #     qm set $vm_num --nameserver 8.8.8.8,2001:4860:4860::8888
-    #     qm set $vm_num --searchdomain 8.8.4.4,2001:4860:4860::8844
-    # fi
 fi
 qm set $vm_num --cipassword $password --ciuser $user
 sleep 5
@@ -507,12 +417,23 @@ if [ $? -ne 0 ]; then
 fi
 qm start $vm_num
 
+# 对所有 TCP 流量进行 DNAT
+iptables -t nat -A PREROUTING -d $extranet_ipv4 -p tcp -j DNAT --to-destination $user_ip
+# 对所有 UDP 流量进行 DNAT
+iptables -t nat -A PREROUTING -d $extranet_ipv4 -p udp -j DNAT --to-destination $user_ip
+if [ ! -f "/etc/iptables/rules.v4" ]; then
+    touch /etc/iptables/rules.v4
+fi
+iptables-save | awk '{if($1=="COMMIT"){delete x}}$1=="-A"?!x[$0]++:1' | iptables-restore
+iptables-save >/etc/iptables/rules.v4
+service netfilter-persistent restart
+
 # 虚拟机的相关信息将会存储到对应的虚拟机的NOTE中，可在WEB端查看
 if [ "$independent_ipv6_status" == "N" ]; then
-    echo "$vm_num $user $password $core $memory $disk $system $storage $user_ip" >>"vm${vm_num}"
+    echo "$vm_num $user $password $core $memory $disk $system $storage $extranet_ipv4" >>"vm${vm_num}"
     data=$(echo " VMID 用户名-username 密码-password CPU核数-CPU 内存-memory 硬盘-disk 系统-system 存储盘-storage 外网IP地址-ipv4")
 else
-    echo "$vm_num $user $password $core $memory $disk $system $storage $user_ip ${ipv6_address_without_last_segment}${vm_num}" >>"vm${vm_num}"
+    echo "$vm_num $user $password $core $memory $disk $system $storage $extranet_ipv4 ${ipv6_address_without_last_segment}${vm_num}" >>"vm${vm_num}"
     data=$(echo " VMID 用户名-username 密码-password CPU核数-CPU 内存-memory 硬盘-disk 系统-system 存储盘-storage 外网IPV4-ipv4 外网IPV6-ipv6")
 fi
 values=$(cat "vm${vm_num}")
