@@ -5,7 +5,7 @@
 # 创建NAT全端口映射的虚拟机
 # 前置条件：
 # 要用到的外网IPV4地址已绑定到vmbr0网卡上(手动附加时务必在PVE安装完毕且自动配置网关后再附加)，且宿主机的IPV4地址仍为顺序第一
-# 即 使用 curl ip.sb 仍显示宿主机原有IPV4地址，但 curl --interface a.b.c.d ip.sb 时显示 a.b.c.d 这个绑定的IPV4地址
+# 即 使用 curl ip.sb 仍显示宿主机原有IPV4地址，但可通过额外的IPV4地址登录进入宿主机
 
 # ./buildvm_fullnat_ip.sh VMID 用户名 密码 CPU核数 内存 硬盘 系统 存储盘 外网IPV4地址 是否附加IPV6(默认为N)
 # 示例：
