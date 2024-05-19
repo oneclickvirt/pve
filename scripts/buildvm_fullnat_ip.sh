@@ -417,10 +417,9 @@ if [ $? -ne 0 ]; then
 fi
 qm start $vm_num
 
-# 对所有 TCP 流量进行 DNAT
 iptables -t nat -A PREROUTING -d $extranet_ipv4 -p tcp -j DNAT --to-destination $user_ip
-# 对所有 UDP 流量进行 DNAT
 iptables -t nat -A PREROUTING -d $extranet_ipv4 -p udp -j DNAT --to-destination $user_ip
+iptables -t nat -A POSTROUTING -s $user_ip -o vmbr0 -j SNAT --to-source $extranet_ipv4
 if [ ! -f "/etc/iptables/rules.v4" ]; then
     touch /etc/iptables/rules.v4
 fi
