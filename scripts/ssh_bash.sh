@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/oneclickvirt/pve
-# 2024.05.13
+# 2024.06.05
 
 if [ -f "/etc/resolv.conf" ]; then
     cp /etc/resolv.conf /etc/resolv.conf.bak
@@ -155,29 +155,32 @@ if [ -f "/etc/selinux/config" ]; then
     sed -i.bak '/^SELINUX=/cSELINUX=disabled' /etc/selinux/config
 fi
 setenforce 0
-if [ -f /etc/ssh/sshd_config ]; then
-    sed -i 's/^#\?Port.*/Port 22/g' /etc/ssh/sshd_config
-    sed -i 's/^#\?PermitRootLogin.*/PermitRootLogin yes/g' /etc/ssh/sshd_config
-    sed -i 's/^#\?PasswordAuthentication.*/PasswordAuthentication yes/g' /etc/ssh/sshd_config
-    sed -i 's/#ListenAddress 0.0.0.0/ListenAddress 0.0.0.0/' /etc/ssh/sshd_config
-    sed -i 's/#ListenAddress ::/ListenAddress ::/' /etc/ssh/sshd_config
-    sed -i 's/#AddressFamily any/AddressFamily any/' /etc/ssh/sshd_config
-    sed -i '/^#UsePAM\|UsePAM/c #UsePAM no' /etc/ssh/sshd_config
-    sed -i 's/^#\?PubkeyAuthentication.*/PubkeyAuthentication no/g' /etc/ssh/sshd_config
-    sed -i '/^AuthorizedKeysFile/s/^/#/' /etc/ssh/sshd_config
+update_sshd_config() {
+    local config_file="$1"
+    if [ -f "$config_file" ]; then
+        echo "updating $config_file"
+        sudo sed -i "s/^#\?Port.*/Port 22/g" "$config_file"
+        sudo sed -i "s/^#\?PermitRootLogin.*/PermitRootLogin yes/g" "$config_file"
+        sudo sed -i "s/^#\?PasswordAuthentication.*/PasswordAuthentication yes/g" "$config_file"
+        sudo sed -i 's/#ListenAddress 0.0.0.0/ListenAddress 0.0.0.0/' "$config_file"
+        sudo sed -i 's/#ListenAddress ::/ListenAddress ::/' "$config_file"
+        sudo sed -i 's/#AddressFamily any/AddressFamily any/' "$config_file"
+        sudo sed -i "s/^#\?PubkeyAuthentication.*/PubkeyAuthentication no/g" "$config_file"
+        sudo sed -i '/^#UsePAM\|UsePAM/c #UsePAM no' "$config_file"
+        sudo sed -i '/^AuthorizedKeysFile/s/^/#/' "$config_file"
+        sudo sed -i 's/^#[[:space:]]*KbdInteractiveAuthentication.*\|^KbdInteractiveAuthentication.*/KbdInteractiveAuthentication yes/' "$config_file"
+    fi
+}
+update_sshd_config "/etc/ssh/sshd_config"
+remove_duplicate_lines /etc/ssh/sshd_config
+if [ -d /etc/ssh/sshd_config.d ]; then
+    for config_file in /etc/ssh/sshd_config.d/*; do
+        if [ -f "$config_file" ]; then
+            update_sshd_config "$config_file"
+            remove_duplicate_lines "$config_file"
+        fi
+    done
 fi
-if [ -f /etc/ssh/sshd_config.d/50-cloud-init.conf ]; then
-    sed -i "s/^#\?Port.*/Port 22/g" /etc/ssh/sshd_config.d/50-cloud-init.conf
-    sed -i "s/^#\?PermitRootLogin.*/PermitRootLogin yes/g" /etc/ssh/sshd_config.d/50-cloud-init.conf
-    sed -i "s/^#\?PasswordAuthentication.*/PasswordAuthentication yes/g" /etc/ssh/sshd_config.d/50-cloud-init.conf
-    sed -i 's/#ListenAddress 0.0.0.0/ListenAddress 0.0.0.0/' /etc/ssh/sshd_config.d/50-cloud-init.conf
-    sed -i 's/#ListenAddress ::/ListenAddress ::/' /etc/ssh/sshd_config.d/50-cloud-init.conf
-    sed -i 's/#AddressFamily any/AddressFamily any/' /etc/ssh/sshd_config.d/50-cloud-init.conf
-    sed -i '/^#UsePAM\|UsePAM/c #UsePAM no' /etc/ssh/sshd_config.d/50-cloud-init.conf
-    sed -i "s/^#\?PubkeyAuthentication.*/PubkeyAuthentication no/g" /etc/ssh/sshd_config.d/50-cloud-init.conf
-    sed -i '/^AuthorizedKeysFile/s/^/#/' /etc/ssh/sshd_config.d/50-cloud-init.conf
-fi
-remove_duplicate_lines "/etc/ssh/sshd_config"
 config_dir="/etc/ssh/sshd_config.d/"
 for file in "$config_dir"*
 do
