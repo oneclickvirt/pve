@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/oneclickvirt/pve
-# 2024.04.25
+# 2024.08.11
 
 ########## 预设部分输出和部分中间变量
 
@@ -477,7 +477,6 @@ check_ipv6() {
             _green "本机绑定了不止一个IPV6地址"
         fi
     fi
-
     if is_private_ipv6 "$IPV6"; then # 由于是内网IPV6地址，需要通过API获取外网地址
         IPV6=""
         API_NET=("ipv6.ip.sb" "https://ipget.net" "ipv6.ping0.cc" "https://api.my-ip.io/ip" "https://ipv6.icanhazip.com")
@@ -641,36 +640,6 @@ check_china() {
     fi
 }
 
-change_debian_apt_sources() {
-    DEBIAN_VERSION=$(lsb_release -sr)
-    if [[ -z "${CN}" || "${CN}" != true ]]; then
-        URL="http://deb.debian.org/debian"
-    else
-        # Use mirrors.aliyun.com sources list if IP is in China
-        URL="http://mirrors.aliyun.com/debian"
-    fi
-
-    case $DEBIAN_VERSION in
-    6*) DEBIAN_RELEASE="squeeze" ;;
-    7*) DEBIAN_RELEASE="wheezy" ;;
-    8*) DEBIAN_RELEASE="jessie" ;;
-    9*) DEBIAN_RELEASE="stretch" ;;
-    10*) DEBIAN_RELEASE="buster" ;;
-    11*) DEBIAN_RELEASE="bullseye" ;;
-    12*) DEBIAN_RELEASE="bookworm" ;;
-    *) echo "The system is not Debian 6/7/8/9/10/11/12 . No changes were made to the apt-get sources." && return 1 ;;
-    esac
-
-    cat >/etc/apt/sources.list <<EOF
-deb ${URL} ${DEBIAN_RELEASE} main contrib non-free
-deb ${URL} ${DEBIAN_RELEASE}-updates main contrib non-free
-deb ${URL} ${DEBIAN_RELEASE}-backports main contrib non-free
-deb-src ${URL} ${DEBIAN_RELEASE} main contrib non-free
-deb-src ${URL} ${DEBIAN_RELEASE}-updates main contrib non-free
-deb-src ${URL} ${DEBIAN_RELEASE}-backports main contrib non-free
-EOF
-}
-
 check_interface() {
     if [ -z "$interface_2" ]; then
         interface=${interface_1}
@@ -800,7 +769,17 @@ fi
 rm "$temp_file_apt_fix"
 apt-get update -y
 if [ $? -ne 0 ]; then
-    change_debian_apt_sources
+    if [[ -z "${CN}" || "${CN}" != true ]]; then
+        curl -lk https://raw.githubusercontent.com/SuperManito/LinuxMirrors/main/ChangeMirrors.sh -o ChangeMirrors.sh
+        chmod 777 ChangeMirrors.sh
+        ./ChangeMirrors.sh --use-official-source --web-protocol http --intranet false --close-firewall true --backup true --updata-software false --clean-cache false --ignore-backup-tips
+        rm -rf ChangeMirrors.sh
+    else
+        curl -lk https://gitee.com/SuperManito/LinuxMirrors/raw/main/ChangeMirrors.sh -o ChangeMirrors.sh
+        chmod 777 ChangeMirrors.sh
+        ./ChangeMirrors.sh --source mirrors.tuna.tsinghua.edu.cn --web-protocol http --intranet false --close-firewall true --backup true --updata-software false --clean-cache false --ignore-backup-tips
+        rm -rf ChangeMirrors.sh
+    fi
     apt-get update -y
 fi
 systemctl daemon-reload
