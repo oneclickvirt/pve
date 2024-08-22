@@ -63,8 +63,6 @@ fi
 # 其他相关操作
 echo "Rebuilding the iptables rules..."
 cat /etc/iptables/rules.v4 | iptables-restore
-service networking restart
-systemctl restart networking.service
 if [ -f "/usr/local/bin/ndpresponder" ]; then
     systemctl restart ndpresponder.service
 fi
