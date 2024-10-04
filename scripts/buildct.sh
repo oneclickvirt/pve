@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/oneclickvirt/pve
-# 2024.05.19
+# 2024.10.04
 
 # ./buildct.sh CTID 密码 CPU核数 内存 硬盘 SSH端口 80端口 443端口 外网端口起 外网端口止 系统 存储盘 独立IPV6
 # ./buildct.sh 102 1234567 1 512 5 20001 20002 20003 30000 30025 debian11 local N
@@ -146,7 +146,8 @@ if [ "$system_arch" = "arch" ]; then
             fi
         done
     else
-        system_name="${en_system}_${version}_${version}_arm64_cloud.tar.xz"
+        version="$num_system"
+        system_name="${en_system}_${version}"
     fi
     if [ ${#system_names[@]} -eq 0 ] && [ -z "$system_name" ]; then
         _red "No suitable system names found."
@@ -155,6 +156,7 @@ if [ "$system_arch" = "arch" ]; then
         for sy in "${system_names[@]}"; do
             if [[ $sy == "${system_name}"* ]]; then
                 usable_system=true
+                system_name="$sy"
             fi
         done
     fi
