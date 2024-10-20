@@ -524,11 +524,11 @@ pct exec $CTID -- touch /etc/.pve-ignore.hostname
 #     pct reboot $CTID
 # fi
 
-iptables -t nat -A PREROUTING -p tcp --dport ${sshn} -j DNAT --to-destination ${user_ip}:22
-iptables -t nat -A PREROUTING -p tcp -m tcp --dport ${web1_port} -j DNAT --to-destination ${user_ip}:80
-iptables -t nat -A PREROUTING -p tcp -m tcp --dport ${web2_port} -j DNAT --to-destination ${user_ip}:443
-iptables -t nat -A PREROUTING -p tcp -m tcp --dport ${port_first}:${port_last} -j DNAT --to-destination ${user_ip}:${port_first}-${port_last}
-iptables -t nat -A PREROUTING -p udp -m udp --dport ${port_first}:${port_last} -j DNAT --to-destination ${user_ip}:${port_first}-${port_last}
+iptables -t nat -A PREROUTING -i vmbr0 -p tcp --dport ${sshn} -j DNAT --to-destination ${user_ip}:22
+iptables -t nat -A PREROUTING -i vmbr0 -p tcp -m tcp --dport ${web1_port} -j DNAT --to-destination ${user_ip}:80
+iptables -t nat -A PREROUTING -i vmbr0 -p tcp -m tcp --dport ${web2_port} -j DNAT --to-destination ${user_ip}:443
+iptables -t nat -A PREROUTING -i vmbr0 -p tcp -m tcp --dport ${port_first}:${port_last} -j DNAT --to-destination ${user_ip}:${port_first}-${port_last}
+iptables -t nat -A PREROUTING -i vmbr0 -p udp -m udp --dport ${port_first}:${port_last} -j DNAT --to-destination ${user_ip}:${port_first}-${port_last}
 if [ ! -f "/etc/iptables/rules.v4" ]; then
     touch /etc/iptables/rules.v4
 fi
