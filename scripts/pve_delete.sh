@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/oneclickvirt/pve
-# 2024.03.12
+# 2024.10.27
 # ./pve_delete.sh arg1 arg2
 # arg 可填入虚拟机/容器的序号，可以有任意多个
 # 日志 /var/log/pve_delete.log
