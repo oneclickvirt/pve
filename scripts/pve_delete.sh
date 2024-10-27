@@ -17,18 +17,19 @@ log() {
 }
 
 # 检查VM状态函数
-check_vm_status() {
+check_vmct_status() {
     local id=$1
     local type=$2
     local max_attempts=5
-
     for ((i=1; i<=max_attempts; i++)); do
         if [ "$type" = "vm" ]; then
-            if ! qm status "$id" &>/dev/null; then
+            # 检查VM是否已经停止
+            if [ "$(qm status "$id" 2>/dev/null | grep -w "status:" | awk '{print $2}')" = "stopped" ]; then
                 return 0
             fi
         elif [ "$type" = "ct" ]; then
-            if ! pct status "$id" &>/dev/null; then
+            # 检查容器是否已经停止
+            if [ "$(pct status "$id" 2>/dev/null | grep -w "status:" | awk '{print $2}')" = "stopped" ]; then
                 return 0
             fi
         fi
@@ -62,7 +63,7 @@ handle_vm_deletion() {
     qm stop "$vmid" 2>/dev/null || true
     
     # 检查VM是否完全停止
-    if ! check_vm_status "$vmid" "vm"; then
+    if ! check_vmct_status "$vmid" "vm"; then
         log "Warning: VM $vmid did not stop cleanly"
         return 1
     fi
@@ -97,7 +98,7 @@ handle_ct_deletion() {
     pct stop "$ctid" 2>/dev/null || true
     
     # 检查容器是否完全停止
-    if ! check_vm_status "$ctid" "ct"; then
+    if ! check_vmct_status "$ctid" "ct"; then
         log "Warning: CT $ctid did not stop cleanly"
         return 1
     fi
