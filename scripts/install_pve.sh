@@ -1163,8 +1163,8 @@ if [ "${hostname}" != "$new_hostname" ]; then
         # 注释掉查询到的行
         sudo sed -i "s/^$(echo ${hosts} | sed 's/\//\\\//g')/# &/" /etc/hosts
         # 添加新行
-        echo "${main_ipv4} ${new_hostname} ${new_hostname}" | sudo tee -a /etc/hosts > /dev/null
-        echo "已将 ${main_ipv4} ${new_hostname} ${new_hostname} 添加到 /etc/hosts 文件中"
+        # echo "${main_ipv4} ${new_hostname} ${new_hostname}" | sudo tee -a /etc/hosts > /dev/null
+        # echo "已将 ${main_ipv4} ${new_hostname} ${new_hostname} 添加到 /etc/hosts 文件中"
     else
         echo "A record for ${main_ipv4} ${new_hostname} ${new_hostname} already exists, no need to add it"
         echo "已存在 ${main_ipv4} ${new_hostname} ${new_hostname} 的记录,无需添加"
