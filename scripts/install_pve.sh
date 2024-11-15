@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/oneclickvirt/pve
-# 2024.08.11
+# 2024.11.15
 
 ########## 预设部分输出和部分中间变量
 
@@ -1141,22 +1141,36 @@ fi
 rebuild_cloud_init
 
 # /etc/hosts文件修改
+while true; do
+    _green "Please enter a new host name (can only contain English letters and numbers, not pure numbers or special characters, enter the default pve):"
+    _green "请输入新的主机名(只能包含英文字母和数字,不能是纯数字或特殊字符,回车默认为pve):"
+    reading new_hostname
+    if [ -z "$new_hostname" ]; then
+        new_hostname="pve"
+        break
+    elif ! [[ "$new_hostname" =~ ^[a-zA-Z0-9]+$ ]]; then
+        _yellow "The hostname entered can only contain English letters and numbers, please re-enter it."
+        _yellow "输入的主机名只能包含英文字母和数字,请重新输入。"
+    else
+        break
+    fi
+done
 hostname=$(hostname)
-if [ "${hostname}" != "pve" ]; then
+if [ "${hostname}" != "$new_hostname" ]; then
     chattr -i /etc/hosts
     hosts=$(grep -E "^[^#]*\s+${hostname}\s+${hostname}\$" /etc/hosts | grep -v "${main_ipv4}")
     if [ -n "${hosts}" ]; then
         # 注释掉查询到的行
         sudo sed -i "s/^$(echo ${hosts} | sed 's/\//\\\//g')/# &/" /etc/hosts
         # 添加新行
-        # echo "${main_ipv4} ${hostname} ${hostname}" | sudo tee -a /etc/hosts > /dev/null
-        # _green "已将 ${main_ipv4} ${hostname} ${hostname} 添加到 /etc/hosts 文件中"
+        echo "${main_ipv4} ${new_hostname} ${new_hostname}" | sudo tee -a /etc/hosts > /dev/null
+        echo "已将 ${main_ipv4} ${new_hostname} ${new_hostname} 添加到 /etc/hosts 文件中"
     else
-        _blue "A record for ${main_ipv4} ${hostname} ${hostname} already exists, no need to add it"
-        _blue "已存在 ${main_ipv4} ${hostname} ${hostname} 的记录，无需添加"
+        echo "A record for ${main_ipv4} ${new_hostname} ${new_hostname} already exists, no need to add it"
+        echo "已存在 ${main_ipv4} ${new_hostname} ${new_hostname} 的记录,无需添加"
     fi
     chattr -i /etc/hostname
-    hostnamectl set-hostname pve
+    hostnamectl set-hostname "$new_hostname"
     chattr +i /etc/hostname
     hostname=$(hostname)
     if ! grep -q "::1 localhost" /etc/hosts; then
@@ -1169,16 +1183,16 @@ if [ "${hostname}" != "pve" ]; then
     fi
     hostname_bak=$(cat /etc/hostname.bak)
     if grep -q "^127\.0\.0\.1 ${hostname_bak}\.localdomain ${hostname_bak}$" /etc/hosts; then
-        sed -i "s/^127\.0\.0\.1 ${hostname_bak}\.localdomain ${hostname_bak}$/&\n${main_ipv4} ${hostname}.localdomain ${hostname}/" /etc/hosts
+        sed -i "s/^127\.0\.0\.1 ${hostname_bak}\.localdomain ${hostname_bak}/&\n${main_ipv4} ${new_hostname}.localdomain ${new_hostname}/" /etc/hosts
         echo "Replaced the line for ${hostname_bak} in /etc/hosts"
     elif ! grep -q "^127\.0\.0\.1 localhost\.localdomain localhost$" /etc/hosts; then
         # 127.0.1.1
-        echo "${main_ipv4} ${hostname}.localdomain ${hostname}" >>/etc/hosts
-        echo "Added ${main_ipv4} ${hostname}.localdomain ${hostname} to /etc/hosts"
+        echo "${main_ipv4} ${new_hostname}.localdomain ${new_hostname}" >>/etc/hosts
+        echo "Added ${main_ipv4} ${new_hostname}.localdomain ${new_hostname} to /etc/hosts"
     fi
     hostname_check=$(cat /etc/hosts)
-    if ! grep -q "pve$" /etc/hosts; then
-        echo "${main_ipv4} pve.localdomain pve" >> /etc/hosts
+    if ! grep -q "$new_hostname$" /etc/hosts; then
+        echo "${main_ipv4} ${new_hostname}.localdomain ${new_hostname}" >> /etc/hosts
     fi
     chattr +i /etc/hosts
 fi
