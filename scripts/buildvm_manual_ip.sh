@@ -454,10 +454,19 @@ if [ $? -ne 0 ] || [ -z "$file_path" ]; then
 fi
 file_name=$(basename "$file_path")
 echo "Found file: $file_name"
-if [ -n "$raw_name" ]; then
-    qm set $vm_num --scsihw virtio-scsi-pci --scsi0 ${storage}:${vm_num}/${raw_name}
-else
-    qm set $vm_num --scsihw virtio-scsi-pci --scsi0 ${storage}:${vm_num}/vm-${vm_num}-disk-0.raw
+echo "Attempting to set SCSI hardware with virtio-scsi-pci for VM $vm_num..."
+qm set $vm_num --scsihw virtio-scsi-pci --scsi0 ${storage}:${vm_num}/vm-${vm_num}-disk-0.raw
+if [ $? -ne 0 ]; then
+    echo "Failed to set SCSI hardware with vm-${vm_num}-disk-0.raw. Trying alternative disk file..."
+    qm set $vm_num --scsihw virtio-scsi-pci --scsi0 ${storage}:${vm_num}/$file_name
+    if [ $? -ne 0 ]; then
+        echo "Failed to set SCSI hardware with $file_name for VM $vm_num. Trying fallback file..."
+        qm set $vm_num --scsihw virtio-scsi-pci --scsi0 ${storage}:$file_name
+        if [ $? -ne 0 ]; then
+            echo "All attempts failed. Exiting..."
+            exit 1
+        fi
+    fi
 fi
 qm set $vm_num --bootdisk scsi0
 qm set $vm_num --boot order=scsi0
