@@ -51,14 +51,17 @@ safe_remove() {
 cleanup_vm_files() {
     local vmid=$1
     log "Cleaning up files for VM $vmid"
-    # 动态获取 VM 的所有卷路径
-    pvesm list | awk -v vmid="$vmid" '$5 == vmid {print $1}' | while read -r volid; do
-        vol_path=$(pvesm path "$volid" 2>/dev/null || true)
-        if [ -n "$vol_path" ]; then
-            safe_remove "$vol_path"
-        else
-            log "Warning: Failed to resolve path for volume $volid"
-        fi
+    # 获取所有存储名称
+    pvesm status | awk 'NR > 1 {print $1}' | while read -r storage; do
+        # 遍历存储并列出相关的卷
+        pvesm list "$storage" | awk -v vmid="$vmid" '$5 == vmid {print $1}' | while read -r volid; do
+            vol_path=$(pvesm path "$volid" 2>/dev/null || true)
+            if [ -n "$vol_path" ]; then
+                safe_remove "$vol_path"
+            else
+                log "Warning: Failed to resolve path for volume $volid in storage $storage"
+            fi
+        done
     done
 }
 
@@ -66,14 +69,17 @@ cleanup_vm_files() {
 cleanup_ct_files() {
     local ctid=$1
     log "Cleaning up files for CT $ctid"
-    # 动态获取 CT 的所有卷路径
-    pvesm list | awk -v ctid="$ctid" '$5 == ctid {print $1}' | while read -r volid; do
-        vol_path=$(pvesm path "$volid" 2>/dev/null || true)
-        if [ -n "$vol_path" ]; then
-            safe_remove "$vol_path"
-        else
-            log "Warning: Failed to resolve path for volume $volid"
-        fi
+    # 获取所有存储名称
+    pvesm status | awk 'NR > 1 {print $1}' | while read -r storage; do
+        # 遍历存储并列出相关的卷
+        pvesm list "$storage" | awk -v ctid="$ctid" '$5 == ctid {print $1}' | while read -r volid; do
+            vol_path=$(pvesm path "$volid" 2>/dev/null || true)
+            if [ -n "$vol_path" ]; then
+                safe_remove "$vol_path"
+            else
+                log "Warning: Failed to resolve path for volume $volid in storage $storage"
+            fi
+        done
     done
 }
 
