@@ -368,7 +368,7 @@ else
     qm importdisk $vm_num /root/qcow/${system}.img ${storage}
 fi
 sleep 3
-raw_volid=$(pvesm list ${storage} | awk -v vmid="${vm_num}" '$5 == vmid && $2 ~ /\.raw$/ {print $1}' | tail -n 1)
+raw_volid=$(pvesm list ${storage} | awk -v vmid="${vm_num}" '$5 == vmid && $1 ~ /\.raw$/ {print $1}' | tail -n 1)
 if [ -z "$raw_volid" ]; then
     echo "Error: No .raw file found for VM ID '${vm_num}' in storage '${storage}'"
     exit 1
