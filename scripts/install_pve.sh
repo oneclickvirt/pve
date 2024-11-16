@@ -1143,8 +1143,7 @@ rebuild_cloud_init
 # /etc/hosts文件修改
 while true; do
     _green "Please enter a new host name (can only contain English letters and numbers, not pure numbers or special characters, enter the default pve):"
-    _green "请输入新的主机名(只能包含英文字母和数字,不能是纯数字或特殊字符,回车默认为pve):"
-    reading new_hostname
+    reading "请输入新的主机名(只能包含英文字母和数字,不能是纯数字或特殊字符,回车默认为pve):" new_hostname
     if [ -z "$new_hostname" ]; then
         new_hostname="pve"
         break
