@@ -334,7 +334,18 @@ else
     qm importdisk $vm_num /root/qcow/${system}.img ${storage}
 fi
 sleep 3
-raw_name=$(ls /var/lib/vz/images/${vm_num}/*.raw | xargs -n1 basename | tail -n 1)
+raw_volid=$(pvesm list ${storage} | awk -v vmid="${vm_num}" '$5 == vmid && $2 ~ /\.raw$/ {print $1}' | tail -n 1)
+if [ -z "$raw_volid" ]; then
+    echo "Error: No .raw file found for VM ID '${vm_num}' in storage '${storage}'"
+    exit 1
+fi
+raw_path=$(pvesm path ${raw_volid})
+if [ $? -ne 0 ] || [ -z "$raw_path" ]; then
+    echo "Error: Failed to resolve path for volume '${raw_volid}'"
+    exit 1
+fi
+raw_name=$(basename "$raw_path")
+echo "Found raw file: $raw_name"
 if [ -n "$raw_name" ]; then
     qm set $vm_num --scsihw virtio-scsi-pci --scsi0 ${storage}:${vm_num}/${raw_name}
 else

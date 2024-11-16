@@ -16,7 +16,7 @@ log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a "$log_file"
 }
 
-# 检查VM状态函数
+# 检查VM/CT状态函数
 check_vmct_status() {
     local id=$1
     local type=$2
@@ -38,13 +38,43 @@ check_vmct_status() {
     return 1
 }
 
-# 安全删除函数
+# 安全删除文件/路径
 safe_remove() {
     local path=$1
     if [ -e "$path" ]; then
         log "Removing: $path"
         rm -rf "$path"
     fi
+}
+
+# 清理VM相关文件
+cleanup_vm_files() {
+    local vmid=$1
+    log "Cleaning up files for VM $vmid"
+    # 动态获取 VM 的所有卷路径
+    pvesm list | awk -v vmid="$vmid" '$5 == vmid {print $1}' | while read -r volid; do
+        vol_path=$(pvesm path "$volid" 2>/dev/null || true)
+        if [ -n "$vol_path" ]; then
+            safe_remove "$vol_path"
+        else
+            log "Warning: Failed to resolve path for volume $volid"
+        fi
+    done
+}
+
+# 清理CT相关文件
+cleanup_ct_files() {
+    local ctid=$1
+    log "Cleaning up files for CT $ctid"
+    # 动态获取 CT 的所有卷路径
+    pvesm list | awk -v ctid="$ctid" '$5 == ctid {print $1}' | while read -r volid; do
+        vol_path=$(pvesm path "$volid" 2>/dev/null || true)
+        if [ -n "$vol_path" ]; then
+            safe_remove "$vol_path"
+        else
+            log "Warning: Failed to resolve path for volume $volid"
+        fi
+    done
 }
 
 # 处理VM删除
@@ -54,7 +84,7 @@ handle_vm_deletion() {
 
     log "Starting deletion process for VM $vmid (IP: $ip_address)"
     
-    # 先解锁
+    # 解锁VM
     log "Attempting to unlock VM $vmid"
     qm unlock "$vmid" 2>/dev/null || true
     
@@ -68,17 +98,13 @@ handle_vm_deletion() {
         return 1
     fi
 
-    # 同步文件系统
-    sync
-    
     # 删除VM
     log "Destroying VM $vmid"
     qm destroy "$vmid"
-    
+
     # 清理相关文件
-    safe_remove "/var/lib/vz/images/$vmid*"
-    safe_remove "vm$vmid"
-    
+    cleanup_vm_files "$vmid"
+
     # 更新iptables规则
     if [ -n "$ip_address" ]; then
         log "Removing iptables rules for IP $ip_address"
@@ -103,16 +129,13 @@ handle_ct_deletion() {
         return 1
     fi
 
-    # 同步文件系统
-    sync
-    
     # 删除容器
     log "Destroying CT $ctid"
     pct destroy "$ctid"
-    
+
     # 清理相关文件
-    safe_remove "ct$ctid"
-    
+    cleanup_ct_files "$ctid"
+
     # 更新iptables规则
     if [ -n "$ip_address" ]; then
         log "Removing iptables rules for IP $ip_address"
