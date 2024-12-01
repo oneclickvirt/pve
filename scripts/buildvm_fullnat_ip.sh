@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/oneclickvirt/pve
-# 2024.11.16
+# 2024.12.01
 # 创建NAT全端口映射的虚拟机
 # 前置条件：
 # 要用到的外网IPV4地址已绑定到vmbr0网卡上(手动附加时务必在PVE安装完毕且自动配置网关后再附加)，且宿主机的IPV4地址仍为顺序第一
@@ -39,6 +39,22 @@ else
     export LANGUAGE="$utf8_locale"
     _green "Locale set to $utf8_locale"
 fi
+
+# 检测vm_num是否为数字
+if ! [[ "$vm_num" =~ ^[0-9]+$ ]]; then
+    _red "Error: vm_num must be a valid number."
+    _red "错误：vm_num 必须是有效的数字。"
+    exit 1
+fi
+# 检测vm_num是否在范围10到256之间
+if [[ "$vm_num" -ge 10 && "$vm_num" -le 256 ]]; then
+    _green "vm_num is valid: $vm_num"
+else
+    _red "Error: vm_num must be in the range 10 ~ 256."
+    _red "错误： vm_num 需要在10到256以内。"
+    exit 1
+fi
+num=$vm_num
 
 get_system_arch() {
     local sysarch="$(uname -m)"
@@ -343,18 +359,6 @@ else
     if [ -f /usr/local/bin/pve_ipv6_gateway ]; then
         ipv6_gateway=$(cat /usr/local/bin/pve_ipv6_gateway)
     fi
-fi
-first_digit=${vm_num:0:1}
-second_digit=${vm_num:1:1}
-third_digit=${vm_num:2:1}
-if [ $first_digit -le 2 ]; then
-    if [ $second_digit -eq 0 ]; then
-        num=$third_digit
-    else
-        num=$second_digit$third_digit
-    fi
-else
-    num=$((first_digit - 2))$second_digit$third_digit
 fi
 if [ "$independent_ipv6" = "n" ]; then
     qm create "$vm_num" --agent 1 --scsihw virtio-scsi-single --serial0 socket --cores "$core" --sockets 1 --cpu host --net0 virtio,bridge=vmbr1,firewall=0

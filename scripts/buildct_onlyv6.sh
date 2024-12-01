@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/oneclickvirt/pve
-# 2024.03.12
+# 2024.12.01
 # ./buildct_onlyv6.sh CTID 密码 CPU核数 内存 硬盘 系统 存储盘
 # ./buildct_onlyv6.sh 102 1234567 1 512 5 debian11 local
 
@@ -308,18 +308,21 @@ else
     fi
 fi
 
-first_digit=${CTID:0:1}
-second_digit=${CTID:1:1}
-third_digit=${CTID:2:1}
-if [ $first_digit -le 2 ]; then
-    if [ $second_digit -eq 0 ]; then
-        num=$third_digit
-    else
-        num=$second_digit$third_digit
-    fi
-else
-    num=$((first_digit - 2))$second_digit$third_digit
+# 检测CTID是否为数字
+if ! [[ "$CTID" =~ ^[0-9]+$ ]]; then
+    _red "Error: CTID must be a valid number."
+    _red "错误：CTID 必须是有效的数字。"
+    exit 1
 fi
+# 检测CTID是否在范围10到256之间
+if [[ "$CTID" -ge 10 && "$CTID" -le 256 ]]; then
+    _green "CTID is valid: $CTID"
+else
+    _red "Error: CTID must be in the range 10 ~ 256."
+    _red "错误： CTID 需要在10到256以内。"
+    exit 1
+fi
+num=$CTID
 # 检测IPV6相关的信息
 if [ -f /usr/local/bin/pve_check_ipv6 ]; then
     host_ipv6_address=$(cat /usr/local/bin/pve_check_ipv6)

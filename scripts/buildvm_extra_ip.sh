@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/oneclickvirt/pve
-# 2024.11.16
+# 2024.12.01
 # 自动选择要绑定的IPV4地址 额外的IPV4地址需要与本机的IPV4地址在同一个子网内，即前缀一致
 # 此时开设出的虚拟机的网关为宿主机的IPV4的网关，不需要强制约定MAC地址。
 # 此时附加的IPV4地址是宿主机目前的IPV4地址顺位后面的地址
@@ -41,6 +41,22 @@ else
     export LANGUAGE="$utf8_locale"
     _green "Locale set to $utf8_locale"
 fi
+
+# 检测vm_num是否为数字
+if ! [[ "$vm_num" =~ ^[0-9]+$ ]]; then
+    _red "Error: vm_num must be a valid number."
+    _red "错误：vm_num 必须是有效的数字。"
+    exit 1
+fi
+# 检测vm_num是否在范围10到256之间
+if [[ "$vm_num" -ge 10 && "$vm_num" -le 256 ]]; then
+    _green "vm_num is valid: $vm_num"
+else
+    _red "Error: vm_num must be in the range 10 ~ 256."
+    _red "错误： vm_num 需要在10到256以内。"
+    exit 1
+fi
+num=$vm_num
 
 get_system_arch() {
     local sysarch="$(uname -m)"

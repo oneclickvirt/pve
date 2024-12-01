@@ -92,7 +92,7 @@ check_info() {
     if [ ! -f "ctlog" ]; then
         _yellow "ctrlog file does not exist in the current directory"
         _yellow "当前目录下不存在ctlog文件"
-        ct_num=302
+        ct_num=11
         web2_port=20003
         port_end=30025
     else

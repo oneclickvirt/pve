@@ -1,14 +1,14 @@
 #!/bin/bash
 # from
 # https://github.com/oneclickvirt/pve
-# 2024.03.12
+# 2024.12.01
 # 自动选择要绑定的IPV6地址
 # ./buildvm_onlyv6.sh VMID 用户名 密码 CPU核数 内存 硬盘 系统 存储盘
 # ./buildvm_onlyv6.sh 152 test1 1234567 1 512 5 debian11 local
 
 cd /root >/dev/null 2>&1
 # 创建NAT的虚拟机
-vm_num="${1:-102}"
+vm_num="${1:-152}"
 user="${2:-test}"
 password="${3:-123456}"
 core="${4:-1}"
@@ -38,6 +38,22 @@ fi
 if ! grep -q "vmbr2" /etc/network/interfaces; then
     _yellow "No vmbr2 exists to open a server with a standalone IPV6 address"
 fi
+
+# 检测vm_num是否为数字
+if ! [[ "$vm_num" =~ ^[0-9]+$ ]]; then
+    _red "Error: vm_num must be a valid number."
+    _red "错误：vm_num 必须是有效的数字。"
+    exit 1
+fi
+# 检测vm_num是否在范围10到256之间
+if [[ "$vm_num" -ge 10 && "$vm_num" -le 256 ]]; then
+    _green "vm_num is valid: $vm_num"
+else
+    _red "Error: vm_num must be in the range 10 ~ 256."
+    _red "错误： vm_num 需要在10到256以内。"
+    exit 1
+fi
+num=$vm_num
 
 # 检测ndppd服务是否启动了
 service_status=$(systemctl is-active ndpresponder.service)
@@ -271,18 +287,6 @@ elif [ "$system_arch" = "arch" ]; then
         url="http://cloud-images.ubuntu.com/${version}/current/${version}-server-cloudimg-arm64.img"
         curl -L -o "$file_path" "$url"
     fi
-fi
-first_digit=${vm_num:0:1}
-second_digit=${vm_num:1:1}
-third_digit=${vm_num:2:1}
-if [ $first_digit -le 2 ]; then
-    if [ $second_digit -eq 0 ]; then
-        num=$third_digit
-    else
-        num=$second_digit$third_digit
-    fi
-else
-    num=$((first_digit - 2))$second_digit$third_digit
 fi
 # 检测IPV6相关的信息
 if [ -f /usr/local/bin/pve_check_ipv6 ]; then

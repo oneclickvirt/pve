@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/oneclickvirt/pve
-# 2024.11.16
+# 2024.12.01
 
 # ./buildvm.sh VMID 用户名 密码 CPU核数 内存 硬盘 SSH端口 80端口 443端口 外网端口起 外网端口止 系统 存储盘 独立IPV6
 # ./buildvm.sh 102 test1 1234567 1 512 5 40001 40002 40003 50000 50025 debian11 local N
@@ -41,6 +41,22 @@ else
     export LANGUAGE="$utf8_locale"
     _green "Locale set to $utf8_locale"
 fi
+
+# 检测vm_num是否为数字
+if ! [[ "$vm_num" =~ ^[0-9]+$ ]]; then
+    _red "Error: vm_num must be a valid number."
+    _red "错误：vm_num 必须是有效的数字。"
+    exit 1
+fi
+# 检测vm_num是否在范围10到256之间
+if [[ "$vm_num" -ge 10 && "$vm_num" -le 256 ]]; then
+    _green "vm_num is valid: $vm_num"
+else
+    _red "Error: vm_num must be in the range 10 ~ 256."
+    _red "错误： vm_num 需要在10到256以内。"
+    exit 1
+fi
+num=$vm_num
 
 get_system_arch() {
     local sysarch="$(uname -m)"
@@ -309,18 +325,6 @@ else
     if [ -f /usr/local/bin/pve_ipv6_gateway ]; then
         ipv6_gateway=$(cat /usr/local/bin/pve_ipv6_gateway)
     fi
-fi
-first_digit=${vm_num:0:1}
-second_digit=${vm_num:1:1}
-third_digit=${vm_num:2:1}
-if [ $first_digit -le 2 ]; then
-    if [ $second_digit -eq 0 ]; then
-        num=$third_digit
-    else
-        num=$second_digit$third_digit
-    fi
-else
-    num=$((first_digit - 2))$second_digit$third_digit
 fi
 if [ "$independent_ipv6" == "n" ]; then
     qm create $vm_num --agent 1 --scsihw virtio-scsi-single --serial0 socket --cores $core --sockets 1 --cpu host --net0 virtio,bridge=vmbr1,firewall=0
