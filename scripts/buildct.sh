@@ -307,12 +307,12 @@ if ! [[ "$CTID" =~ ^[0-9]+$ ]]; then
     _red "错误：CTID 必须是有效的数字。"
     exit 1
 fi
-# 检测CTID是否在范围10到256之间
-if [[ "$CTID" -ge 10 && "$CTID" -le 256 ]]; then
+# 检测CTID是否在范围100到256之间
+if [[ "$CTID" -ge 100 && "$CTID" -le 256 ]]; then
     _green "CTID is valid: $CTID"
 else
-    _red "Error: CTID must be in the range 10 ~ 256."
-    _red "错误： CTID 需要在10到256以内。"
+    _red "Error: CTID must be in the range 100 ~ 256."
+    _red "错误： CTID 需要在100到256以内。"
     exit 1
 fi
 num=$CTID
