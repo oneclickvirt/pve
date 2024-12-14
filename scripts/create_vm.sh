@@ -92,7 +92,7 @@ check_info() {
     if [ ! -f "vmlog" ]; then
         _yellow "vmlog file does not exist in the current directory"
         _yellow "当前目录下不存在vmlog文件"
-        vm_num=11
+        vm_num=112
         web2_port=40003
         port_end=50025
     else
