@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/oneclickvirt/pve
-# 2024.11.15
+# 2024.12.31
 
 ########## 预设部分输出和部分中间变量
 
@@ -772,15 +772,22 @@ if [ $? -ne 0 ]; then
     if [[ -z "${CN}" || "${CN}" != true ]]; then
         curl -lk https://raw.githubusercontent.com/SuperManito/LinuxMirrors/main/ChangeMirrors.sh -o ChangeMirrors.sh
         chmod 777 ChangeMirrors.sh
-        ./ChangeMirrors.sh --use-official-source --web-protocol http --intranet false --close-firewall true --backup true --updata-software false --clean-cache false --ignore-backup-tips
-        rm -rf ChangeMirrors.sh
+        ./ChangeMirrors.sh --use-official-source --web-protocol http --intranet false --backup true --updata-software false --clean-cache false --ignore-backup-tips
     else
         curl -lk https://gitee.com/SuperManito/LinuxMirrors/raw/main/ChangeMirrors.sh -o ChangeMirrors.sh
         chmod 777 ChangeMirrors.sh
-        ./ChangeMirrors.sh --source mirrors.tuna.tsinghua.edu.cn --web-protocol http --intranet false --close-firewall true --backup true --updata-software false --clean-cache false --ignore-backup-tips
-        rm -rf ChangeMirrors.sh
+        ./ChangeMirrors.sh --source mirrors.tuna.tsinghua.edu.cn --web-protocol http --intranet false --backup true --updata-software false --clean-cache false --ignore-backup-tips
     fi
+    rm -rf ChangeMirrors.sh
     apt-get update -y
+    if [ $? -ne 0 ]; then
+        # 如果仍然报错，切换到阿里云镜像源
+        curl -lk https://gitee.com/SuperManito/LinuxMirrors/raw/main/ChangeMirrors.sh -o ChangeMirrors.sh
+        chmod 777 ChangeMirrors.sh
+        ./ChangeMirrors.sh --source mirrors.aliyun.com --web-protocol http --intranet false --backup true --updata-software false --clean-cache false --ignore-backup-tips
+        rm -rf ChangeMirrors.sh
+        apt-get update -y
+    fi
 fi
 systemctl daemon-reload
 
