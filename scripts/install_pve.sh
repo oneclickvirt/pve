@@ -1206,13 +1206,6 @@ fi
 # 新增pve源
 version=$(lsb_release -cs)
 # 如果是CN的IP则修改apt源先
-if [[ "${CN}" == true ]]; then
-    rm /etc/apt/sources.list
-    echo "deb https://mirrors.tuna.tsinghua.edu.cn/debian/ ${version} main contrib non-free" >>/etc/apt/sources.list
-    echo "deb https://mirrors.tuna.tsinghua.edu.cn/debian/ ${version}-updates main contrib non-free" >>/etc/apt/sources.list
-    echo "deb https://mirrors.tuna.tsinghua.edu.cn/debian/ ${version}-backports main contrib non-free" >>/etc/apt/sources.list
-    echo "deb https://mirrors.tuna.tsinghua.edu.cn/debian-security ${version}-security main contrib non-free" >>/etc/apt/sources.list
-fi
 if [ "$system_arch" = "x86" ]; then
     case $version in
     stretch | buster | bullseye | bookworm)
