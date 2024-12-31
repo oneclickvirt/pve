@@ -1205,7 +1205,6 @@ fi
 
 # 新增pve源
 version=$(lsb_release -cs)
-# 如果是CN的IP则修改apt源先
 if [ "$system_arch" = "x86" ]; then
     case $version in
     stretch | buster | bullseye | bookworm)
@@ -1215,12 +1214,6 @@ if [ "$system_arch" = "x86" ]; then
             repo_url="deb https://mirrors.tuna.tsinghua.edu.cn/proxmox/debian/pve ${version} pve-no-subscription"
         fi
         ;;
-    # bookworm)
-    #   repo_url="deb http://download.proxmox.com/debian/pve ${version} pvetest"
-    #   if [[ -n "${CN}" ]]; then
-    #     repo_url="deb https://mirrors.tuna.tsinghua.edu.cn/proxmox/debian/pve ${version} pvetest"
-    #   fi
-    #   ;;
     *)
         _red "Error: Unsupported Debian version"
         _yellow "Do you want to continue the installation? (Enter to not continue the installation by default) (y/[n])"
@@ -1283,8 +1276,49 @@ if [ "$system_arch" = "x86" ]; then
         fi
         ;;
     esac
+    # 添加软件源到sources.list
     if ! grep -q "^deb.*pve-no-subscription" /etc/apt/sources.list; then
         echo "$repo_url" >>/etc/apt/sources.list
+    fi
+    # 仅在CN模式下测试和切换镜像源
+    if [[ "${CN}" == true ]]; then
+        # 尝试运行apt-get update
+        if ! apt-get update >/dev/null 2>&1; then
+            _yellow "当前镜像源连接失败，将尝试切换其他镜像源..."
+            # 定义备选镜像源数组
+            mirrors=(
+                "https://mirrors.bfsu.edu.cn/proxmox/debian/pve"    # 北京外国语大学镜像源
+                "https://mirrors.nju.edu.cn/proxmox/debian/pve"     # 南京大学镜像源
+                "https://mirrors.tuna.tsinghua.edu.cn/proxmox/debian/pve"  # 清华大学镜像源
+            )
+            # 标记是否找到可用镜像源
+            success=false
+            # 遍历所有备选镜像源进行测试
+            for mirror in "${mirrors[@]}"; do
+                _green "正在测试镜像源: $mirror"
+                # 替换sources.list中的仓库地址
+                sed -i "s|^deb.*pve-no-subscription|deb $mirror $version pve-no-subscription|" /etc/apt/sources.list
+                
+                # 测试新镜像源
+                if apt-get update >/dev/null 2>&1; then
+                    _green "成功切换到镜像源: $mirror"
+                    success=true
+                    break
+                else
+                    _red "镜像源 $mirror 连接失败，尝试下一个..."
+                fi
+            done
+            # 如果所有镜像源都失败，询问用户是否继续
+            if [[ "$success" != true ]]; then
+                _red "所有镜像源均连接失败。请检查网络连接或稍后重试。"
+                _yellow "是否仍要继续安装？(y/[n])"
+                reading "是否仍然继续？(回车默认为否) (y/[n]) " confirm
+                echo ""
+                if [ "$confirm" != "y" ]; then
+                    exit 1
+                fi
+            fi
+        fi
     fi
 elif [ "$system_arch" = "arch" ]; then
     # https://github.com/jiangcuo/Proxmox-Port/wiki/Proxmox%E2%80%90Port--Repo-List
