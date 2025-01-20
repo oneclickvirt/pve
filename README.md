@@ -1,6 +1,6 @@
 # PVE
 
-[![Hits](https://hits.seeyoufarm.com/api/count/incr/badge.svg?url=https%3A%2F%2Fgithub.com%2FspiritLHLS%2Fpve&count_bg=%2379C83D&title_bg=%23555555&icon=&icon_color=%23E7E7E7&title=hits&edge_flat=false)](https://hits.seeyoufarm.com)
+[![Hits](https://hits.seeyoufarm.com/api/count/incr/badge.svg?url=https%3A%2F%2Fgithub.com%2FspiritLHLS%2Fpve&count_bg=%2379C83D&title_bg=%23555555&icon=&icon_color=%23E7E7E7&title=hits&edge_flat=false)](https://hits.seeyoufarm.com) [<img src="https://api.gitsponsors.com/api/badge/img?id=601054100" height="20">](https://api.gitsponsors.com/api/badge/link?p=EiN1W20XXHXrhsoVTbnHyaY94BncOcpYXK7ibHF53bSUkka5BT+YiG44CvFxRNeMAEdaMjo5sCrGzDLzfl6/5jknNucNKr+/BR2XkF3wZXbqupTBF9vECVTMYAiPsAON3OaE5NRG6HBgmQcejgR1xA==)
 
 感谢 Proxmox VE 的免费订阅支持
 
