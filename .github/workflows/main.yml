@@ -1,14 +1,16 @@
 name: Build and Upload ndpresponder
 
 on:
-  push:
-    branches:
-      - main
+  repository_dispatch:
+    types:
+      - ndpresponder_update
+  schedule:
+    - cron: '0 0 * * *' # Daily check for updates
   workflow_dispatch:
 
 jobs:
   build-and-upload:
-    name: Build and Upload ndpresponder
+    name: Build, Upload ndpresponder, and Push Docker Image
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -36,3 +38,17 @@ jobs:
           tag_name: ${{ matrix.architecture == 'amd64' && 'ndpresponder_x86' || 'ndpresponder_aarch64' }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build Docker Image
+        run: |
+          docker build -t spiritlhl/ndpresponder_${{ matrix.architecture }}:latest .
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Push Docker Image
+        run: |
+          docker push spiritlhl/ndpresponder_${{ matrix.architecture }}:latest
