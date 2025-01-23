@@ -1,0 +1,38 @@
+name: Build and Upload ndpresponder
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build-and-upload:
+    name: Build and Upload ndpresponder
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        architecture: [amd64, arm64] # x86 corresponds to amd64, aarch64 corresponds to arm64
+    steps:
+      - name: Checkout ndpresponder repository
+        uses: actions/checkout@v3
+        with:
+          repository: yoursunny/ndpresponder
+
+      - name: Set up Go 1.23
+        uses: actions/setup-go@v4
+        with:
+          go-version: 1.23
+
+      - name: Build ndpresponder
+        run: |
+          mkdir -p build
+          GOARCH=${{ matrix.architecture }} GOOS=linux go build -o build/ndpresponder .
+
+      - name: Upload to GitHub Releases
+        uses: softprops/action-gh-release@v1
+        with:
+          files: build/ndpresponder
+          tag_name: ${{ matrix.architecture == 'amd64' && 'ndpresponder_x86' || 'ndpresponder_aarch64' }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
