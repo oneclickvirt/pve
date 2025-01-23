@@ -5,7 +5,7 @@ on:
     types:
       - ndpresponder_update
   schedule:
-    - cron: '0 0 * * *' # Daily check for updates
+    - cron: '0 12 * * *'
   workflow_dispatch:
 
 jobs:
@@ -14,7 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        architecture: [amd64, arm64] # x86 corresponds to amd64, aarch64 corresponds to arm64
+        architecture: [amd64, arm64]
     steps:
       - name: Checkout ndpresponder repository
         uses: actions/checkout@v3
@@ -29,7 +29,7 @@ jobs:
       - name: Build ndpresponder
         run: |
           mkdir -p build
-          GOARCH=${{ matrix.architecture }} GOOS=linux go build -o build/ndpresponder .
+          CGO_ENABLED=0 GOARCH=${{ matrix.architecture }} GOOS=linux go build -o build/ndpresponder .
 
       - name: Upload to GitHub Releases
         uses: softprops/action-gh-release@v1
@@ -41,7 +41,8 @@ jobs:
 
       - name: Build Docker Image
         run: |
-          docker build -t spiritlhl/ndpresponder_${{ matrix.architecture }}:latest .
+          arch_suffix=$([[ "${{ matrix.architecture }}" == "amd64" ]] && echo "x86" || echo "aarch64")
+          docker build -t spiritlhl/ndpresponder_${arch_suffix}:latest .
 
       - name: Log in to Docker Hub
         uses: docker/login-action@v2
@@ -51,4 +52,5 @@ jobs:
 
       - name: Push Docker Image
         run: |
-          docker push spiritlhl/ndpresponder_${{ matrix.architecture }}:latest
+          arch_suffix=$([[ "${{ matrix.architecture }}" == "amd64" ]] && echo "x86" || echo "aarch64")
+          docker push spiritlhl/ndpresponder_${arch_suffix}:latest
