@@ -62,13 +62,6 @@ check_china() {
         if [[ $(curl -m 6 -s https://ipapi.co/json | grep 'China') != "" ]]; then
             _yellow "根据ipapi.co提供的信息，当前IP可能在中国，使用中国镜像下载"
             CN=true
-        else
-            if [[ $? -ne 0 ]]; then
-                if [[ $(curl -m 6 -s cip.cc) =~ "中国" ]]; then
-                    _yellow "根据cip.cc提供的信息，当前IP可能在中国，使用中国镜像下载"
-                    CN=true
-                fi
-            fi
         fi
     fi
 }

@@ -42,13 +42,6 @@ check_china() {
         if [[ $(curl -m 6 -s https://ipapi.co/json | grep 'China') != "" ]]; then
             echo "根据ipapi.co提供的信息，当前IP可能在中国"
             CN=true
-        else
-            if [[ $? -ne 0 ]]; then
-                if [[ $(curl -m 6 -s cip.cc) =~ "中国" ]]; then
-                    echo "根据cip.cc提供的信息，当前IP可能在中国"
-                    CN=true
-                fi
-            fi
         fi
     fi
 }

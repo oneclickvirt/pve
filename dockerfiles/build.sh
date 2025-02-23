@@ -203,25 +203,6 @@ check_china() {
                 CN=true
                 ;;
             esac
-        else
-            if [[ $? -ne 0 ]]; then
-                if [[ $(curl -m 6 -s cip.cc) =~ "中国" ]]; then
-                    _yellow "根据cip.cc提供的信息，当前IP可能在中国"
-                    read -e -r -p "是否选用中国镜像完成相关组件安装? [Y/n] " input
-                    case $input in
-                    [yY][eE][sS] | [yY])
-                        echo "使用中国镜像"
-                        CN=true
-                        ;;
-                    [nN][oO] | [nN])
-                        echo "不使用中国镜像"
-                        ;;
-                    *)
-                        echo "不使用中国镜像"
-                        ;;
-                    esac
-                fi
-            fi
         fi
     fi
 }
