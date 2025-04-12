@@ -676,32 +676,6 @@ check_china
 cdn_urls=("https://cdn0.spiritlhl.top/" "http://cdn3.spiritlhl.net/" "http://cdn1.spiritlhl.net/" "https://ghproxy.com/" "http://cdn2.spiritlhl.net/")
 check_cdn_file
 
-systemctl restart networking
-if [ $? -ne 0 ] && [ -e "/etc/systemd/system/networking.service" ]; then
-    # altname=$(ip addr show eth0 | grep altname | awk '{print $NF}')
-    if [ -f /etc/network/interfaces ] && grep -q "eth0" /etc/network/interfaces; then
-        chattr -i /etc/network/interfaces
-        sed -i '/^auto ens[0-9]\+$/d' /etc/network/interfaces
-        sed -i '/^allow-hotplug ens[0-9]\+$/d' /etc/network/interfaces
-        sed -i '/^iface ens[0-9]\+ inet/d' /etc/network/interfaces
-        chattr +i /etc/network/interfaces
-    fi
-fi
-systemctl restart networking
-if [ $? -ne 0 ] && [ -e "/etc/systemd/system/networking.service" ]; then
-    if [ ! -f "/usr/local/bin/clear_interface_route_cache.sh" ]; then
-        wget ${cdn_success_url}https://raw.githubusercontent.com/oneclickvirt/pve/main/extra_scripts/clear_interface_route_cache.sh -O /usr/local/bin/clear_interface_route_cache.sh
-        wget ${cdn_success_url}https://raw.githubusercontent.com/oneclickvirt/pve/main/extra_scripts/clear_interface_route_cache.service -O /etc/systemd/system/clear_interface_route_cache.service
-        chmod +x /usr/local/bin/clear_interface_route_cache.sh
-        chmod +x /etc/systemd/system/clear_interface_route_cache.service
-        systemctl daemon-reload
-        systemctl enable clear_interface_route_cache.service
-        _green "An anomaly was detected with the routing conflict, perform a reboot to reboot the machine to start the repaired daemon and try the installation again."
-        _green "检测到路由冲突存在异常，请执行 reboot 重启机器以启动修复的守护进程，再次尝试安装"
-        exit 1
-    fi
-fi
-
 # 前置环境安装与配置
 if [ "$(id -u)" != "0" ]; then
     _red "This script must be run as root"
@@ -832,6 +806,32 @@ fi
 # 检测系统信息
 _yellow "Detecting system information, will probably stay on the page for up to 1~2 minutes"
 _yellow "正在检测系统信息，大概会停留在该页面最多1~2分钟"
+
+systemctl restart networking
+if [ $? -ne 0 ] && [ -e "/etc/systemd/system/networking.service" ]; then
+    # altname=$(ip addr show eth0 | grep altname | awk '{print $NF}')
+    if [ -f /etc/network/interfaces ] && grep -q "eth0" /etc/network/interfaces; then
+        chattr -i /etc/network/interfaces
+        sed -i '/^auto ens[0-9]\+$/d' /etc/network/interfaces
+        sed -i '/^allow-hotplug ens[0-9]\+$/d' /etc/network/interfaces
+        sed -i '/^iface ens[0-9]\+ inet/d' /etc/network/interfaces
+        chattr +i /etc/network/interfaces
+    fi
+fi
+systemctl restart networking
+if [ $? -ne 0 ] && [ -e "/etc/systemd/system/networking.service" ]; then
+    if [ ! -f "/usr/local/bin/clear_interface_route_cache.sh" ]; then
+        wget ${cdn_success_url}https://raw.githubusercontent.com/oneclickvirt/pve/main/extra_scripts/clear_interface_route_cache.sh -O /usr/local/bin/clear_interface_route_cache.sh
+        wget ${cdn_success_url}https://raw.githubusercontent.com/oneclickvirt/pve/main/extra_scripts/clear_interface_route_cache.service -O /etc/systemd/system/clear_interface_route_cache.service
+        chmod +x /usr/local/bin/clear_interface_route_cache.sh
+        chmod +x /etc/systemd/system/clear_interface_route_cache.service
+        systemctl daemon-reload
+        systemctl enable clear_interface_route_cache.service
+        _green "An anomaly was detected with the routing conflict, perform a reboot to reboot the machine to start the repaired daemon and try the installation again."
+        _green "检测到路由冲突存在异常，请执行 reboot 重启机器以启动修复的守护进程，再次尝试安装"
+        exit 1
+    fi
+fi
 
 # 检测主IPV4相关信息
 if [ ! -f /usr/local/bin/pve_main_ipv4 ]; then
