@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/oneclickvirt/pve
-# 2024.12.31
+# 2025.04.12
 
 ########## 预设部分输出和部分中间变量
 
@@ -1110,6 +1110,13 @@ if [ ! -f "/usr/local/bin/reboot_pve.txt" ]; then
     # if dig -x $main_ipv4 | grep -q "vps.ovh"; then
     #     prebuild_ifupdown2
     # fi
+    # 特殊处理DigitalOcean的Debian12，需要抢先安装ifupdown2
+    if grep -q '^VERSION_ID="12"$' /etc/os-release &&
+        grep -q '^NAME="Debian"$' /etc/os-release &&
+        [[ $dmidecode_output == *"DigitalOcean"* ]] &&
+        ! dpkg -S ifupdown2; then
+        apt install ifupdown2 -y
+    fi
     echo "1" >"/usr/local/bin/reboot_pve.txt"
     _green "Please execute reboot to reboot the system and then execute this script again"
     _green "Please wait for at least 20 seconds without automatically rebooting the system before executing this script."
@@ -1178,7 +1185,7 @@ if [ "${hostname}" != "$new_hostname" ]; then
     fi
     hostname_check=$(cat /etc/hosts)
     if ! grep -q "$new_hostname$" /etc/hosts; then
-        echo "${main_ipv4} ${new_hostname}.localdomain ${new_hostname}" >> /etc/hosts
+        echo "${main_ipv4} ${new_hostname}.localdomain ${new_hostname}" >>/etc/hosts
     fi
     chattr +i /etc/hosts
 fi
@@ -1267,9 +1274,9 @@ if [ "$system_arch" = "x86" ]; then
             _yellow "当前镜像源连接失败，将尝试切换其他镜像源..."
             # 定义备选镜像源数组
             mirrors=(
-                "https://mirrors.bfsu.edu.cn/proxmox/debian/pve"    # 北京外国语大学镜像源
-                "https://mirrors.nju.edu.cn/proxmox/debian/pve"     # 南京大学镜像源
-                "https://mirrors.tuna.tsinghua.edu.cn/proxmox/debian/pve"  # 清华大学镜像源
+                "https://mirrors.bfsu.edu.cn/proxmox/debian/pve"          # 北京外国语大学镜像源
+                "https://mirrors.nju.edu.cn/proxmox/debian/pve"           # 南京大学镜像源
+                "https://mirrors.tuna.tsinghua.edu.cn/proxmox/debian/pve" # 清华大学镜像源
             )
             # 标记是否找到可用镜像源
             success=false
@@ -1278,7 +1285,7 @@ if [ "$system_arch" = "x86" ]; then
                 _green "正在测试镜像源: $mirror"
                 # 替换sources.list中的仓库地址
                 sed -i "s|^deb.*pve-no-subscription|deb $mirror $version pve-no-subscription|" /etc/apt/sources.list
-                
+
                 # 测试新镜像源
                 if apt-get update >/dev/null 2>&1; then
                     _green "成功切换到镜像源: $mirror"
@@ -1602,7 +1609,7 @@ install_package ufw
 ufw disable
 
 # 强制WEB面板使用IPV4地址
-echo LISTEN_IP="0.0.0.0" > /etc/default/pveproxy
+echo LISTEN_IP="0.0.0.0" >/etc/default/pveproxy
 
 ########## 打印安装成功的信息
 

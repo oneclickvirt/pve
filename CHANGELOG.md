@@ -1,5 +1,9 @@
 # 更新日志
 
+2025.03.29
+
+- 修复Hits徽章访问量统计，使用 https://github.com/oneclickvirt/hitscounter
+
 2025.02.23
 
 - 去除对 cip.cc 的依赖
