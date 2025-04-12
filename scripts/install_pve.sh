@@ -1037,6 +1037,13 @@ fi
 
 # 网络配置修改
 dmidecode_output=$(dmidecode -t system)
+# 特殊处理DigitalOcean的Debian12，需要抢先安装ifupdown2
+if grep -q '^VERSION_ID="12"$' /etc/os-release &&
+    grep -q '^NAME="Debian"$' /etc/os-release &&
+    [[ $dmidecode_output == *"DigitalOcean"* ]] &&
+    ! dpkg -S ifupdown2; then
+    apt install ifupdown2 -y
+fi
 rebuild_interfaces
 # 去除空行之外的重复行
 remove_duplicate_lines "/etc/network/interfaces"
@@ -1110,13 +1117,6 @@ if [ ! -f "/usr/local/bin/reboot_pve.txt" ]; then
     # if dig -x $main_ipv4 | grep -q "vps.ovh"; then
     #     prebuild_ifupdown2
     # fi
-    # 特殊处理DigitalOcean的Debian12，需要抢先安装ifupdown2
-    if grep -q '^VERSION_ID="12"$' /etc/os-release &&
-        grep -q '^NAME="Debian"$' /etc/os-release &&
-        [[ $dmidecode_output == *"DigitalOcean"* ]] &&
-        ! dpkg -S ifupdown2; then
-        apt install ifupdown2 -y
-    fi
     echo "1" >"/usr/local/bin/reboot_pve.txt"
     _green "Please execute reboot to reboot the system and then execute this script again"
     _green "Please wait for at least 20 seconds without automatically rebooting the system before executing this script."
