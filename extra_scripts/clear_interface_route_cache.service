@@ -5,7 +5,7 @@ After=network.target
 [Service]
 Type=oneshot
 ExecStart=/usr/local/bin/clear_interface_route_cache.sh
-ExecStartPost=/sbin/reboot
+ExecStartPost=/usr/bin/env reboot
 RemainAfterExit=yes
 
 [Install]
