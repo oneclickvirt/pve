@@ -1039,9 +1039,9 @@ fi
 dmidecode_output=$(dmidecode -t system)
 # 特殊处理DigitalOcean的Debian12，需要抢先安装ifupdown2
 if grep -q '^VERSION_ID="12"$' /etc/os-release &&
-    grep -q '^NAME="Debian"$' /etc/os-release &&
+    grep -q '^NAME="Debian GNU/Linux"$' /etc/os-release &&
     [[ $dmidecode_output == *"DigitalOcean"* ]] &&
-    ! dpkg -S ifupdown2; then
+    ! dpkg -l ifupdown2 | grep -q '^ii'; then
     apt install ifupdown2 -y
 fi
 rebuild_interfaces
@@ -1110,7 +1110,7 @@ if [ ! -f "/usr/local/bin/reboot_pve.txt" ]; then
         #     prebuild_ifupdown2
         # fi
     fi
-    if [[ $dmidecode_output == *"Hetzner_vServer"* ]] || [[ $dmidecode_output == *"Exoscale Compute Platform"* ]] || ! dpkg -S ifupdown; then
+    if [[ $dmidecode_output == *"Hetzner_vServer"* ]] || [[ $dmidecode_output == *"Exoscale Compute Platform"* ]] || ! dpkg -l ifupdown | grep -q '^ii'; then
         prebuild_ifupdown2
     fi
     # # 特殊处理OVH
