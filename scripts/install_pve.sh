@@ -785,15 +785,13 @@ if grep -q '^VERSION_ID="12"$' /etc/os-release &&
     [[ $dmidecode_output == *"DigitalOcean"* ]] &&
     ! dpkg -l ifupdown2 | grep -q '^ii'; then
     install_package ifupdown2
-fi
-# 特殊处理Hetzner
-if [[ $dmidecode_output == *"Hetzner_vServer"* ]] || [[ $dmidecode_output == *"Exoscale Compute Platform"* ]] || ! dpkg -l ifupdown | grep -q '^ii'; then
+elif [[ $dmidecode_output == *"Hetzner_vServer"* ]] || [[ $dmidecode_output == *"Exoscale Compute Platform"* ]] || ! dpkg -l ifupdown | grep -q '^ii'; then
+    # 特殊处理Hetzner
     prebuild_ifupdown2
-fi
-# # 特殊处理OVH
-# if dig -x $main_ipv4 | grep -q "vps.ovh"; then
+# elif dig -x $main_ipv4 | grep -q "vps.ovh"; then
+#     # 特殊处理OVH
 #     prebuild_ifupdown2
-# fi
+fi
 
 # 预检查
 if [ ! -f /etc/debian_version ] || [ $(grep MemTotal /proc/meminfo | awk '{print $2}') -lt 2000000 ] || [ $(grep -c ^processor /proc/cpuinfo) -lt 2 ] || [ $(
