@@ -4,6 +4,7 @@ After=network.target
 
 [Service]
 Type=oneshot
+ExecStartPre=/bin/sleep 5
 ExecStart=/usr/local/bin/install_ifupdown2.sh
 ExecStartPost=/sbin/reboot
 RemainAfterExit=yes
