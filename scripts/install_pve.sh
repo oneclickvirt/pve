@@ -798,12 +798,20 @@ install_package sipcalc
 install_package dmidecode
 install_package dnsutils
 install_package ethtool
-apt-get install gnupg -y
-apt-get install iputils-ping -y
-apt-get install iproute2 -y
-apt-get install lsb-release -y
+install_package gnupg
+install_package iputils-ping
+install_package iproute2
+install_package lsb-release
 ethtool_path=$(which ethtool)
 check_haveged
+dmidecode_output=$(dmidecode -t system)
+# 特殊处理DigitalOcean的Debian12，需要抢先安装ifupdown2
+if grep -q '^VERSION_ID="12"$' /etc/os-release &&
+    grep -q '^NAME="Debian GNU/Linux"$' /etc/os-release &&
+    [[ $dmidecode_output == *"DigitalOcean"* ]] &&
+    ! dpkg -l ifupdown2 | grep -q '^ii'; then
+    install_package ifupdown2
+fi
 
 # 预检查
 if [ ! -f /etc/debian_version ] || [ $(grep MemTotal /proc/meminfo | awk '{print $2}') -lt 2000000 ] || [ $(grep -c ^processor /proc/cpuinfo) -lt 2 ] || [ $(
@@ -1036,14 +1044,6 @@ if [ ! -f "/etc/network/interfaces" ]; then
 fi
 
 # 网络配置修改
-dmidecode_output=$(dmidecode -t system)
-# 特殊处理DigitalOcean的Debian12，需要抢先安装ifupdown2
-if grep -q '^VERSION_ID="12"$' /etc/os-release &&
-    grep -q '^NAME="Debian GNU/Linux"$' /etc/os-release &&
-    [[ $dmidecode_output == *"DigitalOcean"* ]] &&
-    ! dpkg -l ifupdown2 | grep -q '^ii'; then
-    apt install ifupdown2 -y
-fi
 rebuild_interfaces
 # 去除空行之外的重复行
 remove_duplicate_lines "/etc/network/interfaces"
