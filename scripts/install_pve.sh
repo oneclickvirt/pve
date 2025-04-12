@@ -786,6 +786,14 @@ if grep -q '^VERSION_ID="12"$' /etc/os-release &&
     ! dpkg -l ifupdown2 | grep -q '^ii'; then
     install_package ifupdown2
 fi
+# 特殊处理Hetzner
+if [[ $dmidecode_output == *"Hetzner_vServer"* ]] || [[ $dmidecode_output == *"Exoscale Compute Platform"* ]] || ! dpkg -l ifupdown | grep -q '^ii'; then
+    prebuild_ifupdown2
+fi
+# # 特殊处理OVH
+# if dig -x $main_ipv4 | grep -q "vps.ovh"; then
+#     prebuild_ifupdown2
+# fi
 
 # 预检查
 if [ ! -f /etc/debian_version ] || [ $(grep MemTotal /proc/meminfo | awk '{print $2}') -lt 2000000 ] || [ $(grep -c ^processor /proc/cpuinfo) -lt 2 ] || [ $(
@@ -1105,18 +1113,7 @@ if [ ! -f "/usr/local/bin/reboot_pve.txt" ]; then
         sed -i 's#http://debian-archive.trafficmanager.net/debian-security#http://security.debian.org/debian-security#g' /etc/apt/sources.list
         sed -i 's#http://debian-archive.trafficmanager.net/debian bullseye-updates#http://deb.debian.org/debian bullseye-updates#g' /etc/apt/sources.list
         sed -i 's#http://debian-archive.trafficmanager.net/debian bullseye-backports#http://deb.debian.org/debian bullseye-backports#g' /etc/apt/sources.list
-        # if [[ "${inet_dhcp}" == true ]]; then
-        #     # 特殊处理原有配置是dhcp的情况
-        #     prebuild_ifupdown2
-        # fi
     fi
-    if [[ $dmidecode_output == *"Hetzner_vServer"* ]] || [[ $dmidecode_output == *"Exoscale Compute Platform"* ]] || ! dpkg -l ifupdown | grep -q '^ii'; then
-        prebuild_ifupdown2
-    fi
-    # # 特殊处理OVH
-    # if dig -x $main_ipv4 | grep -q "vps.ovh"; then
-    #     prebuild_ifupdown2
-    # fi
     echo "1" >"/usr/local/bin/reboot_pve.txt"
     _green "Please execute reboot to reboot the system and then execute this script again"
     _green "Please wait for at least 20 seconds without automatically rebooting the system before executing this script."
