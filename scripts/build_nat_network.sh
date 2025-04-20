@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/oneclickvirt/pve
-# 2024.03.12
+# 2025.04.20
 
 ########## 预设部分输出和部分中间变量
 
@@ -24,7 +24,8 @@ rm -rf /usr/local/bin/build_backend_pve.txt
 
 check_cdn() {
     local o_url=$1
-    for cdn_url in "${cdn_urls[@]}"; do
+    local shuffled_cdn_urls=($(shuf -e "${cdn_urls[@]}")) # 打乱数组顺序
+    for cdn_url in "${shuffled_cdn_urls[@]}"; do
         if curl -sL -k "$cdn_url$o_url" --max-time 6 | grep -q "success" >/dev/null 2>&1; then
             export cdn_success_url="$cdn_url"
             return

@@ -68,7 +68,8 @@ check_china() {
 
 check_cdn() {
     local o_url=$1
-    for cdn_url in "${cdn_urls[@]}"; do
+    local shuffled_cdn_urls=($(shuf -e "${cdn_urls[@]}")) # 打乱数组顺序
+    for cdn_url in "${shuffled_cdn_urls[@]}"; do
         if curl -sL -k "$cdn_url$o_url" --max-time 6 | grep -q "success" >/dev/null 2>&1; then
             export cdn_success_url="$cdn_url"
             return
@@ -105,7 +106,7 @@ rm -rf "ct$name"
 en_system=$(echo "$system_ori" | sed 's/[0-9]*//g; s/\.$//')
 num_system=$(echo "$system_ori" | sed 's/[a-zA-Z]*//g')
 system="$en_system-$num_system"
-cdn_urls=("https://cdn0.spiritlhl.top/" "http://cdn3.spiritlhl.net/" "http://cdn1.spiritlhl.net/" "https://ghproxy.com/" "http://cdn2.spiritlhl.net/")
+cdn_urls=("https://cdn0.spiritlhl.top/" "http://cdn1.spiritlhl.net/" "http://cdn2.spiritlhl.net/" "http://cdn3.spiritlhl.net/" "http://cdn4.spiritlhl.net/")
 check_cdn_file
 if [ "$system_arch" = "arch" ]; then
     system_name=""
@@ -122,7 +123,7 @@ if [ "$system_arch" = "arch" ]; then
     version=""
     if [ "$en_system" = "ubuntu" ]; then
         # 转换ubuntu系统的代号为对应名字
-        for ((i=0; i<${#ubuntu_versions[@]}; i++)); do
+        for ((i = 0; i < ${#ubuntu_versions[@]}; i++)); do
             if [ "${ubuntu_versions[$i]}" = "$num_system" ]; then
                 version="${ubuntu_names[$i]}"
                 system_name="${en_system}_${ubuntu_versions[$i]}_${ubuntu_names[$i]}_arm64_cloud.tar.xz"
@@ -131,7 +132,7 @@ if [ "$system_arch" = "arch" ]; then
         done
     elif [ "$en_system" = "debian" ]; then
         # 转换debian系统的代号为对应名字
-        for ((i=0; i<${#debian_versions[@]}; i++)); do
+        for ((i = 0; i < ${#debian_versions[@]}; i++)); do
             if [ "${debian_versions[$i]}" = "$num_system" ]; then
                 version="${debian_names[$i]}"
                 system_name="${en_system}_${debian_versions[$i]}_${debian_names[$i]}_arm64_cloud.tar.xz"
@@ -140,7 +141,7 @@ if [ "$system_arch" = "arch" ]; then
         done
     elif [ -z $num_system ]; then
         # 适配无指定版本的系统
-        for ((i=0; i<${#system_names[@]}; i++)); do
+        for ((i = 0; i < ${#system_names[@]}; i++)); do
             if [[ "${system_names[$i]}" == "${en_system}_"* ]]; then
                 system_name="${system_names[$i]}"
                 break
@@ -237,7 +238,7 @@ else
                 echo "No suitable system names found."
             elif [ -z $num_system ]; then
                 # 适配无指定版本的系统
-                for ((i=0; i<${#system_names[@]}; i++)); do
+                for ((i = 0; i < ${#system_names[@]}; i++)); do
                     if [[ "${system_names[$i]}" == "${en_system}-"* ]]; then
                         system_name="${system_names[$i]}"
                         fixed_system=true

@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/oneclickvirt/pve
-# 2025.04.12
+# 2025.04.20
 
 ########## 预设部分输出和部分中间变量
 
@@ -494,7 +494,8 @@ check_ipv6() {
 
 check_cdn() {
     local o_url=$1
-    for cdn_url in "${cdn_urls[@]}"; do
+    local shuffled_cdn_urls=($(shuf -e "${cdn_urls[@]}")) # 打乱数组顺序
+    for cdn_url in "${shuffled_cdn_urls[@]}"; do
         if curl -sL -k "$cdn_url$o_url" --max-time 6 | grep -q "success" >/dev/null 2>&1; then
             export cdn_success_url="$cdn_url"
             return
@@ -668,14 +669,11 @@ check_interface() {
 
 # 更改网络优先级为IPV4优先
 sed -i 's/.*precedence ::ffff:0:0\/96.*/precedence ::ffff:0:0\/96  100/g' /etc/gai.conf
-
 # ChinaIP检测
 check_china
-
 # cdn检测
-cdn_urls=("https://cdn0.spiritlhl.top/" "http://cdn3.spiritlhl.net/" "http://cdn1.spiritlhl.net/" "https://ghproxy.com/" "http://cdn2.spiritlhl.net/")
+cdn_urls=("https://cdn0.spiritlhl.top/" "http://cdn1.spiritlhl.net/" "http://cdn2.spiritlhl.net/" "http://cdn3.spiritlhl.net/" "http://cdn4.spiritlhl.net/")
 check_cdn_file
-
 # 前置环境安装与配置
 if [ "$(id -u)" != "0" ]; then
     _red "This script must be run as root"

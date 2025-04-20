@@ -50,7 +50,8 @@ check_china() {
 
 check_cdn() {
     local o_url=$1
-    for cdn_url in "${cdn_urls[@]}"; do
+    local shuffled_cdn_urls=($(shuf -e "${cdn_urls[@]}"))  # 打乱数组顺序
+    for cdn_url in "${shuffled_cdn_urls[@]}"; do
         if curl -sL -k "$cdn_url$o_url" --max-time 6 | grep -q "success" >/dev/null 2>&1; then
             export cdn_success_url="$cdn_url"
             return
@@ -59,6 +60,7 @@ check_cdn() {
     done
     export cdn_success_url=""
 }
+
 
 check_cdn_file() {
     check_cdn "https://raw.githubusercontent.com/spiritLHLS/ecs/main/back/test"
