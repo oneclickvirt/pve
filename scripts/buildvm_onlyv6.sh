@@ -7,64 +7,72 @@
 # ./buildvm_onlyv6.sh 152 test1 1234567 1 512 5 debian11 local
 
 cd /root >/dev/null 2>&1
-# 创建NAT的虚拟机
-vm_num="${1:-152}"
-user="${2:-test}"
-password="${3:-123456}"
-core="${4:-1}"
-memory="${5:-512}"
-disk="${6:-5}"
-system="${7:-ubuntu22}"
-storage="${8:-local}"
-rm -rf "vm$name"
-
 _red() { echo -e "\033[31m\033[01m$@\033[0m"; }
 _green() { echo -e "\033[32m\033[01m$@\033[0m"; }
 _yellow() { echo -e "\033[33m\033[01m$@\033[0m"; }
 _blue() { echo -e "\033[36m\033[01m$@\033[0m"; }
 reading() { read -rp "$(_green "$1")" "$2"; }
-utf8_locale=$(locale -a 2>/dev/null | grep -i -m 1 -E "utf8|UTF-8")
-if [[ -z "$utf8_locale" ]]; then
-    _yellow "No UTF-8 locale found"
-else
-    export LC_ALL="$utf8_locale"
-    export LANG="$utf8_locale"
-    export LANGUAGE="$utf8_locale"
-    _green "Locale set to $utf8_locale"
-fi
-if [ ! -f /usr/local/bin/pve_check_ipv6 ]; then
-    _yellow "No ipv6 address exists to open a server with a standalone IPV6 address"
-fi
-if ! grep -q "vmbr2" /etc/network/interfaces; then
-    _yellow "No vmbr2 exists to open a server with a standalone IPV6 address"
-fi
 
-# 检测vm_num是否为数字
-if ! [[ "$vm_num" =~ ^[0-9]+$ ]]; then
-    _red "Error: vm_num must be a valid number."
-    _red "错误：vm_num 必须是有效的数字。"
-    exit 1
-fi
-# 检测vm_num是否在范围100到256之间
-if [[ "$vm_num" -ge 100 && "$vm_num" -le 256 ]]; then
-    _green "vm_num is valid: $vm_num"
-else
-    _red "Error: vm_num must be in the range 100 ~ 256."
-    _red "错误： vm_num 需要在100到256以内。"
-    exit 1
-fi
-num=$vm_num
+init_config() {
+    vm_num="${1:-152}"
+    user="${2:-test}"
+    password="${3:-123456}"
+    core="${4:-1}"
+    memory="${5:-512}"
+    disk="${6:-5}"
+    system="${7:-ubuntu22}"
+    storage="${8:-local}"
+    rm -rf "vm$vm_num"
+    cdn_urls=("http://cdn1.spiritlhl.net/" "http://cdn2.spiritlhl.net/" "http://cdn3.spiritlhl.net/" "http://cdn4.spiritlhl.net/")
+    if [ ! -d "qcow" ]; then
+        mkdir qcow
+    fi
+}
 
-# 检测ndppd服务是否启动了
-service_status=$(systemctl is-active ndpresponder.service)
-if [ "$service_status" == "active" ]; then
-    _green "The ndpresponder service started successfully and is running, and the host can open a service with a separate IPV6 address."
-    _green "ndpresponder服务启动成功且正在运行，宿主机可开设带独立IPV6地址的服务。"
-else
-    _green "The status of the ndpresponder service is abnormal and the host may not open a service with a separate IPV6 address."
-    _green "ndpresponder服务状态异常，宿主机不可开设带独立IPV6地址的服务。"
-    exit 1
-fi
+validate_params() {
+    # 检测vm_num是否为数字
+    if ! [[ "$vm_num" =~ ^[0-9]+$ ]]; then
+        _red "Error: vm_num must be a valid number."
+        _red "错误：vm_num 必须是有效的数字。"
+        exit 1
+    fi
+    # 检测vm_num是否在范围100到256之间
+    if [[ "$vm_num" -ge 100 && "$vm_num" -le 256 ]]; then
+        _green "vm_num is valid: $vm_num"
+    else
+        _red "Error: vm_num must be in the range 100 ~ 256."
+        _red "错误： vm_num 需要在100到256以内。"
+        exit 1
+    fi
+    num=$vm_num
+}
+
+check_environment() {
+    utf8_locale=$(locale -a 2>/dev/null | grep -i -m 1 -E "utf8|UTF-8")
+    if [[ -z "$utf8_locale" ]]; then
+        _yellow "No UTF-8 locale found"
+    else
+        export LC_ALL="$utf8_locale"
+        export LANG="$utf8_locale"
+        export LANGUAGE="$utf8_locale"
+        _green "Locale set to $utf8_locale"
+    fi
+    if [ ! -f /usr/local/bin/pve_check_ipv6 ]; then
+        _yellow "No ipv6 address exists to open a server with a standalone IPV6 address"
+    fi
+    if ! grep -q "vmbr2" /etc/network/interfaces; then
+        _yellow "No vmbr2 exists to open a server with a standalone IPV6 address"
+    fi
+    service_status=$(systemctl is-active ndpresponder.service)
+    if [ "$service_status" == "active" ]; then
+        _green "The ndpresponder service started successfully and is running, and the host can open a service with a separate IPV6 address."
+        _green "ndpresponder服务启动成功且正在运行，宿主机可开设带独立IPV6地址的服务。"
+    else
+        _green "The status of the ndpresponder service is abnormal and the host may not open a service with a separate IPV6 address."
+        _green "ndpresponder服务状态异常，宿主机不可开设带独立IPV6地址的服务。"
+        exit 1
+    fi
+}
 
 get_system_arch() {
     local sysarch="$(uname -m)"
@@ -90,6 +98,8 @@ check_kvm_support() {
         if [ -r /dev/kvm ] && [ -w /dev/kvm ]; then
             _green "KVM硬件加速可用，将使用硬件加速。"
             _green "KVM hardware acceleration is available. Using hardware acceleration."
+            cpu_type="host"
+            kvm_flag="--kvm 1"
             return 0
         fi
     fi
@@ -102,6 +112,8 @@ check_kvm_support() {
     fi
     _yellow "将使用QEMU软件模拟(TCG)模式，性能会受到影响。"
     _yellow "Falling back to QEMU software emulation (TCG). Performance will be affected."
+    cpu_type="qemu64"
+    kvm_flag="--kvm 0"
     return 1
 }
 
@@ -126,21 +138,15 @@ check_cdn_file() {
     fi
 }
 
-cdn_urls=("https://cdn0.spiritlhl.top/" "http://cdn3.spiritlhl.net/" "http://cdn1.spiritlhl.net/" "https://ghproxy.com/" "http://cdn2.spiritlhl.net/")
-if [ ! -d "qcow" ]; then
-    mkdir qcow
-fi
-get_system_arch
-if [ -z "${system_arch}" ] || [ ! -v system_arch ]; then
-    _red "This script can only run on machines under x86_64 or arm architecture."
-    exit 1
-fi
-if check_kvm_support; then
-    cpu_type="host"
-else
-    cpu_type="qemu64"
-fi
-if [ "$system_arch" = "x86" ]; then
+prepare_system_image() {
+    if [ "$system_arch" = "x86" ]; then
+        prepare_x86_image
+    elif [ "$system_arch" = "arch" ]; then
+        prepare_arm_image
+    fi
+}
+
+prepare_x86_image() {
     file_path=""
     # 过去手动修补的镜像
     old_images=(
@@ -161,26 +167,6 @@ if [ "$system_arch" = "x86" ]; then
         "rockylinux8"
         "centos8-stream"
     )
-    # 新的自动修补的镜像
-    # response=$(curl -sSL -m 6 -H "Accept: application/vnd.github.v3+json" "https://api.github.com/repos/oneclickvirt/pve_kvm_images/releases/tags/images")
-    # # 如果 https://api.github.com/ 请求失败，则使用 https://githubapi.spiritlhl.workers.dev/ ，此时可能宿主机无IPV4网络
-    # if [ -z "$response" ]; then
-    #     response=$(curl -sSL -m 6 -H "Accept: application/vnd.github.v3+json" "https://githubapi.spiritlhl.workers.dev/repos/oneclickvirt/pve_kvm_images/releases/tags/images")
-    # fi
-    # # 如果 https://githubapi.spiritlhl.workers.dev/ 请求失败，则使用 https://githubapi.spiritlhl.top/ ，此时可能宿主机在国内
-    # if [ -z "$response" ]; then
-    #     response=$(curl -sSL -m 6 -H "Accept: application/vnd.github.v3+json" "https://githubapi.spiritlhl.top/repos/oneclickvirt/pve_kvm_images/releases/tags/images")
-    # fi
-    # if [[ -n "$response" ]]; then
-    #     new_images=($(echo "$response" | grep -oP '"name": "\K[^"]+' | grep 'qcow2' | awk '{print $1}'))
-    #     for ((i=0; i<${#new_images[@]}; i++)); do
-    #         new_images[i]=${new_images[i]%.qcow2}
-    #     done
-    #     combined=($(echo "${old_images[@]}" "${new_images[@]}" | tr ' ' '\n' | sort -u))
-    #     systems=("${combined[@]}")
-    # else
-    #     systems=("${old_images[@]}")
-    # fi
     new_images=($(curl -slk -m 6 https://down.idc.wiki/Image/realServer-Template/current/qcow2/ | grep -o '<a href="[^"]*">' | awk -F'"' '{print $2}' | sed -n '/qcow2$/s#/Image/realServer-Template/current/qcow2/##p'))
     if [[ -n "$new_images" ]]; then
         for ((i = 0; i < ${#new_images[@]}; i++)); do
@@ -250,7 +236,6 @@ if [ "$system_arch" = "x86" ]; then
                     exit 1
                 else
                     _blue "Use manual-fixed image: ${system}"
-                    break
                 fi
             else
                 if [[ -n "$ver" ]]; then
@@ -263,7 +248,6 @@ if [ "$system_arch" = "x86" ]; then
                         exit 1
                     else
                         _blue "Use manual-fixed image: ${system}"
-                        break
                     fi
                 else
                     _red "Unable to install corresponding system, please check https://github.com/oneclickvirt/kvm_images/ for supported system images "
@@ -273,7 +257,9 @@ if [ "$system_arch" = "x86" ]; then
             fi
         fi
     fi
-elif [ "$system_arch" = "arch" ]; then
+}
+
+prepare_arm_image() {
     systems=("ubuntu14" "ubuntu16" "ubuntu18" "ubuntu20" "ubuntu22")
     for sys in ${systems[@]}; do
         if [[ "$system" == "$sys" ]]; then
@@ -312,91 +298,134 @@ elif [ "$system_arch" = "arch" ]; then
         url="http://cloud-images.ubuntu.com/${version}/current/${version}-server-cloudimg-arm64.img"
         curl -L -o "$file_path" "$url"
     fi
-fi
-# 检测IPV6相关的信息
-if [ -f /usr/local/bin/pve_check_ipv6 ]; then
-    host_ipv6_address=$(cat /usr/local/bin/pve_check_ipv6)
-    ipv6_address_without_last_segment="${host_ipv6_address%:*}:"
-fi
-if [ -f /usr/local/bin/pve_ipv6_prefixlen ]; then
-    ipv6_prefixlen=$(cat /usr/local/bin/pve_ipv6_prefixlen)
-fi
-if [ -f /usr/local/bin/pve_ipv6_gateway ]; then
-    ipv6_gateway=$(cat /usr/local/bin/pve_ipv6_gateway)
-fi
-qm create $vm_num --agent 1 --scsihw virtio-scsi-single --serial0 socket --cores $core --sockets 1 --cpu $cpu_type --net0 virtio,bridge=vmbr1,firewall=0 --net1 virtio,bridge=vmbr2,firewall=0
-if [ "$system_arch" = "x86" ]; then
-    qm importdisk $vm_num /root/qcow/${system}.qcow2 ${storage}
-else
-    qm set $vm_num --bios ovmf
-    qm importdisk $vm_num /root/qcow/${system}.img ${storage}
-fi
-sleep 3
-volid=$(pvesm list ${storage} | awk -v vmid="${vm_num}" '$5 == vmid && $1 ~ /\.raw$/ {print $1}' | tail -n 1)
-if [ -z "$volid" ]; then
-    echo "No .raw file found for VM ID '${vm_num}' in storage '${storage}'. Searching for other formats..."
-    volid=$(pvesm list ${storage} | awk -v vmid="${vm_num}" '$5 == vmid {print $1}' | tail -n 1)
-fi
-if [ -z "$volid" ]; then
-    echo "Error: No file found for VM ID '${vm_num}' in storage '${storage}'"
-    exit 1
-fi
-file_path=$(pvesm path ${volid})
-if [ $? -ne 0 ] || [ -z "$file_path" ]; then
-    echo "Error: Failed to resolve path for volume '${volid}'"
-    exit 1
-fi
-file_name=$(basename "$file_path")
-echo "Found file: $file_name"
-echo "Attempting to set SCSI hardware with virtio-scsi-pci for VM $vm_num..."
-qm set $vm_num --scsihw virtio-scsi-pci --scsi0 ${storage}:${vm_num}/vm-${vm_num}-disk-0.raw
-if [ $? -ne 0 ]; then
-    echo "Failed to set SCSI hardware with vm-${vm_num}-disk-0.raw. Trying alternative disk file..."
-    qm set $vm_num --scsihw virtio-scsi-pci --scsi0 ${storage}:${vm_num}/$file_name
+}
+
+get_ipv6_info() {
+    if [ -f /usr/local/bin/pve_check_ipv6 ]; then
+        host_ipv6_address=$(cat /usr/local/bin/pve_check_ipv6)
+        ipv6_address_without_last_segment="${host_ipv6_address%:*}:"
+    fi
+    if [ -f /usr/local/bin/pve_ipv6_prefixlen ]; then
+        ipv6_prefixlen=$(cat /usr/local/bin/pve_ipv6_prefixlen)
+    fi
+    if [ -f /usr/local/bin/pve_ipv6_gateway ]; then
+        ipv6_gateway=$(cat /usr/local/bin/pve_ipv6_gateway)
+    fi
+}
+
+create_vm() {
+    qm create $vm_num \
+        --agent 1 \
+        --scsihw virtio-scsi-single \
+        --serial0 socket \
+        --cores $core \
+        --sockets 1 \
+        --cpu $cpu_type \
+        --net0 virtio,bridge=vmbr1,firewall=0 \
+        --net1 virtio,bridge=vmbr2,firewall=0 \
+        ${kvm_flag}
+    if [ "$system_arch" = "x86" ]; then
+        qm importdisk $vm_num /root/qcow/${system}.qcow2 ${storage}
+    else
+        qm set $vm_num --bios ovmf
+        qm importdisk $vm_num /root/qcow/${system}.img ${storage}
+    fi
+    sleep 3
+}
+
+configure_vm() {
+    volid=$(pvesm list ${storage} | awk -v vmid="${vm_num}" '$5 == vmid && $1 ~ /\.raw$/ {print $1}' | tail -n 1)
+    if [ -z "$volid" ]; then
+        echo "No .raw file found for VM ID '${vm_num}' in storage '${storage}'. Searching for other formats..."
+        volid=$(pvesm list ${storage} | awk -v vmid="${vm_num}" '$5 == vmid {print $1}' | tail -n 1)
+    fi
+    if [ -z "$volid" ]; then
+        echo "Error: No file found for VM ID '${vm_num}' in storage '${storage}'"
+        exit 1
+    fi
+    file_path=$(pvesm path ${volid})
+    if [ $? -ne 0 ] || [ -z "$file_path" ]; then
+        echo "Error: Failed to resolve path for volume '${volid}'"
+        exit 1
+    fi
+    file_name=$(basename "$file_path")
+    echo "Found file: $file_name"
+    echo "Attempting to set SCSI hardware with virtio-scsi-pci for VM $vm_num..."
+    qm set $vm_num --scsihw virtio-scsi-pci --scsi0 ${storage}:${vm_num}/vm-${vm_num}-disk-0.raw
     if [ $? -ne 0 ]; then
-        echo "Failed to set SCSI hardware with $file_name for VM $vm_num. Trying fallback file..."
-        qm set $vm_num --scsihw virtio-scsi-pci --scsi0 ${storage}:$file_name
+        echo "Failed to set SCSI hardware with vm-${vm_num}-disk-0.raw. Trying alternative disk file..."
+        qm set $vm_num --scsihw virtio-scsi-pci --scsi0 ${storage}:${vm_num}/$file_name
         if [ $? -ne 0 ]; then
-            echo "All attempts failed. Exiting..."
-            exit 1
+            echo "Failed to set SCSI hardware with $file_name for VM $vm_num. Trying fallback file..."
+            qm set $vm_num --scsihw virtio-scsi-pci --scsi0 ${storage}:$file_name
+            if [ $? -ne 0 ]; then
+                echo "All attempts failed. Exiting..."
+                exit 1
+            fi
         fi
     fi
-fi
-qm set $vm_num --bootdisk scsi0
-qm set $vm_num --boot order=scsi0
-qm set $vm_num --memory $memory
-# --swap 256
-qm set $vm_num --ide2 ${storage}:cloudinit
-qm set $vm_num --nameserver 1.1.1.1
-# qm set $vm_num --nameserver 1.0.0.1
-qm set $vm_num --searchdomain local
-user_ip="172.16.1.${num}"
-qm set $vm_num --ipconfig0 ip=${user_ip}/24,gw=172.16.1.1
-qm set $vm_num --ipconfig1 ip6="${ipv6_address_without_last_segment}${vm_num}/128",gw6="${host_ipv6_address}"
-qm set $vm_num --cipassword $password --ciuser $user
-sleep 5
-qm resize $vm_num scsi0 ${disk}G
-if [ $? -ne 0 ]; then
-    if [[ $disk =~ ^[0-9]+G$ ]]; then
-        dnum=${disk::-1}
-        disk_m=$((dnum * 1024))
-        qm resize $vm_num scsi0 ${disk_m}M
+    qm set $vm_num --bootdisk scsi0
+    qm set $vm_num --boot order=scsi0
+    qm set $vm_num --memory $memory
+    # --swap 256
+    qm set $vm_num --ide2 ${storage}:cloudinit
+    qm set $vm_num --nameserver 1.1.1.1
+    # qm set $vm_num --nameserver 1.0.0.1
+    qm set $vm_num --searchdomain local
+    user_ip="172.16.1.${num}"
+    qm set $vm_num --ipconfig0 ip=${user_ip}/24,gw=172.16.1.1
+    qm set $vm_num --ipconfig1 ip6="${ipv6_address_without_last_segment}${vm_num}/128",gw6="${host_ipv6_address}"
+    qm set $vm_num --cipassword $password --ciuser $user
+    sleep 5
+}
+
+resize_disk() {
+    qm resize $vm_num scsi0 ${disk}G
+    if [ $? -ne 0 ]; then
+        if [[ $disk =~ ^[0-9]+G$ ]]; then
+            dnum=${disk::-1}
+            disk_m=$((dnum * 1024))
+            qm resize $vm_num scsi0 ${disk_m}M
+        fi
     fi
-fi
-qm start $vm_num
-echo "$vm_num $user $password $core $memory $disk $system $storage ${ipv6_address_without_last_segment}${vm_num}" >>"vm${vm_num}"
-# 虚拟机的相关信息将会存储到对应的虚拟机的NOTE中，可在WEB端查看
-data=$(echo " VMID 用户名-username 密码-password CPU核数-CPU 内存-memory 硬盘-disk 系统-system 存储盘-storage 外网IPV6-ipv6")
-values=$(cat "vm${vm_num}")
-IFS=' ' read -ra data_array <<<"$data"
-IFS=' ' read -ra values_array <<<"$values"
-length=${#data_array[@]}
-for ((i = 0; i < $length; i++)); do
-    echo "${data_array[$i]} ${values_array[$i]}"
-    echo ""
-done >"/tmp/temp${vm_num}.txt"
-sed -i 's/^/# /' "/tmp/temp${vm_num}.txt"
-cat "/etc/pve/qemu-server/${vm_num}.conf" >>"/tmp/temp${vm_num}.txt"
-cp "/tmp/temp${vm_num}.txt" "/etc/pve/qemu-server/${vm_num}.conf"
-rm -rf "/tmp/temp${vm_num}.txt"
-cat "vm${vm_num}"
+}
+
+start_vm_and_save_info() {
+    qm start $vm_num
+    echo "$vm_num $user $password $core $memory $disk $system $storage ${ipv6_address_without_last_segment}${vm_num}" >>"vm${vm_num}"
+    # 虚拟机的相关信息将会存储到对应的虚拟机的NOTE中，可在WEB端查看
+    data=$(echo " VMID 用户名-username 密码-password CPU核数-CPU 内存-memory 硬盘-disk 系统-system 存储盘-storage 外网IPV6-ipv6")
+    values=$(cat "vm${vm_num}")
+    IFS=' ' read -ra data_array <<<"$data"
+    IFS=' ' read -ra values_array <<<"$values"
+    length=${#data_array[@]}
+    for ((i = 0; i < $length; i++)); do
+        echo "${data_array[$i]} ${values_array[$i]}"
+        echo ""
+    done >"/tmp/temp${vm_num}.txt"
+    sed -i 's/^/# /' "/tmp/temp${vm_num}.txt"
+    cat "/etc/pve/qemu-server/${vm_num}.conf" >>"/tmp/temp${vm_num}.txt"
+    cp "/tmp/temp${vm_num}.txt" "/etc/pve/qemu-server/${vm_num}.conf"
+    rm -rf "/tmp/temp${vm_num}.txt"
+    cat "vm${vm_num}"
+}
+
+main() {
+    init_config "$@"
+    validate_params
+    check_environment
+    get_system_arch
+    if [ -z "${system_arch}" ] || [ ! -v system_arch ]; then
+        _red "This script can only run on machines under x86_64 or arm architecture."
+        exit 1
+    fi
+    check_kvm_support
+    prepare_system_image
+    get_ipv6_info
+    create_vm
+    configure_vm
+    resize_disk
+    start_vm_and_save_info
+}
+
+main "$@"

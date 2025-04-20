@@ -16,7 +16,6 @@
 # ./buildvm_manual_ip.sh 152 test1 oneclick123 1 512 5 debian11 local a.b.c.d/32 N 4c:52:62:0e:04:c6
 
 cd /root >/dev/null 2>&1
-# 创建独立IPV4地址的虚拟机
 vm_num="${1:-152}"
 user="${2:-test}"
 password="${3:-123456}"
@@ -104,6 +103,8 @@ check_kvm_support() {
         if [ -r /dev/kvm ] && [ -w /dev/kvm ]; then
             _green "KVM硬件加速可用，将使用硬件加速。"
             _green "KVM hardware acceleration is available. Using hardware acceleration."
+            cpu_type="host"
+            kvm_flag="--kvm 1"
             return 0
         fi
     fi
@@ -116,6 +117,8 @@ check_kvm_support() {
     fi
     _yellow "将使用QEMU软件模拟(TCG)模式，性能会受到影响。"
     _yellow "Falling back to QEMU software emulation (TCG). Performance will be affected."
+    cpu_type="qemu64"
+    kvm_flag="--kvm 0"
     return 1
 }
 
@@ -150,7 +153,7 @@ check_cdn_file() {
     fi
 }
 
-cdn_urls=("https://cdn0.spiritlhl.top/" "http://cdn3.spiritlhl.net/" "http://cdn1.spiritlhl.net/" "https://ghproxy.com/" "http://cdn2.spiritlhl.net/")
+cdn_urls=("http://cdn1.spiritlhl.net/" "http://cdn2.spiritlhl.net/" "http://cdn3.spiritlhl.net/" "http://cdn4.spiritlhl.net/")
 if [ ! -d "qcow" ]; then
     mkdir qcow
 fi
@@ -185,26 +188,6 @@ if [ "$system_arch" = "x86" ]; then
         "rockylinux8"
         "centos8-stream"
     )
-    # 新的自动修补的镜像
-    # response=$(curl -sSL -m 6 -H "Accept: application/vnd.github.v3+json" "https://api.github.com/repos/oneclickvirt/pve_kvm_images/releases/tags/images")
-    # # 如果 https://api.github.com/ 请求失败，则使用 https://githubapi.spiritlhl.workers.dev/ ，此时可能宿主机无IPV4网络
-    # if [ -z "$response" ]; then
-    #     response=$(curl -sSL -m 6 -H "Accept: application/vnd.github.v3+json" "https://githubapi.spiritlhl.workers.dev/repos/oneclickvirt/pve_kvm_images/releases/tags/images")
-    # fi
-    # # 如果 https://githubapi.spiritlhl.workers.dev/ 请求失败，则使用 https://githubapi.spiritlhl.top/ ，此时可能宿主机在国内
-    # if [ -z "$response" ]; then
-    #     response=$(curl -sSL -m 6 -H "Accept: application/vnd.github.v3+json" "https://githubapi.spiritlhl.top/repos/oneclickvirt/pve_kvm_images/releases/tags/images")
-    # fi
-    # if [[ -n "$response" ]]; then
-    #     new_images=($(echo "$response" | grep -oP '"name": "\K[^"]+' | grep 'qcow2' | awk '{print $1}'))
-    #     for ((i=0; i<${#new_images[@]}; i++)); do
-    #         new_images[i]=${new_images[i]%.qcow2}
-    #     done
-    #     combined=($(echo "${old_images[@]}" "${new_images[@]}" | tr ' ' '\n' | sort -u))
-    #     systems=("${combined[@]}")
-    # else
-    #     systems=("${old_images[@]}")
-    # fi
     new_images=($(curl -slk -m 6 https://down.idc.wiki/Image/realServer-Template/current/qcow2/ | grep -o '<a href="[^"]*">' | awk -F'"' '{print $2}' | sed -n '/qcow2$/s#/Image/realServer-Template/current/qcow2/##p'))
     if [[ -n "$new_images" ]]; then
         for ((i = 0; i < ${#new_images[@]}; i++)); do
@@ -461,15 +444,26 @@ else
         ipv6_gateway=$(cat /usr/local/bin/pve_ipv6_gateway)
     fi
 fi
-if [ "$independent_ipv6" = "n" ] && [ -n "$mac_address" ]; then
-    qm create "$vm_num" --agent 1 --scsihw virtio-scsi-single --serial0 socket --cores "$core" --sockets 1 --cpu $cpu_type --net0 virtio,bridge=vmbr0,firewall=0,macaddr="$mac_address"
-elif [ "$independent_ipv6" = "n" ]; then
-    qm create "$vm_num" --agent 1 --scsihw virtio-scsi-single --serial0 socket --cores "$core" --sockets 1 --cpu $cpu_type --net0 virtio,bridge=vmbr0,firewall=0
-elif [ "$independent_ipv6" = "y" ] && [ -n "$mac_address" ]; then
-    qm create "$vm_num" --agent 1 --scsihw virtio-scsi-single --serial0 socket --cores "$core" --sockets 1 --cpu $cpu_type --net0 virtio,bridge=vmbr0,firewall=0,macaddr="$mac_address" --net1 virtio,bridge=vmbr2,firewall=0
-elif [ "$independent_ipv6" = "y" ]; then
-    qm create "$vm_num" --agent 1 --scsihw virtio-scsi-single --serial0 socket --cores "$core" --sockets 1 --cpu $cpu_type --net0 virtio,bridge=vmbr0,firewall=0 --net1 virtio,bridge=vmbr2,firewall=0
+if [ -n "$mac_address" ]; then
+    net0="--net0 virtio,bridge=vmbr0,firewall=0,macaddr=$mac_address"
+else
+    net0="--net0 virtio,bridge=vmbr0,firewall=0"
 fi
+if [ "$independent_ipv6" = "y" ]; then
+    net1="--net1 virtio,bridge=vmbr2,firewall=0"
+else
+    net1=""
+fi
+qm create "$vm_num" \
+    --agent 1 \
+    --scsihw virtio-scsi-single \
+    --serial0 socket \
+    --cores "$core" \
+    --sockets 1 \
+    --cpu "$cpu_type" \
+    $net0 \
+    $net1 \
+    ${kvm_flag}
 if [ "$system_arch" = "x86" ]; then
     qm importdisk $vm_num /root/qcow/${system}.qcow2 ${storage}
 else
@@ -550,13 +544,7 @@ if [ "$independent_ipv6_status" == "N" ]; then
         qm set $vm_num --ipconfig0 ip=${user_ip}/32,gw=${user_main_ip}
     fi
     qm set $vm_num --nameserver 8.8.8.8
-    # qm set $vm_num --nameserver 8.8.4.4
     qm set $vm_num --searchdomain local
-    # else
-    #     qm set $vm_num --ipconfig0 ip=${user_ip}/${user_ip_range},gw=${gateway},ip6=${ipv6_address}/${ipv6_prefixlen},gw6=${ipv6_gateway}
-    #     qm set $vm_num --nameserver 8.8.8.8,2001:4860:4860::8888
-    #     qm set $vm_num --searchdomain 8.8.4.4,2001:4860:4860::8844
-    # fi
 fi
 qm set $vm_num --cipassword $password --ciuser $user
 sleep 5
