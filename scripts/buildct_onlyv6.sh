@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/oneclickvirt/pve
-# 2024.12.01
+# 2025.04.20
 # ./buildct_onlyv6.sh CTID 密码 CPU核数 内存 硬盘 系统 存储盘
 # ./buildct_onlyv6.sh 102 1234567 1 512 5 debian11 local
 
@@ -455,10 +455,6 @@ pct exec $CTID -- touch /etc/.pve-ignore.resolv.conf
 # 禁止PVE自动修改主机名设置
 pct exec $CTID -- touch /etc/.pve-ignore.hosts
 pct exec $CTID -- touch /etc/.pve-ignore.hostname
-# 设置容器的滥用限制
-# pct exec $CTID -- curl -L ${cdn_success_url}https://raw.githubusercontent.com/spiritLHLS/lxc/main/config.sh -o config.sh
-# pct exec $CTID -- chmod +x config.sh
-# pct exec $CTID -- bash config.sh
 
 echo "$CTID $password $core $memory $disk $system_ori $storage ${ipv6_address_without_last_segment}${CTID}" >>"ct${CTID}"
 # 容器的相关信息将会存储到对应的容器的NOTE中，可在WEB端查看
