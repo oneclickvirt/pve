@@ -1,5 +1,9 @@
 # 更新日志
 
+2025.04.12
+
+- 修复DigitalOcean的debian12存在不同的debian系统发行版本存在默认命令路径不同的问题
+
 2025.03.29
 
 - 修复Hits徽章访问量统计，使用 https://github.com/oneclickvirt/hitscounter

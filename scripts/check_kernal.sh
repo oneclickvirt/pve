@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/oneclickvirt/pve
-# 2024.03.12
+# 2025.04.20
 
 # 用颜色输出信息
 _red() { echo -e "\033[31m\033[01m$@\033[0m"; }
@@ -382,56 +382,88 @@ fi
 # 检测硬件配置
 check_config
 
-# 检查CPU是否支持硬件虚拟化
+# 检查 CPU 是否支持硬件虚拟化指令集
 if [ "$(egrep -c '(vmx|svm)' /proc/cpuinfo)" -eq 0 ]; then
-    _yellow "CPU does not support hardware virtualization, cannot nest virtualized KVM servers, but can open LXC servers (CT)"
-    _yellow "CPU不支持硬件虚拟化，无法嵌套虚拟化KVM服务器，但可以开LXC服务器(CT)"
+    _yellow "CPU does not support hardware virtualization (vmx/svm); nested KVM virtualization is not possible. You can still run LXC containers or QEMU with software emulation (TCG)."
+    _yellow "CPU 不支持硬件虚拟化（缺少 vmx/svm 指令），无法进行嵌套 KVM 虚拟化。但仍可使用 LXC 容器或 QEMU 软件仿真（TCG）运行虚拟机。"
     exit 1
 else
-    _green "The local CPU supports KVM hardware nested virtualization"
-    _green "本机CPU支持KVM硬件嵌套虚拟化"
+    _green "CPU supports hardware virtualization (vmx/svm); nested KVM virtualization is possible."
+    _green "CPU 支持硬件虚拟化（支持 vmx/svm 指令），可用于嵌套 KVM 虚拟化。"
 fi
 
-# 检查虚拟化选项是否启用
+# 检查虚拟化是否已在 BIOS/UEFI 中启用
 if [ "$(grep -E -c '(vmx|svm)' /proc/cpuinfo)" -eq 0 ]; then
-    _yellow "Hardware virtualization is not enabled in BIOS, cannot nest virtualized KVM servers, but can open LXC servers (CT)"
-    _yellow "BIOS中未启用硬件虚拟化，无法嵌套虚拟化KVM服务器，但可以开LXC服务器(CT)"
+    _yellow "Hardware virtualization is disabled in BIOS/UEFI; nested KVM virtualization will not work."
+    _yellow "BIOS/UEFI 中未启用硬件虚拟化，嵌套 KVM 虚拟化将无法使用。"
     exit 1
 else
-    _green "This machine BIOS is enabled to support KVM hardware nested virtualization"
-    _green "本机BIOS已启用支持KVM硬件嵌套虚拟化"
+    _green "Hardware virtualization is enabled in BIOS/UEFI; nested KVM virtualization is supported."
+    _green "BIOS/UEFI 中已启用硬件虚拟化，支持嵌套 KVM 虚拟化。"
 fi
 
-# 查询系统是否支持
-if [ -e "/sys/module/kvm_intel/parameters/nested" ] && [ "$(cat /sys/module/kvm_intel/parameters/nested | tr '[:upper:]' '[:lower:]')" = "y" ]; then
-    CPU_TYPE="intel"
-elif [ -e "/sys/module/kvm_amd/parameters/nested" ] && [ "$(cat /sys/module/kvm_amd/parameters/nested | tr '[:upper:]' '[:lower:]')" = "1" ]; then
-    CPU_TYPE="amd"
-else
-    _yellow "The local system configuration file identifies that KVM hardware nested virtualization is not supported, the KVM server virtualized using PVE may not be able to turn on KVM hardware virtualization in the options, if you have problems using NOVNC remember to turn it off in the open out KVM server options, subject to whether you can actually use it"
-    _yellow "本机系统配置文件识别到不支持KVM硬件嵌套虚拟化，使用PVE虚拟化出来的KVM服务器可能不能在选项中开启KVM硬件虚拟化，如果使用NOVNC有问题记得在开出来的KVM服务器选项中关闭，以实际能否使用为准"
-    exit 1
-fi
-
-if ! lsmod | grep -q kvm; then
-    if [ "$CPU_TYPE" = "intel" ]; then
-        _yellow "KVM module not loaded, can't use PVE virtualized KVM server, but can open LXC server (CT)"
-        _yellow "KVM模块未加载，不能使用PVE虚拟化KVM服务器，但可以开LXC服务器(CT)"
-    elif [ "$CPU_TYPE" = "amd" ]; then
-        _yellow "KVM module not loaded, can't use PVE virtualized KVM server, but can open LXC server (CT)"
-        _yellow "KVM模块未加载，不能使用PVE虚拟化KVM服务器，但可以开LXC服务器(CT)"
+# 检查宿主机是否启用了嵌套虚拟化
+if [ -e "/sys/module/kvm_intel/parameters/nested" ]; then
+    NESTED=$(cat /sys/module/kvm_intel/parameters/nested | tr '[:upper:]' '[:lower:]')
+    if [ "$NESTED" = "y" ]; then
+        CPU_TYPE="intel"
+    else
+        _yellow "Nested virtualization is supported by the Intel KVM module but currently disabled (nested=0)."
+        _yellow "已加载 Intel KVM 模块，但嵌套虚拟化当前未启用（nested=0）。"
+        exit 1
+    fi
+elif [ -e "/sys/module/kvm_amd/parameters/nested" ]; then
+    NESTED=$(cat /sys/module/kvm_amd/parameters/nested | tr '[:upper:]' '[:lower:]')
+    if [ "$NESTED" = "1" ]; then
+        CPU_TYPE="amd"
+    else
+        _yellow "Nested virtualization is supported by the AMD KVM module but currently disabled (nested=0)."
+        _yellow "已加载 AMD KVM 模块，但嵌套虚拟化当前未启用（nested=0）。"
+        exit 1
     fi
 else
-    _green "This machine meets the requirements: it can use PVE to virtualize the KVM server and can turn on KVM hardware virtualization in the KVM server option that is opened"
-    _green "本机符合要求：可以使用PVE虚拟化KVM服务器，并可以在开出来的KVM服务器选项中开启KVM硬件虚拟化"
+    _yellow "KVM kernel module with nested virtualization support is not loaded or not available in this environment."
+    _yellow "未检测到启用嵌套虚拟化支持的 KVM 内核模块，可能是当前系统运行在虚拟机中且未开启嵌套虚拟化，或内核未加载 kvm_intel/kvm_amd 模块。"
+    _yellow "请确保宿主机已启用嵌套虚拟化，并通过 modprobe 或 grub 参数启用 nested=1，再重启生效。"
+    exit 1
 fi
 
-# 如果KVM模块未加载，则加载KVM模块并将其添加到/etc/modules文件中
+# 检查 kvm 模块是否已加载
 if ! lsmod | grep -q kvm; then
-    _yellow "Trying to load KVM module ......"
-    _yellow "尝试加载KVM模块……"
-    modprobe kvm
-    echo "kvm" >>/etc/modules
-    _green "KVM module has tried to load and add to /etc/modules, you can try to use PVE virtualized KVM server, you can also open LXC server (CT)"
-    _green "KVM模块已尝试加载并添加到 /etc/modules，可以尝试使用PVE虚拟化KVM服务器，也可以开LXC服务器(CT)"
+    _yellow "KVM module is not currently loaded. KVM-based acceleration (hardware virtualization) will not be available."
+    _yellow "当前未加载 KVM 模块，无法使用基于 KVM 的加速（硬件虚拟化）。"
+    _yellow "You can still run virtual machines using QEMU TCG (software emulation), but performance may be poor."
+    _yellow "仍可通过 QEMU TCG（软件仿真）运行虚拟机，但性能可能较差。"
+    _yellow "Attempting to load the KVM module..."
+    _yellow "正在尝试加载 KVM 模块……"
+    if modprobe kvm; then
+        echo "kvm" >> /etc/modules
+        _green "Successfully loaded the KVM module and added it to /etc/modules."
+        _green "KVM 模块已成功加载，并添加至 /etc/modules。"
+    else
+        _yellow "Failed to load the KVM module, continuing without hardware virtualization support."
+        _yellow "KVM 模块加载失败，将继续使用软件虚拟化。"
+    fi
+else
+    _green "KVM module is already loaded. Hardware virtualization is available for better performance."
+    _green "KVM 模块已加载，可使用硬件虚拟化以获得更好性能。"
+fi
+
+# 检查并尝试加载 CPU 对应的嵌套模块（Intel 或 AMD）
+if [ "$CPU_TYPE" = "intel" ] && ! lsmod | grep -q kvm_intel; then
+    _yellow "Attempting to load Intel KVM module (kvm_intel)..."
+    _yellow "正在尝试加载 Intel 的 KVM 模块（kvm_intel）……"
+    if modprobe kvm_intel nested=1; then
+        echo "kvm_intel" >> /etc/modules
+        _green "Loaded kvm_intel module with nested virtualization enabled."
+        _green "已加载 kvm_intel 模块并启用嵌套虚拟化。"
+    fi
+elif [ "$CPU_TYPE" = "amd" ] && ! lsmod | grep -q kvm_amd; then
+    _yellow "Attempting to load AMD KVM module (kvm_amd)..."
+    _yellow "正在尝试加载 AMD 的 KVM 模块（kvm_amd）……"
+    if modprobe kvm_amd nested=1; then
+        echo "kvm_amd" >> /etc/modules
+        _green "Loaded kvm_amd module with nested virtualization enabled."
+        _green "已加载 kvm_amd 模块并启用嵌套虚拟化。"
+    fi
 fi

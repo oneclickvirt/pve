@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/oneclickvirt/pve
-# 2024.12.01
+# 2025.04.20
 # 创建NAT全端口映射的虚拟机
 # 前置条件：
 # 要用到的外网IPV4地址已绑定到vmbr0网卡上(手动附加时务必在PVE安装完毕且自动配置网关后再附加)，且宿主机的IPV4地址仍为顺序第一
@@ -55,6 +55,20 @@ else
     exit 1
 fi
 num=$vm_num
+if [[ -z "$extranet_ipv4" ]]; then
+    _yellow "No IPV4 address is manually assigned"
+    _yellow "IPV4地址未手动指定"
+    exit 1
+else
+    if is_ipv4 "$extranet_ipv4"; then
+        _green "This IPV4 address will be used: ${extranet_ipv4}"
+        _green "将使用此IPV4地址: ${extranet_ipv4}"
+    else
+        _yellow "IPV4 addresses do not conform to the rules"
+        _yellow "IPV4地址不符合规则"
+        exit 1
+    fi
+fi
 
 get_system_arch() {
     local sysarch="$(uname -m)"
@@ -75,6 +89,26 @@ get_system_arch() {
     esac
 }
 
+check_kvm_support() {
+    if [ -e /dev/kvm ]; then
+        if [ -r /dev/kvm ] && [ -w /dev/kvm ]; then
+            _green "KVM硬件加速可用，将使用硬件加速。"
+            _green "KVM hardware acceleration is available. Using hardware acceleration."
+            return 0
+        fi
+    fi
+    if grep -E 'vmx|svm' /proc/cpuinfo >/dev/null; then
+        _yellow "CPU支持虚拟化，但/dev/kvm不可用，请检查BIOS设置或内核模块。"
+        _yellow "CPU supports virtualization, but /dev/kvm is not available. Please check BIOS settings or kernel modules."
+    else
+        _yellow "CPU不支持硬件虚拟化。"
+        _yellow "CPU does not support hardware virtualization."
+    fi
+    _yellow "将使用QEMU软件模拟(TCG)模式，性能会受到影响。"
+    _yellow "Falling back to QEMU software emulation (TCG). Performance will be affected."
+    return 1
+}
+
 is_ipv4() {
     local ip=$1
     local regex="^([0-9]{1,3}\.){3}[0-9]{1,3}$"
@@ -84,21 +118,6 @@ is_ipv4() {
         return 1 # 不符合IPv4格式
     fi
 }
-
-if [[ -z "$extranet_ipv4" ]]; then
-    _yellow "No IPV4 address is manually assigned"
-    _yellow "IPV4地址未手动指定"
-    exit 1
-else
-    if is_ipv4 "$extranet_ipv4"; then
-        _green "This IPV4 address will be used: ${extranet_ipv4}"
-        _green "将使用此IPV4地址: ${extranet_ipv4}"
-    else
-        _yellow "IPV4 addresses do not conform to the rules"
-        _yellow "IPV4地址不符合规则"
-        exit 1
-    fi
-fi
 
 check_cdn() {
     local o_url=$1
@@ -129,6 +148,11 @@ get_system_arch
 if [ -z "${system_arch}" ] || [ ! -v system_arch ]; then
     _red "This script can only run on machines under x86_64 or arm architecture."
     exit 1
+fi
+if check_kvm_support; then
+    cpu_type="host"
+else
+    cpu_type="qemu64"
 fi
 if [ "$system_arch" = "x86" ]; then
     file_path=""
@@ -361,9 +385,9 @@ else
     fi
 fi
 if [ "$independent_ipv6" = "n" ]; then
-    qm create "$vm_num" --agent 1 --scsihw virtio-scsi-single --serial0 socket --cores "$core" --sockets 1 --cpu host --net0 virtio,bridge=vmbr1,firewall=0
+    qm create "$vm_num" --agent 1 --scsihw virtio-scsi-single --serial0 socket --cores "$core" --sockets 1 --cpu $cpu_type --net0 virtio,bridge=vmbr1,firewall=0
 elif [ "$independent_ipv6" = "y" ]; then
-    qm create "$vm_num" --agent 1 --scsihw virtio-scsi-single --serial0 socket --cores "$core" --sockets 1 --cpu host --net0 virtio,bridge=vmbr1,firewall=0 --net1 virtio,bridge=vmbr2,firewall=0
+    qm create "$vm_num" --agent 1 --scsihw virtio-scsi-single --serial0 socket --cores "$core" --sockets 1 --cpu $cpu_type --net0 virtio,bridge=vmbr1,firewall=0 --net1 virtio,bridge=vmbr2,firewall=0
 fi
 if [ "$system_arch" = "x86" ]; then
     qm importdisk $vm_num /root/qcow/${system}.qcow2 ${storage}

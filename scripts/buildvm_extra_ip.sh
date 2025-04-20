@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/oneclickvirt/pve
-# 2024.12.01
+# 2025.04.20
 # 自动选择要绑定的IPV4地址 额外的IPV4地址需要与本机的IPV4地址在同一个子网内，即前缀一致
 # 此时开设出的虚拟机的网关为宿主机的IPV4的网关，不需要强制约定MAC地址。
 # 此时附加的IPV4地址是宿主机目前的IPV4地址顺位后面的地址
@@ -77,6 +77,26 @@ get_system_arch() {
     esac
 }
 
+check_kvm_support() {
+    if [ -e /dev/kvm ]; then
+        if [ -r /dev/kvm ] && [ -w /dev/kvm ]; then
+            _green "KVM硬件加速可用，将使用硬件加速。"
+            _green "KVM hardware acceleration is available. Using hardware acceleration."
+            return 0
+        fi
+    fi
+    if grep -E 'vmx|svm' /proc/cpuinfo >/dev/null; then
+        _yellow "CPU支持虚拟化，但/dev/kvm不可用，请检查BIOS设置或内核模块。"
+        _yellow "CPU supports virtualization, but /dev/kvm is not available. Please check BIOS settings or kernel modules."
+    else
+        _yellow "CPU不支持硬件虚拟化。"
+        _yellow "CPU does not support hardware virtualization."
+    fi
+    _yellow "将使用QEMU软件模拟(TCG)模式，性能会受到影响。"
+    _yellow "Falling back to QEMU software emulation (TCG). Performance will be affected."
+    return 1
+}
+
 check_cdn() {
     local o_url=$1
     for cdn_url in "${cdn_urls[@]}"; do
@@ -106,6 +126,11 @@ get_system_arch
 if [ -z "${system_arch}" ] || [ ! -v system_arch ]; then
     _red "This script can only run on machines under x86_64 or arm architecture."
     exit 1
+fi
+if check_kvm_support; then
+    cpu_type="host"
+else
+    cpu_type="qemu64"
 fi
 if [ "$system_arch" = "x86" ]; then
     file_path=""
@@ -406,9 +431,9 @@ else
 fi
 
 if [ "$independent_ipv6" == "n" ]; then
-    qm create $vm_num --agent 1 --scsihw virtio-scsi-single --serial0 socket --cores $core --sockets 1 --cpu host --net0 virtio,bridge=vmbr0,firewall=0
+    qm create $vm_num --agent 1 --scsihw virtio-scsi-single --serial0 socket --cores $core --sockets 1 --cpu $cpu_type --net0 virtio,bridge=vmbr0,firewall=0
 else
-    qm create $vm_num --agent 1 --scsihw virtio-scsi-single --serial0 socket --cores $core --sockets 1 --cpu host --net0 virtio,bridge=vmbr0,firewall=0 --net1 virtio,bridge=vmbr2,firewall=0
+    qm create $vm_num --agent 1 --scsihw virtio-scsi-single --serial0 socket --cores $core --sockets 1 --cpu $cpu_type --net0 virtio,bridge=vmbr0,firewall=0 --net1 virtio,bridge=vmbr2,firewall=0
 fi
 if [ "$system_arch" = "x86" ]; then
     qm importdisk $vm_num /root/qcow/${system}.qcow2 ${storage}
