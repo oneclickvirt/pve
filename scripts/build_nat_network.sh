@@ -575,7 +575,11 @@ EOF
         update_sysctl "net.ipv6.conf.vmbr0.proxy_ndp=1"
         update_sysctl "net.ipv6.conf.vmbr1.proxy_ndp=1"
         update_sysctl "net.ipv6.conf.vmbr2.proxy_ndp=1"
+    else
+        rm -rf /etc/systemd/system/ndpresponder.service
     fi
+else
+    rm -rf /etc/systemd/system/ndpresponder.service
 fi
 chattr +i /etc/network/interfaces
 rm -rf /usr/local/bin/iface_auto.txt
@@ -592,11 +596,14 @@ systemctl restart networking.service
 sleep 3
 ifreload -ad
 iptables-save | awk '{if($1=="COMMIT"){delete x}}$1=="-A"?!x[$0]++:1' | iptables-restore
-if [ -f "/usr/local/bin/ndpresponder" ]; then
+if [ -f "/usr/local/bin/ndpresponder" ] && [ -f "/etc/systemd/system/ndpresponder.service" ]; then
+    echo "Found ndpresponder binary and service file, setting up..."
     systemctl daemon-reload
     systemctl enable ndpresponder.service
     systemctl start ndpresponder.service
-    systemctl status ndpresponder.service 2>/dev/null
+    systemctl status ndpresponder.service
+else
+    echo "ndpresponder binary or service file not found."
 fi
 
 # 删除可能存在的原有的网卡配置
