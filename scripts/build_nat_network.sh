@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/oneclickvirt/pve
-# 2025.04.20
+# 2025.04.21
 
 ########## 预设部分输出和部分中间变量
 
@@ -601,7 +601,7 @@ if [ -f "/usr/local/bin/ndpresponder" ] && [ -f "/etc/systemd/system/ndpresponde
     systemctl daemon-reload
     systemctl enable ndpresponder.service
     systemctl start ndpresponder.service
-    systemctl status ndpresponder.service
+    systemctl status ndpresponder.service 2>/dev/null
 else
     echo "ndpresponder binary or service file not found."
 fi
