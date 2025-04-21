@@ -639,7 +639,7 @@ systemctl start check-dns.service
 sleep 3
 # 检测ndppd服务是否启动了
 service_status=$(systemctl is-active ndpresponder.service)
-if [ "$service_status" == "active" || "$service_status" == "activating" ]; then
+if [[ "$service_status" == "active" || "$service_status" == "activating" ]]; then
     _green "The ndpresponder service started successfully and is running, and the host can open a service with a separate IPV6 address."
     _green "ndpresponder服务启动成功且正在运行，宿主机可开设带独立IPV6地址的服务。"
 else
