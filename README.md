@@ -62,13 +62,14 @@ Self-patching container image source:
 
 [https://github.com/oneclickvirt/lxc_arm_images](https://github.com/oneclickvirt/lxc_arm_images)
 
-
-## Stargazers over time
-
-[![Stargazers over time](https://starchart.cc/oneclickvirt/pve.svg)](https://starchart.cc/oneclickvirt/pve)
-
 ## 友链
 
 VPS融合怪测评脚本
 
+https://github.com/oneclickvirt/ecs
+
 https://github.com/spiritLHLS/ecs
+
+## Stargazers over time
+
+[![Stargazers over time](https://starchart.cc/oneclickvirt/pve.svg)](https://starchart.cc/oneclickvirt/pve)
