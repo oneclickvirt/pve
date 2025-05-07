@@ -220,7 +220,6 @@ delete_extract() {
 }
 
 while true; do
-  clear
   print_menu
   reading "$(_text "选择操作" "Choice"): " choice
   case "$choice" in
