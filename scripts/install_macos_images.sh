@@ -7,22 +7,22 @@ set -e
 LANG_MODE="zh"
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --lang=*)
-      LANG_MODE="${1#*=}"
-      shift
-      ;;
-    *)
-      echo "Unknown option: $1"
-      echo "Available options: --lang=zh|en"
-      exit 1
-      ;;
+  --lang=*)
+    LANG_MODE="${1#*=}"
+    shift
+    ;;
+  *)
+    echo "Unknown option: $1"
+    echo "Available options: --lang=zh|en"
+    exit 1
+    ;;
   esac
 done
 
-_red()    { echo -e "\033[31m\033[01m$@\033[0m"; }
-_green()  { echo -e "\033[32m\033[01m$@\033[0m"; }
+_red() { echo -e "\033[31m\033[01m$@\033[0m"; }
+_green() { echo -e "\033[32m\033[01m$@\033[0m"; }
 _yellow() { echo -e "\033[33m\033[01m$@\033[0m"; }
-_blue()   { echo -e "\033[36m\033[01m$@\033[0m"; }
+_blue() { echo -e "\033[36m\033[01m$@\033[0m"; }
 
 _text() {
   local zh="$1"
@@ -37,12 +37,12 @@ _text() {
 reading() { read -rp "$(_green "$1")" "$2"; }
 utf8_locale=$(locale -a 2>/dev/null | grep -i -m 1 -E "UTF-8|utf8")
 if [[ -z "$utf8_locale" ]]; then
-    _yellow "$(_text "未找到 UTF-8 本地化" "No UTF-8 locale found")"
+  _yellow "$(_text "未找到 UTF-8 本地化" "No UTF-8 locale found")"
 else
-    export LC_ALL="$utf8_locale"
-    export LANG="$utf8_locale"
-    export LANGUAGE="$utf8_locale"
-    _green "$(_text "本地化已设置为 $utf8_locale" "Locale set to $utf8_locale")"
+  export LC_ALL="$utf8_locale"
+  export LANG="$utf8_locale"
+  export LANGUAGE="$utf8_locale"
+  _green "$(_text "本地化已设置为 $utf8_locale" "Locale set to $utf8_locale")"
 fi
 
 DOWNLOAD_DIR="/var/lib/vz/template/iso"
@@ -54,6 +54,7 @@ if [ ! -d "$DOWNLOAD_DIR" ]; then
 fi
 touch "$DOWNLOAD_TASKS" "$DECOMPRESS_TASKS"
 rm -f "${DOWNLOAD_TASKS}.tmp" "${DECOMPRESS_TASKS}.tmp"
+
 if ! command -v 7z >/dev/null 2>&1; then
   apt install p7zip-full -y
   if ! command -v 7z >/dev/null 2>&1; then
@@ -74,7 +75,7 @@ declare -A files=(
 print_menu() {
   _blue "=== $(_text "macOS 下载器 菜单" "macOS Downloader Menu") ==="
   for i in {1..6}; do
-    IFS='|' read -r name size url <<< "${files[$i]}"
+    IFS='|' read -r name size url <<<"${files[$i]}"
     _yellow "  $i) $(_text "下载" "Download") $name ($(_text "大小" "Size"): ${size}GB)"
   done
   _yellow "100) $(_text "显示当前下载任务" "Show current download tasks")"
@@ -89,7 +90,7 @@ get_remote_size() {
   local url=$1
   local file_hash=$(basename "$url")
   for i in {1..6}; do
-    IFS='|' read -r name size url_info exact_size <<< "${files[$i]}"
+    IFS='|' read -r name size url_info exact_size <<<"${files[$i]}"
     if [[ "$url_info" == *"$file_hash"* ]]; then
       echo "$exact_size"
       return
@@ -106,7 +107,7 @@ start_download() {
   local fileName=$1 url=$2
   local size avail req
   for i in {1..6}; do
-    IFS='|' read -r name _ url_info exact_size <<< "${files[$i]}"
+    IFS='|' read -r name _ url_info exact_size <<<"${files[$i]}"
     if [[ "$name" == "$fileName" ]]; then
       size="$exact_size"
       break
@@ -117,15 +118,15 @@ start_download() {
     return
   fi
   avail=$(get_avail_space)
-  req=$(( size * 2 + 2*1024*1024*1024 ))
-  if (( avail < req )); then
+  req=$((size * 2 + 2 * 1024 * 1024 * 1024))
+  if ((avail < req)); then
     _red "$(_text "空间不足: 可用=${avail} 字节, 需要=${req} 字节" "Insufficient space: available=${avail} bytes, required=${req} bytes")"
     return
   fi
   nohup curl -L "$url" -o "$DOWNLOAD_DIR/$fileName" >"$DOWNLOAD_DIR/$fileName.log" 2>&1 &
   pid=$!
-  echo "$pid|$fileName|$url|$size" >> "$DOWNLOAD_TASKS"
-  _green "$(_text "下载开始: PID=$pid, 文件=$fileName" "Download started: PID=$pid, file=$fileName")"
+  echo "$pid|$fileName|$url|$size" >>"$DOWNLOAD_TASKS"
+  _green "$(_text "下载开始: PID=$pid, 文件路径=$DOWNLOAD_DIR/$fileName" "Download started: PID=$pid, path=$DOWNLOAD_DIR/$fileName")"
 }
 
 show_downloads() {
@@ -134,19 +135,19 @@ show_downloads() {
     return
   fi
   while IFS='|' read -r pid file url size_bytes; do
-    if ps -p "$pid" > /dev/null 2>&1; then
+    if ps -p "$pid" >/dev/null 2>&1; then
       downloaded=$(du -b "$DOWNLOAD_DIR/$file" 2>/dev/null | cut -f1 || echo 0)
       if [[ -n "$size_bytes" && "$size_bytes" -gt 0 ]]; then
         pct=$(awk "BEGIN{printf \"%.2f\", $downloaded*100/$size_bytes}")
-        _blue "PID $pid: $file — $downloaded/$size_bytes $(_text "字节" "bytes") ($pct%)"
+        _blue "PID $pid: $file — $downloaded/$size_bytes 字节 ($pct%)，路径=$DOWNLOAD_DIR/$file"
       else
-        _blue "PID $pid: $file — $downloaded $(_text "字节 (总大小未知)" "bytes (total size unknown)")"
+        _blue "PID $pid: $file — $downloaded 字节 (总大小未知)，路径=$DOWNLOAD_DIR/$file"
       fi
     else
       _yellow "PID $pid: $(_text "未运行 ▶ 从任务列表移除" "not running ▶ removing from task list")"
-      grep -v "^$pid|" "$DOWNLOAD_TASKS" > "$DOWNLOAD_TASKS.tmp" && mv "$DOWNLOAD_TASKS.tmp" "$DOWNLOAD_TASKS"
+      grep -v "^$pid|" "$DOWNLOAD_TASKS" >"$DOWNLOAD_TASKS.tmp" && mv "$DOWNLOAD_TASKS.tmp" "$DOWNLOAD_TASKS"
     fi
-  done < "$DOWNLOAD_TASKS"
+  done <"$DOWNLOAD_TASKS"
 }
 
 delete_download() {
@@ -156,11 +157,12 @@ delete_download() {
     return
   fi
   line=$(grep "^$pid|" "$DOWNLOAD_TASKS")
-  file=${line#*|}; file=${file%%|*}
+  file=${line#*|}
+  file=${file%%|*}
   kill "$pid" 2>/dev/null || true
   rm -f "$DOWNLOAD_DIR/$file" "$DOWNLOAD_DIR/$file.log"
-  grep -v "^$pid|" "$DOWNLOAD_TASKS" > "$DOWNLOAD_TASKS.tmp" && mv "$DOWNLOAD_TASKS.tmp" "$DOWNLOAD_TASKS"
-  _green "$(_text "已删除下载任务: $file" "Deleted download task for $file")"
+  grep -v "^$pid|" "$DOWNLOAD_TASKS" >"$DOWNLOAD_TASKS.tmp" && mv "$DOWNLOAD_TASKS.tmp" "$DOWNLOAD_TASKS"
+  _green "$(_text "已删除下载任务: $file，路径=$DOWNLOAD_DIR/$file" "Deleted download task for $file, path=$DOWNLOAD_DIR/$file")"
 }
 
 extract_7z() {
@@ -171,19 +173,19 @@ extract_7z() {
   fi
   _blue "$(_text "可用 .7z 归档:" "Available .7z archives:")"
   for i in "${!archives[@]}"; do
-    num=$((i+1))
+    num=$((i + 1))
     _yellow "  $num) $(basename "${archives[i]}")"
   done
   reading "$(_text "选择要解压的索引" "Select index to extract"): " idx
-  if ! [[ "$idx" =~ ^[0-9]+$ ]] || (( idx<1 || idx> ${#archives[@]} )); then
+  if ! [[ "$idx" =~ ^[0-9]+$ ]] || ((idx < 1 || idx > ${#archives[@]})); then
     _red "$(_text "无效选择" "Invalid selection")"
     return
   fi
-  archive="${archives[$((idx-1))]}"
+  archive="${archives[$((idx - 1))]}"
   nohup 7z x "$archive" -o"$DOWNLOAD_DIR" >"$DOWNLOAD_DIR/$(basename "$archive").extract.log" 2>&1 &
   pid=$!
-  echo "$pid|$(basename "$archive")" >> "$DECOMPRESS_TASKS"
-  _green "$(_text "开始解压: PID=$pid, 归档=$(basename "$archive")" "Extraction started: PID=$pid, archive=$(basename "$archive")")"
+  echo "$pid|$(basename "$archive")" >>"$DECOMPRESS_TASKS"
+  _green "$(_text "开始解压: PID=$pid, 归档路径=$DOWNLOAD_DIR/$(basename "$archive")" "Extraction started: PID=$pid, path=$DOWNLOAD_DIR/$(basename "$archive")")"
 }
 
 show_extracts() {
@@ -192,15 +194,14 @@ show_extracts() {
     return
   fi
   while IFS='|' read -r pid archive; do
-    if ps -p "$pid" > /dev/null 2>&1; then
-      _blue "PID $pid: $(_text "正在解压 $archive" "extracting $archive")"
+    if ps -p "$pid" >/dev/null 2>&1; then
+      _blue "PID $pid: $(_text "正在解压" "extracting") $archive，路径=$DOWNLOAD_DIR/$archive"
     else
-      # 任务已完成，自动清理 .7z 和日志
       _yellow "PID $pid: $(_text "未运行 ▶ 解压完成，正在清理并从任务列表移除" "not running ▶ completed, cleaning up and removing from task list")"
       rm -f "$DOWNLOAD_DIR/$archive" "$DOWNLOAD_DIR/${archive}.extract.log"
-      grep -v "^$pid|" "$DECOMPRESS_TASKS" > "$DECOMPRESS_TASKS.tmp" && mv "$DECOMPRESS_TASKS.tmp" "$DECOMPRESS_TASKS"
+      grep -v "^$pid|" "$DECOMPRESS_TASKS" >"$DECOMPRESS_TASKS.tmp" && mv "$DECOMPRESS_TASKS.tmp" "$DECOMPRESS_TASKS"
     fi
-  done < "$DECOMPRESS_TASKS"
+  done <"$DECOMPRESS_TASKS"
 }
 
 delete_extract() {
@@ -214,26 +215,50 @@ delete_extract() {
   iso="${archive%.7z}.iso"
   kill "$pid" 2>/dev/null || true
   rm -f "$DOWNLOAD_DIR/$iso" "$DOWNLOAD_DIR/$archive.extract.log"
-  grep -v "^$pid|" "$DECOMPRESS_TASKS" > "$DECOMPRESS_TASKS.tmp" && mv "$DECOMPRESS_TASKS.tmp" "$DECOMPRESS_TASKS"
-  _green "$(_text "已删除解压任务: $archive" "Deleted extraction task for $archive")"
+  grep -v "^$pid|" "$DECOMPRESS_TASKS" >"$DECOMPRESS_TASKS.tmp" && mv "$DECOMPRESS_TASKS.tmp" "$DECOMPRESS_TASKS"
+  _green "$(_text "已删除解压任务: $archive，路径=$DOWNLOAD_DIR/$archive" "Deleted extraction task for $archive, path=$DOWNLOAD_DIR/$archive")"
 }
 
 while true; do
+  clear
   print_menu
   reading "$(_text "选择操作" "Choice"): " choice
   case "$choice" in
-    [1-6])
-      pair=${files[$choice]}
-      IFS='|' read -r fname fsize furl fexact_size <<< "$pair"
-      start_download "$fname" "$furl"
-      ;;
-    100) show_downloads   ;;
-    101) delete_download  ;;
-    102) extract_7z       ;;
-    103) show_extracts    ;;
-    104) delete_extract   ;;
-    0)   _green "$(_text "再见！" "Goodbye!")"; exit 0 ;;
-    *)   _red "$(_text "无效选项" "Invalid option")" ;;
+  [1-6])
+    clear
+    pair=${files[$choice]}
+    IFS='|' read -r fname fsize furl fexact_size <<<"$pair"
+    start_download "$fname" "$furl"
+    ;;
+  100)
+    clear
+    show_downloads
+    ;;
+  101)
+    clear
+    delete_download
+    ;;
+  102)
+    clear
+    extract_7z
+    ;;
+  103)
+    clear
+    show_extracts
+    ;;
+  104)
+    clear
+    delete_extract
+    ;;
+  0)
+    clear
+    _green "$(_text "退出程序" "Exit")"
+    exit 0
+    ;;
+  *)
+    clear
+    _red "$(_text "无效选项" "Invalid option")"
+    ;;
   esac
   echo
 done
