@@ -49,7 +49,7 @@ DOWNLOAD_DIR="/var/lib/vz/template/iso"
 DOWNLOAD_TASKS="$DOWNLOAD_DIR/download.tasks"
 DECOMPRESS_TASKS="$DOWNLOAD_DIR/decompress.tasks"
 if [ ! -d "$DOWNLOAD_DIR" ]; then
-  _red "$(_text "目录 \$DOWNLOAD_DIR 不存在。请检查路径是否正确。" "Directory \$DOWNLOAD_DIR does not exist. Please check the path.")"
+  _red "$(_text "目录 $DOWNLOAD_DIR 不存在。请检查路径是否正确。" "Directory $DOWNLOAD_DIR does not exist. Please check the path.")"
   exit 1
 fi
 touch "$DOWNLOAD_TASKS" "$DECOMPRESS_TASKS"
