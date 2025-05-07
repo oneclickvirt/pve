@@ -75,7 +75,7 @@ declare -A files=(
 
 print_menu() {
   _blue "=== $(_text "macOS 下载器 菜单" "macOS Downloader Menu") ==="
-  for i in {1..6}; do
+  for i in {1..7}; do
     IFS='|' read -r name size url <<<"${files[$i]}"
     _yellow "  $i) $(_text "下载" "Download") $name ($(_text "大小" "Size"): ${size}GB)"
   done
@@ -224,7 +224,7 @@ while true; do
   print_menu
   reading "$(_text "选择操作" "Choice"): " choice
   case "$choice" in
-  [1-6])
+  [1-7])
     clear
     pair=${files[$choice]}
     IFS='|' read -r fname fsize furl fexact_size <<<"$pair"
