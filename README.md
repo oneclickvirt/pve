@@ -8,9 +8,10 @@
 
 ## 更新
 
-2025.04.21
+2025.05.07
 
-- 修复ndpresponder.service在前置条件不完全正确时依然启动的问题
+- 添加MACOS镜像预下载shell文件
+- 删除无效文件
 
 [更新日志](CHANGELOG.md)
 
