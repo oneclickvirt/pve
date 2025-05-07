@@ -48,9 +48,12 @@ fi
 DOWNLOAD_DIR="/var/lib/vz/template/iso"
 DOWNLOAD_TASKS="$DOWNLOAD_DIR/download.tasks"
 DECOMPRESS_TASKS="$DOWNLOAD_DIR/decompress.tasks"
-mkdir -p "$DOWNLOAD_DIR"
+if [ ! -d "$DOWNLOAD_DIR" ]; then
+  _red "$(_text "目录 \$DOWNLOAD_DIR 不存在。请检查路径是否正确。" "Directory \$DOWNLOAD_DIR does not exist. Please check the path.")"
+  exit 1
+fi
 touch "$DOWNLOAD_TASKS" "$DECOMPRESS_TASKS"
-
+rm -f "${DOWNLOAD_TASKS}.tmp" "${DECOMPRESS_TASKS}.tmp"
 if ! command -v 7z >/dev/null 2>&1; then
   apt install p7zip-full -y
   if ! command -v 7z >/dev/null 2>&1; then
@@ -63,7 +66,7 @@ declare -A files=(
   [1]="high-sierra.iso.7z|5.23|https://cnb.cool/oneclickvirt/template/-/lfs/81ae1e766f12f94a283ee51a2b3a0c274ce31b578acdce7eddd22c5ff8cd045e|5226471630"
   [2]="mojave.iso.7z|6.03|https://cnb.cool/oneclickvirt/template/-/lfs/4145b12588e14c933ad0d3e527b4e1f701b882d505d9dae463349f5062f7b6b1|6032600963"
   [3]="catalina.iso.7z|8.33|https://cnb.cool/oneclickvirt/template/-/lfs/660078c8a258c8bcde62c49897e5415751f5a17d30d40749a06ae81dc9b1c424|8178081717"
-  [4]="big‑sur.iso.7z|12.21|https://cnb.cool/oneclickvirt/template/-/lfs/e15404924199bcf92c6421980a74ad5fdde1dd18a83551726648bd0a1417133a|13154181520"
+  [4]="big‑sur.iso.7z|12.21|https://cnb.cool/oneclickvirt/template/-/lfs/e15404924199bcf92c6421980a74ad5fdde1dd18a83551726648bd0a1417133|13154181520"
   [5]="sonoma.iso.7z|14.41|https://cnb.cool/oneclickvirt/template/-/lfs/b35ff92067171d72519df05a066d3494b7fdb0eac1603b0a8803c98716707e9c|14644126387"
   [6]="sequoia.iso.7z|15.02|https://cnb.cool/oneclickvirt/template/-/lfs/f22ad0a9eba713645b566fd6a45f55a0daf9f481e6872cca2407856c6fd33b45|16398983272"
 )
@@ -84,7 +87,6 @@ print_menu() {
 
 get_remote_size() {
   local url=$1
-  # 直接从files数组中获取确切大小
   local file_hash=$(basename "$url")
   for i in {1..6}; do
     IFS='|' read -r name size url_info exact_size <<< "${files[$i]}"
@@ -93,8 +95,7 @@ get_remote_size() {
       return
     fi
   done
-  # 如果找不到匹配的文件，返回一个估计值
-  echo "5368709120" # 默认5GB
+  echo "5368709120"
 }
 
 get_avail_space() {
@@ -104,9 +105,8 @@ get_avail_space() {
 start_download() {
   local fileName=$1 url=$2
   local size avail req
-  local exact_size=""
   for i in {1..6}; do
-    IFS='|' read -r name size url_info exact_size <<< "${files[$i]}"
+    IFS='|' read -r name _ url_info exact_size <<< "${files[$i]}"
     if [[ "$name" == "$fileName" ]]; then
       size="$exact_size"
       break
@@ -195,7 +195,9 @@ show_extracts() {
     if ps -p "$pid" > /dev/null 2>&1; then
       _blue "PID $pid: $(_text "正在解压 $archive" "extracting $archive")"
     else
-      _yellow "PID $pid: $(_text "未运行 ▶ 从任务列表移除" "not running ▶ removing from task list")"
+      # 任务已完成，自动清理 .7z 和日志
+      _yellow "PID $pid: $(_text "未运行 ▶ 解压完成，正在清理并从任务列表移除" "not running ▶ completed, cleaning up and removing from task list")"
+      rm -f "$DOWNLOAD_DIR/$archive" "$DOWNLOAD_DIR/${archive}.extract.log"
       grep -v "^$pid|" "$DECOMPRESS_TASKS" > "$DECOMPRESS_TASKS.tmp" && mv "$DECOMPRESS_TASKS.tmp" "$DECOMPRESS_TASKS"
     fi
   done < "$DECOMPRESS_TASKS"
