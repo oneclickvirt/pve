@@ -199,16 +199,16 @@ show_extracts() {
       _blue "PID $pid: $(_text "正在解压" "extracting") $archive，路径=$DOWNLOAD_DIR/$archive"
     else
       _yellow "PID $pid: $(_text "未运行 ▶ 解压完成，正在清理并从任务列表移除" "not running ▶ completed, cleaning up and removing from task list")"
-      rm -f "$DOWNLOAD_DIR/$archive" "$DOWNLOAD_DIR/${archive}.extract.log"
-      rm -rf "$DOWNLOAD_DIR/$archive.log"
-      mv "$DOWNLOAD_DIR/output/"* "$DOWNLOAD_DIR"
+      rm -f "$DOWNLOAD_DIR/$archive" "$DOWNLOAD_DIR/${archive}.extract.log" || true
+      rm -rf "$DOWNLOAD_DIR/$archive.log" || true
+      mv "$DOWNLOAD_DIR/output/"* "$DOWNLOAD_DIR" || true
       grep -v "^$pid|" "$DECOMPRESS_TASKS" >"$DECOMPRESS_TASKS.tmp" && mv "$DECOMPRESS_TASKS.tmp" "$DECOMPRESS_TASKS"
-      rm -rf "$DOWNLOAD_DIR/output"
+      rm -rf "$DOWNLOAD_DIR/output" || true
     fi
   done <"$DECOMPRESS_TASKS"
   if [[ ! -s "$DOWNLOAD_DIR/output" ]]; then
     _yellow "$(_text "没有解压任务" "No extraction tasks")"
-    rm -rf "$DECOMPRESS_TASKS"
+    rm -rf "$DECOMPRESS_TASKS" || true
     return
   fi
 }
