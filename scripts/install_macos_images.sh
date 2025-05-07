@@ -234,8 +234,9 @@ while true; do
     show_downloads
     ;;
   101)
-    clear
     delete_download
+    sleep 5
+    clear
     ;;
   102)
     clear
@@ -246,8 +247,9 @@ while true; do
     show_extracts
     ;;
   104)
-    clear
     delete_extract
+    sleep 5
+    clear
     ;;
   0)
     clear
