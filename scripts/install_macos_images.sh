@@ -200,6 +200,8 @@ show_extracts() {
     else
       _yellow "PID $pid: $(_text "未运行 ▶ 解压完成，正在清理并从任务列表移除" "not running ▶ completed, cleaning up and removing from task list")"
       rm -f "$DOWNLOAD_DIR/$archive" "$DOWNLOAD_DIR/${archive}.extract.log"
+      rm -rf "$DOWNLOAD_DIR/$archive.log"
+      mv "$DOWNLOAD_DIR/output/"* "$DOWNLOAD_DIR"
       grep -v "^$pid|" "$DECOMPRESS_TASKS" >"$DECOMPRESS_TASKS.tmp" && mv "$DECOMPRESS_TASKS.tmp" "$DECOMPRESS_TASKS"
     fi
   done <"$DECOMPRESS_TASKS"
