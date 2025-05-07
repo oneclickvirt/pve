@@ -203,8 +203,14 @@ show_extracts() {
       rm -rf "$DOWNLOAD_DIR/$archive.log"
       mv "$DOWNLOAD_DIR/output/"* "$DOWNLOAD_DIR"
       grep -v "^$pid|" "$DECOMPRESS_TASKS" >"$DECOMPRESS_TASKS.tmp" && mv "$DECOMPRESS_TASKS.tmp" "$DECOMPRESS_TASKS"
+      rm -rf "$DOWNLOAD_DIR/output"
     fi
   done <"$DECOMPRESS_TASKS"
+  if [[ ! -s "$DOWNLOAD_DIR/output" ]]; then
+    _yellow "$(_text "没有解压任务" "No extraction tasks")"
+    rm -rf "$DECOMPRESS_TASKS"
+    return
+  fi
 }
 
 delete_extract() {
