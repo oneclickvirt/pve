@@ -68,8 +68,9 @@ declare -A files=(
   [2]="mojave.iso.7z|6.03|https://cnb.cool/oneclickvirt/template/-/lfs/4145b12588e14c933ad0d3e527b4e1f701b882d505d9dae463349f5062f7b6b1|6032600963"
   [3]="catalina.iso.7z|8.33|https://cnb.cool/oneclickvirt/template/-/lfs/660078c8a258c8bcde62c49897e5415751f5a17d30d40749a06ae81dc9b1c424|8178081717"
   [4]="big‑sur.iso.7z|12.21|https://cnb.cool/oneclickvirt/template/-/lfs/e15404924199bcf92c6421980a74ad5fdde1dd18a83551726648bd0a1417133|13154181520"
-  [5]="sonoma.iso.7z|14.41|https://cnb.cool/oneclickvirt/template/-/lfs/b35ff92067171d72519df05a066d3494b7fdb0eac1603b0a8803c98716707e9c|14644126387"
-  [6]="sequoia.iso.7z|15.02|https://cnb.cool/oneclickvirt/template/-/lfs/f22ad0a9eba713645b566fd6a45f55a0daf9f481e6872cca2407856c6fd33b45|16398983272"
+  [5]="monterey.iso.7z|12.36|https://cnb.cool/oneclickvirt/template/-/lfs/520f9e35fb4981bc171945d398f4587f780ab2f8dbfb4bf3a9463b2401ccb148|13257099123"
+  [6]="sonoma.iso.7z|14.41|https://cnb.cool/oneclickvirt/template/-/lfs/b35ff92067171d72519df05a066d3494b7fdb0eac1603b0a8803c98716707e9c|14644126387"
+  [7]="sequoia.iso.7z|15.02|https://cnb.cool/oneclickvirt/template/-/lfs/f22ad0a9eba713645b566fd6a45f55a0daf9f481e6872cca2407856c6fd33b45|16398983272"
 )
 
 print_menu() {
