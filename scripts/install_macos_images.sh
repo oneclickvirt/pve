@@ -253,13 +253,13 @@ while true; do
     clear
     ;;
   0)
-    clear
     _green "$(_text "退出程序" "Exit")"
     exit 0
     ;;
   *)
     clear
     _red "$(_text "无效选项" "Invalid option")"
+    sleep 3
     ;;
   esac
   echo
