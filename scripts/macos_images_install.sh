@@ -60,12 +60,12 @@ if ! command -v 7z >/dev/null 2>&1; then
 fi
 
 declare -A files=(
-  [1]="high-sierra.iso.7z|5.23|https://cnb.cool/oneclickvirt/template/-/lfs/81ae1e766f12f94a283ee51a2b3a0c274ce31b578acdce7eddd22c5ff8cd045e"
-  [2]="mojave.iso.7z|6.03|https://cnb.cool/oneclickvirt/template/-/lfs/4145b12588e14c933ad0d3e527b4e1f701b882d505d9dae463349f5062f7b6b1"
-  [3]="catalina.iso.7z|8.33|https://cnb.cool/oneclickvirt/template/-/lfs/660078c8a258c8bcde62c49897e5415751f5a17d30d40749a06ae81dc9b1c424"
-  [4]="big‑sur.iso.7z|12.21|https://cnb.cool/oneclickvirt/template/-/lfs/e15404924199bcf92c6421980a74ad5fdde1dd18a83551726648bd0a1417133a"
-  [5]="sonoma.iso.7z|14.41|https://cnb.cool/oneclickvirt/template/-/lfs/b35ff92067171d72519df05a066d3494b7fdb0eac1603b0a8803c98716707e9c"
-  [6]="sequoia.iso.7z|15.02|https://cnb.cool/oneclickvirt/template/-/lfs/f22ad0a9eba713645b566fd6a45f55a0daf9f481e6872cca2407856c6fd33b45"
+  [1]="high-sierra.iso.7z|5.23|https://cnb.cool/oneclickvirt/template/-/lfs/81ae1e766f12f94a283ee51a2b3a0c274ce31b578acdce7eddd22c5ff8cd045e|5226471630"
+  [2]="mojave.iso.7z|6.03|https://cnb.cool/oneclickvirt/template/-/lfs/4145b12588e14c933ad0d3e527b4e1f701b882d505d9dae463349f5062f7b6b1|6032600963"
+  [3]="catalina.iso.7z|8.33|https://cnb.cool/oneclickvirt/template/-/lfs/660078c8a258c8bcde62c49897e5415751f5a17d30d40749a06ae81dc9b1c424|8178081717"
+  [4]="big‑sur.iso.7z|12.21|https://cnb.cool/oneclickvirt/template/-/lfs/e15404924199bcf92c6421980a74ad5fdde1dd18a83551726648bd0a1417133a|13154181520"
+  [5]="sonoma.iso.7z|14.41|https://cnb.cool/oneclickvirt/template/-/lfs/b35ff92067171d72519df05a066d3494b7fdb0eac1603b0a8803c98716707e9c|14644126387"
+  [6]="sequoia.iso.7z|15.02|https://cnb.cool/oneclickvirt/template/-/lfs/f22ad0a9eba713645b566fd6a45f55a0daf9f481e6872cca2407856c6fd33b45|16398983272"
 )
 
 print_menu() {
@@ -84,7 +84,17 @@ print_menu() {
 
 get_remote_size() {
   local url=$1
-  curl -sI "$url" | awk '/[Cc]ontent-[Ll]ength/ { print $2 }' | tr -d '\r'
+  # 直接从files数组中获取确切大小
+  local file_hash=$(basename "$url")
+  for i in {1..6}; do
+    IFS='|' read -r name size url_info exact_size <<< "${files[$i]}"
+    if [[ "$url_info" == *"$file_hash"* ]]; then
+      echo "$exact_size"
+      return
+    fi
+  done
+  # 如果找不到匹配的文件，返回一个估计值
+  echo "5368709120" # 默认5GB
 }
 
 get_avail_space() {
@@ -94,9 +104,16 @@ get_avail_space() {
 start_download() {
   local fileName=$1 url=$2
   local size avail req
-  size=$(get_remote_size "$url")
+  local exact_size=""
+  for i in {1..6}; do
+    IFS='|' read -r name size url_info exact_size <<< "${files[$i]}"
+    if [[ "$name" == "$fileName" ]]; then
+      size="$exact_size"
+      break
+    fi
+  done
   if [[ -z "$size" ]]; then
-    _red "$(_text "错误：无法获取远程文件大小" "Error: Unable to determine remote file size")"
+    _red "$(_text "错误：无法获取文件大小" "Error: Unable to determine file size")"
     return
   fi
   avail=$(get_avail_space)
@@ -107,7 +124,7 @@ start_download() {
   fi
   nohup curl -L "$url" -o "$DOWNLOAD_DIR/$fileName" >"$DOWNLOAD_DIR/$fileName.log" 2>&1 &
   pid=$!
-  echo "$pid|$fileName|$url" >> "$DOWNLOAD_TASKS"
+  echo "$pid|$fileName|$url|$size" >> "$DOWNLOAD_TASKS"
   _green "$(_text "下载开始: PID=$pid, 文件=$fileName" "Download started: PID=$pid, file=$fileName")"
 }
 
@@ -116,13 +133,12 @@ show_downloads() {
     _yellow "$(_text "没有下载任务" "No download tasks")"
     return
   fi
-  while IFS='|' read -r pid file url; do
+  while IFS='|' read -r pid file url size_bytes; do
     if ps -p "$pid" > /dev/null 2>&1; then
       downloaded=$(du -b "$DOWNLOAD_DIR/$file" 2>/dev/null | cut -f1 || echo 0)
-      total=$(get_remote_size "$url")
-      if [[ -n "$total" && "$total" -gt 0 ]]; then
-        pct=$(awk "BEGIN{printf \"%.2f\", $downloaded*100/$total}")
-        _blue "PID $pid: $file — $downloaded/$total $(_text "字节" "bytes") ($pct%)"
+      if [[ -n "$size_bytes" && "$size_bytes" -gt 0 ]]; then
+        pct=$(awk "BEGIN{printf \"%.2f\", $downloaded*100/$size_bytes}")
+        _blue "PID $pid: $file — $downloaded/$size_bytes $(_text "字节" "bytes") ($pct%)"
       else
         _blue "PID $pid: $file — $downloaded $(_text "字节 (总大小未知)" "bytes (total size unknown)")"
       fi
@@ -206,7 +222,7 @@ while true; do
   case "$choice" in
     [1-6])
       pair=${files[$choice]}
-      IFS='|' read -r fname fsize furl <<< "$pair"
+      IFS='|' read -r fname fsize furl fexact_size <<< "$pair"
       start_download "$fname" "$furl"
       ;;
     100) show_downloads   ;;
