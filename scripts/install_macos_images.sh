@@ -1,5 +1,5 @@
 #!/bin/bash
-# from
+# images build from https://github.com/oneclickvirt/macos
 # https://github.com/oneclickvirt/pve
 # 2025.05.07
 
@@ -61,6 +61,41 @@ if ! command -v 7z >/dev/null 2>&1; then
     _red "$(_text "错误：未找到 '7z' 命令。请安装 p7zip-full" "ERROR: '7z' command not found. Please install p7zip-full")"
     exit 1
   fi
+fi
+
+check_cdn() {
+    local o_url=$1
+    local shuffled_cdn_urls=($(shuf -e "${cdn_urls[@]}")) # 打乱数组顺序
+    for cdn_url in "${shuffled_cdn_urls[@]}"; do
+        if curl -sL -k "$cdn_url$o_url" --max-time 6 | grep -q "success" >/dev/null 2>&1; then
+            export cdn_success_url="$cdn_url"
+            return
+        fi
+        sleep 0.5
+    done
+    export cdn_success_url=""
+}
+
+check_cdn_file() {
+    check_cdn "https://raw.githubusercontent.com/spiritLHLS/ecs/main/back/test"
+    if [ -n "$cdn_success_url" ]; then
+        _yellow "CDN available, using CDN"
+    else
+        _yellow "No CDN available, using original links"
+        export cdn_success_url=""
+    fi
+}
+
+cdn_urls=("https://cdn0.spiritlhl.top/" "http://cdn1.spiritlhl.net/" "http://cdn2.spiritlhl.net/" "http://cdn3.spiritlhl.net/" "http://cdn4.spiritlhl.net/")
+check_cdn_file
+target_path="/var/lib/vz/template/iso/opencore.iso"
+origin_url="https://github.com/oneclickvirt/macos/raw/refs/heads/main/EFI/opencore.iso"
+final_url="${cdn_success_url}${origin_url}"
+if [ ! -f "$target_path" ]; then
+    _yellow "File not found: $target_path"
+    _yellow "Downloading opencore.iso from: $([ -n "$cdn_success_url" ] && echo "$final_url" || echo "$origin_url")"
+    wget "$([ -n "$cdn_success_url" ] && echo "$final_url" || echo "$origin_url")" -O "$target_path" && chmod 777 "$target_path"
+    _yellow "Download completed and permissions set."
 fi
 
 declare -A files=(
