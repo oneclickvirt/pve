@@ -5,7 +5,7 @@
 
 
 # ./build_macos_vm.sh VMID CPU核数 内存 硬盘 SSH端口 VNC端口 系统 存储盘 独立IPV6
-# ./build_macos_vm.sh 102 1 512 5 40001 5901 big‑sur local N
+# ./build_macos_vm.sh 100 2 4096 45 44022 45901 high-sierra local N
 
 cd /root >/dev/null 2>&1
 _red() { echo -e "\033[31m\033[01m$@\033[0m"; }
@@ -212,7 +212,7 @@ create_vm() {
             --onboot 0 \
             --numa 0 \
             --vmgenid 1 \
-            --name macos_${vm_num} \
+            --name macos-${vm_num} \
             ${kvm_flag}
     else
         qm create $vm_num --agent 1 --scsihw virtio-scsi-pci \
@@ -231,7 +231,7 @@ create_vm() {
             --onboot 0 \
             --numa 0 \
             --vmgenid 1 \
-            --name macos_${vm_num} \
+            --name macos-${vm_num} \
             ${kvm_flag}
     fi
     qm set $vm_num --efidisk0 ${storage}:4
