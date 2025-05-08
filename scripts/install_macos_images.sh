@@ -104,13 +104,14 @@ declare -A files=(
   [3]="catalina.iso.7z|8.33|https://cnb.cool/oneclickvirt/template/-/lfs/660078c8a258c8bcde62c49897e5415751f5a17d30d40749a06ae81dc9b1c424|8178081717"
   [4]="big‑sur.iso.7z|12.21|https://cnb.cool/oneclickvirt/template/-/lfs/e15404924199bcf92c6421980a74ad5fdde1dd18a83551726648bd0a1417133|13154181520"
   [5]="monterey.iso.7z|12.36|https://cnb.cool/oneclickvirt/template/-/lfs/520f9e35fb4981bc171945d398f4587f780ab2f8dbfb4bf3a9463b2401ccb148|13257099123"
-  [6]="sonoma.iso.7z|14.41|https://cnb.cool/oneclickvirt/template/-/lfs/b35ff92067171d72519df05a066d3494b7fdb0eac1603b0a8803c98716707e9c|14644126387"
-  [7]="sequoia.iso.7z|15.02|https://cnb.cool/oneclickvirt/template/-/lfs/f22ad0a9eba713645b566fd6a45f55a0daf9f481e6872cca2407856c6fd33b45|16398983272"
+  [6]="ventura.iso.7z|12.31|https://cnb.cool/oneclickvirt/template/-/lfs/5f735c627d352f0677b6594e3e5f783467a35e34512fc8c6ae31349fce0c9677|13212673700"
+  [7]="sonoma.iso.7z|14.41|https://cnb.cool/oneclickvirt/template/-/lfs/b35ff92067171d72519df05a066d3494b7fdb0eac1603b0a8803c98716707e9c|14644126387"
+  [8]="sequoia.iso.7z|15.02|https://cnb.cool/oneclickvirt/template/-/lfs/f22ad0a9eba713645b566fd6a45f55a0daf9f481e6872cca2407856c6fd33b45|16398983272"
 )
 
 print_menu() {
   _blue "=== $(_text "macOS 下载器 菜单" "macOS Downloader Menu") ==="
-  for i in {1..7}; do
+  for i in {1..8}; do
     IFS='|' read -r name size url <<<"${files[$i]}"
     _yellow "  $i) $(_text "下载" "Download") $name ($(_text "大小" "Size"): ${size}GB)"
   done
@@ -125,7 +126,7 @@ print_menu() {
 get_remote_size() {
   local url=$1
   local file_hash=$(basename "$url")
-  for i in {1..6}; do
+  for i in {1..8}; do
     IFS='|' read -r name size url_info exact_size <<<"${files[$i]}"
     if [[ "$url_info" == *"$file_hash"* ]]; then
       echo "$exact_size"
@@ -142,7 +143,7 @@ get_avail_space() {
 start_download() {
   local fileName=$1 url=$2
   local size avail req
-  for i in {1..6}; do
+  for i in {1..8}; do
     IFS='|' read -r name _ url_info exact_size <<<"${files[$i]}"
     if [[ "$name" == "$fileName" ]]; then
       size="$exact_size"
@@ -267,7 +268,7 @@ while true; do
   print_menu
   reading "$(_text "选择操作" "Choice"): " choice
   case "$choice" in
-  [1-7])
+  [1-8])
     clear
     pair=${files[$choice]}
     IFS='|' read -r fname fsize furl fexact_size <<<"$pair"
