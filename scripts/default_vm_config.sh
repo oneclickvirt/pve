@@ -2,7 +2,6 @@
 # from
 # https://github.com/oneclickvirt/pve
 # 2025.05.09
-# 公共函数
 
 _red() { echo -e "\033[31m\033[01m$@\033[0m"; }
 _green() { echo -e "\033[32m\033[01m$@\033[0m"; }

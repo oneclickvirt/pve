@@ -64,8 +64,8 @@ check_cdn_file() {
 }
 
 load_default_config() {
-    curl -L "${cdn_success_url}https://raw.githubusercontent.com/oneclickvirt/pve/main/scripts/default_config.sh" -o default_config.sh
-    . ./default_config.sh
+    curl -L "${cdn_success_url}https://raw.githubusercontent.com/oneclickvirt/pve/main/scripts/default_vm_config.sh" -o default_vm_config.sh
+    . ./default_vm_config.sh
 }
 
 get_ipv6_info() {
@@ -201,4 +201,4 @@ main() {
 }
 
 main "$@"
-rm -rf default_config.sh
+rm -rf default_vm_config.sh
