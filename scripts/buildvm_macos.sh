@@ -283,3 +283,4 @@ main() {
 }
 
 main "$@"
+rm -rf default_config.sh

@@ -23,21 +23,32 @@ setup_locale() {
 }
 
 validate_vm_num() {
-    # 检测vm_num是否为数字
+    # 检测 vm_num 是否为数字
     if ! [[ "$vm_num" =~ ^[0-9]+$ ]]; then
         _red "Error: vm_num must be a valid number."
         _red "错误：vm_num 必须是有效的数字。"
         return 1
     fi
-    # 检测vm_num是否在范围100到256之间
-    if [[ "$vm_num" -ge 100 && "$vm_num" -le 256 ]]; then
-        _green "vm_num is valid: $vm_num"
-        return 0
-    else
+    # 检测 vm_num 是否在范围 100 到 256 之间
+    if [[ "$vm_num" -lt 100 || "$vm_num" -gt 256 ]]; then
         _red "Error: vm_num must be in the range 100 ~ 256."
-        _red "错误： vm_num 需要在100到256以内。"
+        _red "错误：vm_num 需要在 100 到 256 以内。"
         return 1
     fi
+    # 检查是否已有相同的 VM
+    if qm list | awk '{print $1}' | grep -q "^${vm_num}$"; then
+        _red "Error: A VM with vmid ${vm_num} already exists."
+        _red "错误：vmid 为 ${vm_num} 的虚拟机已存在。"
+        return 1
+    fi
+    # 检查是否已有相同的 CT
+    if pct list | awk '{print $1}' | grep -q "^${vm_num}$"; then
+        _red "Error: A CT with vmid ${vm_num} already exists."
+        _red "错误：vmid 为 ${vm_num} 的容器已存在。"
+        return 1
+    fi
+    _green "vm_num is valid and available: $vm_num"
+    return 0
 }
 
 get_system_arch() {
@@ -222,43 +233,45 @@ download_x86_image() {
 }
 
 prepare_arm_image() {
-    # TODO 添加 https://www.debian.org/mirror/list debian镜像
-    systems=("ubuntu14" "ubuntu16" "ubuntu18" "ubuntu20" "ubuntu22")
-    for sys in ${systems[@]}; do
-        if [[ "$system" == "$sys" ]]; then
-            file_path="/root/qcow/${system}.img"
-            break
-        fi
-    done
-    if [[ -z "$file_path" ]]; then
-        _red "无法安装对应系统，请查看 http://cloud-images.ubuntu.com 支持的系统镜像。"
-        _red "当前支持的系统版本有: ${systems[*]}"
+    # 非local全局定义参数，后续有使用
+    system="$1"
+    ext="img"
+    url=""
+    declare -A ubuntu_map=(
+        [ubuntu14]=trusty [ubuntu16]=xenial [ubuntu18]=bionic
+        [ubuntu20]=focal  [ubuntu22]=jammy
+    )
+    declare -A debian_map=(
+        [10]=buster [11]=bullseye [12]=bookworm [13]=trixie
+    )
+    if [[ "$system" == "debian" ]]; then
+        local latest=$(printf "%s\n" "${!debian_map[@]}" | sort -nr | head -n1)
+        system="debian${latest}"
+    fi
+    if [[ -n "${ubuntu_map[$system]}" ]]; then
+        ext="img"
+        local codename=${ubuntu_map[$system]}
+        url="http://cloud-images.ubuntu.com/${codename}/current/${codename}-server-cloudimg-arm64.img"
+    elif [[ "$system" =~ debian([0-9]+) ]]; then
+        ext="qcow2"
+        local ver=${BASH_REMATCH[1]}
+        local codename=${debian_map[$ver]}
+        url="https://cloud.debian.org/images/cloud/${codename}/latest/debian-${ver}-generic-arm64.qcow2"
+    else
+        echo -e "错误: 不支持的系统版本 ${system}\nError: Unsupported system version: ${system}" >&2
+        echo -e "请查看 http://cloud-images.ubuntu.com 和 https://cloud.debian.org/images/cloud 支持的系统镜像\nSee supported images at http://cloud-images.ubuntu.com and https://cloud.debian.org/images/cloud."
         return 1
     fi
-    if [ -n "$file_path" ] && [ ! -f "$file_path" ]; then
-        case "$system" in
-        ubuntu14)
-            version="trusty"
-            ;;
-        ubuntu16)
-            version="xenial"
-            ;;
-        ubuntu18)
-            version="bionic"
-            ;;
-        ubuntu20)
-            version="focal"
-            ;;
-        ubuntu22)
-            version="jammy"
-            ;;
-        *)
-            echo "Unsupported Ubuntu version."
-            return 1
-            ;;
-        esac
-        url="http://cloud-images.ubuntu.com/${version}/current/${version}-server-cloudimg-arm64.img"
+    local file_path="/root/qcow/${system}.${ext}"
+    if [[ ! -f "$file_path" ]]; then
+        echo -e "开始下载镜像: ${url}\nDownloading image: ${url}"
         curl -L -o "$file_path" "$url"
+        if [[ $? -ne 0 ]]; then
+            echo -e "下载失败: ${url}\nDownload failed: ${url}" >&2
+            return 1
+        fi
+    else
+        echo -e "镜像已存在: ${file_path}\nImage already exists: ${file_path}"
     fi
     return 0
 }

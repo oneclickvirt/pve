@@ -96,7 +96,7 @@ create_vm() {
         qm importdisk $vm_num /root/qcow/${system}.qcow2 ${storage}
     else
         qm set $vm_num --bios ovmf
-        qm importdisk $vm_num /root/qcow/${system}.img ${storage}
+        qm importdisk $vm_num /root/qcow/${system}.${ext} ${storage}
     fi
     sleep 3
 }

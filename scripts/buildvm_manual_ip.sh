@@ -174,7 +174,7 @@ import_disk_and_setup() {
         qm importdisk $vm_num /root/qcow/${system}.qcow2 ${storage}
     else
         qm set $vm_num --bios ovmf
-        qm importdisk $vm_num /root/qcow/${system}.img ${storage}
+        qm importdisk $vm_num /root/qcow/${system}.${ext} ${storage}
     fi
     sleep 3
     volid=$(pvesm list ${storage} | awk -v vmid="${vm_num}" '$5 == vmid && $1 ~ /\.raw$/ {print $1}' | tail -n 1)
