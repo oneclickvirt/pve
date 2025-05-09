@@ -9,6 +9,7 @@ _green() { echo -e "\033[32m\033[01m$@\033[0m"; }
 _yellow() { echo -e "\033[33m\033[01m$@\033[0m"; }
 _blue() { echo -e "\033[36m\033[01m$@\033[0m"; }
 reading() { read -rp "$(_green "$1")" "$2"; }
+
 setup_locale() {
     utf8_locale=$(locale -a 2>/dev/null | grep -i -m 1 -E "utf8|UTF-8")
     if [[ -z "$utf8_locale" ]]; then
@@ -20,6 +21,7 @@ setup_locale() {
         _green "Locale set to $utf8_locale"
     fi
 }
+
 validate_vm_num() {
     # 检测vm_num是否为数字
     if ! [[ "$vm_num" =~ ^[0-9]+$ ]]; then
@@ -38,6 +40,7 @@ validate_vm_num() {
         return 1
     fi
 }
+
 get_system_arch() {
     local sysarch="$(uname -m)"
     if [ "${sysarch}" = "unknown" ] || [ "${sysarch}" = "" ]; then
@@ -61,6 +64,7 @@ get_system_arch() {
     fi
     return 0
 }
+
 check_kvm_support() {
     if [ -e /dev/kvm ]; then
         if [ -r /dev/kvm ] && [ -w /dev/kvm ]; then
@@ -88,6 +92,7 @@ check_kvm_support() {
     kvm_flag="--kvm 0"
     return 1
 }
+
 prepare_system_image() {
     if [ "$system_arch" = "x86" ]; then
         prepare_x86_image
@@ -95,6 +100,7 @@ prepare_system_image() {
         prepare_arm_image
     fi
 }
+
 prepare_x86_image() {
     file_path=""
     # 过去手动修补的镜像
@@ -127,6 +133,7 @@ prepare_x86_image() {
     fi
     return 0
 }
+
 download_x86_image() {
     ver=""
     # 尝试使用新镜像
@@ -214,6 +221,7 @@ download_x86_image() {
         fi
     fi
 }
+
 prepare_arm_image() {
     # TODO 添加 https://www.debian.org/mirror/list debian镜像
     systems=("ubuntu14" "ubuntu16" "ubuntu18" "ubuntu20" "ubuntu22")
@@ -255,6 +263,7 @@ prepare_arm_image() {
     fi
     return 0
 }
+
 check_ipv6_config() {
     independent_ipv6_status="N"
     if [ "$independent_ipv6" == "y" ]; then
@@ -302,4 +311,14 @@ check_ipv6_config() {
         fi
     fi
     return 0
+}
+
+is_ipv4() {
+    local ip=$1
+    local regex="^([0-9]{1,3}\.){3}[0-9]{1,3}$"
+    if [[ $ip =~ $regex ]]; then
+        return 0
+    else
+        return 1
+    fi
 }

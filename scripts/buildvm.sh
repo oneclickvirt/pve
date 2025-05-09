@@ -7,7 +7,7 @@
 
 cd /root >/dev/null 2>&1
 
-init_variables() {
+init_params() {
     vm_num="${1:-102}"
     user="${2:-test}"
     password="${3:-123456}"
@@ -208,7 +208,7 @@ main() {
     check_cdn_file
     load_default_config || exit 1
     setup_locale
-    init_variables "$@"
+    init_params "$@"
     validate_vm_num || exit 1
     get_system_arch || exit 1
     check_kvm_support
@@ -217,10 +217,7 @@ main() {
     create_vm || exit 1
     setup_port_forwarding
     save_vm_info
-    _green "虚拟机创建完成！Virtual machine creation completed!"
-    _green "VM ID: $vm_num, 用户名: $user, 密码: $password"
-    _green "SSH端口: $sshn, HTTP端口: $web1_port, HTTPS端口: $web2_port"
-    rm -rf default_config.sh
 }
 
 main "$@"
+rm -rf default_config.sh
