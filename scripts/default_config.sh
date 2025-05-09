@@ -32,7 +32,6 @@ validate_vm_num() {
     # 检测vm_num是否在范围100到256之间
     if [[ "$vm_num" -ge 100 && "$vm_num" -le 256 ]]; then
         _green "vm_num is valid: $vm_num"
-        num=$vm_num
         return 0
     else
         _red "Error: vm_num must be in the range 100 ~ 256."

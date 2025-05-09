@@ -8,25 +8,8 @@
 # ./build_macos_vm.sh 100 2 4096 45 44022 45901 high-sierra local N
 
 cd /root >/dev/null 2>&1
-_red() { echo -e "\033[31m\033[01m$@\033[0m"; }
-_green() { echo -e "\033[32m\033[01m$@\033[0m"; }
-_yellow() { echo -e "\033[33m\033[01m$@\033[0m"; }
-_blue() { echo -e "\033[36m\033[01m$@\033[0m"; }
-reading() { read -rp "$(_green "$1")" "$2"; }
 
-setup_locale() {
-    utf8_locale=$(locale -a 2>/dev/null | grep -i -m 1 -E "utf8|UTF-8")
-    if [[ -z "$utf8_locale" ]]; then
-        _yellow "未找到UTF-8的locale"
-    else
-        export LC_ALL="$utf8_locale"
-        export LANG="$utf8_locale"
-        export LANGUAGE="$utf8_locale"
-        _green "Locale设置为$utf8_locale"
-    fi
-}
-
-init_variables() {
+init_params() {
     vm_num="${1:-102}"
     core="${2:-1}"
     memory="${3:-512}"
@@ -40,45 +23,31 @@ init_variables() {
     rm -rf "vm$vm_num"
 }
 
-validate_vm_num() {
-    # 检测vm_num是否为数字
-    if ! [[ "$vm_num" =~ ^[0-9]+$ ]]; then
-        _red "错误：vm_num 必须是有效的数字。"
-        return 1
-    fi
-    # 检测vm_num是否在范围100到256之间
-    if [[ "$vm_num" -ge 100 && "$vm_num" -le 256 ]]; then
-        _green "vm_num有效: $vm_num"
-        num=$vm_num
-        return 0
+check_cdn() {
+    local o_url=$1
+    local shuffled_cdn_urls=($(shuf -e "${cdn_urls[@]}")) # 打乱数组顺序
+    for cdn_url in "${shuffled_cdn_urls[@]}"; do
+        if curl -sL -k "$cdn_url$o_url" --max-time 6 | grep -q "success" >/dev/null 2>&1; then
+            export cdn_success_url="$cdn_url"
+            return
+        fi
+        sleep 0.5
+    done
+    export cdn_success_url=""
+}
+
+check_cdn_file() {
+    check_cdn "https://raw.githubusercontent.com/spiritLHLS/ecs/main/back/test"
+    if [ -n "$cdn_success_url" ]; then
+        echo "CDN available, using CDN"
     else
-        _red "错误： vm_num 需要在100到256以内。"
-        return 1
+        echo "No CDN available, no use CDN"
     fi
 }
 
-get_system_arch() {
-    local sysarch="$(uname -m)"
-    if [ "${sysarch}" = "unknown" ] || [ "${sysarch}" = "" ]; then
-        local sysarch="$(arch)"
-    fi
-    # 根据架构信息设置系统位数
-    case "${sysarch}" in
-    "i386" | "i686" | "x86_64")
-        system_arch="x86"
-        ;;
-    "armv7l" | "armv8" | "armv8l" | "aarch64")
-        system_arch="arm"
-        ;;
-    *)
-        system_arch=""
-        ;;
-    esac
-    if [ -z "${system_arch}" ] || [ ! -v system_arch ]; then
-        _red "此脚本只能在x86_64或arm架构的机器上运行。"
-        return 1
-    fi
-    return 0
+load_default_config() {
+    curl -L "${cdn_success_url}https://raw.githubusercontent.com/oneclickvirt/pve/main/scripts/default_config.sh" -o default_config.sh
+    . ./default_config.sh
 }
 
 check_cpu_vendor() {
@@ -93,7 +62,7 @@ check_cpu_vendor() {
     _green "CPU厂商: $cpu_vendor"
 }
 
-check_kvm_support() {
+check_kvm_support_for_macos() {
     if [ -e /dev/kvm ]; then
         if [ -r /dev/kvm ] && [ -w /dev/kvm ]; then
             _green "KVM硬件加速可用，将使用硬件加速。"
@@ -139,53 +108,6 @@ check_iso_exists() {
     if [ ! -f "$opencore_iso" ]; then
         _red "错误：OpenCore引导镜像 'opencore.iso' 未找到"
         return 1
-    fi
-    return 0
-}
-
-check_ipv6_config() {
-    independent_ipv6_status="N"
-    if [ "$independent_ipv6" == "y" ]; then
-        service_status=$(systemctl is-active ndpresponder.service)
-        if [ "$service_status" == "active" ]; then
-            _green "ndpresponder服务启动成功且正在运行，宿主机可开设带独立IPV6地址的服务。"
-        else
-            _green "ndpresponder服务状态异常，宿主机不可开设带独立IPV6地址的服务。"
-            return 1
-        fi
-        if [ -f /usr/local/bin/pve_check_ipv6 ]; then
-            host_ipv6_address=$(cat /usr/local/bin/pve_check_ipv6)
-            ipv6_address_without_last_segment="${host_ipv6_address%:*}:"
-        fi
-        if [ -f /usr/local/bin/pve_ipv6_prefixlen ]; then
-            ipv6_prefixlen=$(cat /usr/local/bin/pve_ipv6_prefixlen)
-        fi
-        if [ -f /usr/local/bin/pve_ipv6_gateway ]; then
-            ipv6_gateway=$(cat /usr/local/bin/pve_ipv6_gateway)
-        fi
-    else
-        if [ -f /usr/local/bin/pve_check_ipv6 ]; then
-            ipv6_address=$(cat /usr/local/bin/pve_check_ipv6)
-            IFS="/" read -ra parts <<<"$ipv6_address"
-            part_1="${parts[0]}"
-            part_2="${parts[1]}"
-            IFS=":" read -ra part_1_parts <<<"$part_1"
-            if [ ! -z "${part_1_parts[*]}" ]; then
-                part_1_last="${part_1_parts[-1]}"
-                if [ "$part_1_last" = "$vm_num" ]; then
-                    ipv6_address=""
-                else
-                    part_1_head=$(echo "$part_1" | awk -F':' 'BEGIN {OFS=":"} {last=""; for (i=1; i<NF; i++) {last=last $i ":"}; print last}')
-                    ipv6_address="${part_1_head}${vm_num}"
-                fi
-            fi
-        fi
-        if [ -f /usr/local/bin/pve_ipv6_prefixlen ]; then
-            ipv6_prefixlen=$(cat /usr/local/bin/pve_ipv6_prefixlen)
-        fi
-        if [ -f /usr/local/bin/pve_ipv6_gateway ]; then
-            ipv6_gateway=$(cat /usr/local/bin/pve_ipv6_gateway)
-        fi
     fi
     return 0
 }
@@ -285,7 +207,7 @@ create_vm() {
 }
 
 configure_network() {
-    user_ip="172.16.1.${num}"
+    user_ip="172.16.1.${vm_num}"
     if [ "$independent_ipv6" == "y" ]; then
         if [ ! -z "$host_ipv6_address" ] && [ ! -z "$ipv6_prefixlen" ] && [ ! -z "$ipv6_gateway" ] && [ ! -z "$ipv6_address_without_last_segment" ]; then
             if grep -q "vmbr2" /etc/network/interfaces; then
@@ -303,7 +225,7 @@ configure_network() {
 }
 
 setup_port_forwarding() {
-    user_ip="172.16.1.${num}"
+    user_ip="172.16.1.${vm_num}"
     iptables -t nat -A PREROUTING -i vmbr0 -p tcp --dport ${sshn} -j DNAT --to-destination ${user_ip}:22
     iptables -t nat -A PREROUTING -i vmbr0 -p tcp --dport ${vnc_port} -j DNAT --to-destination ${user_ip}:5900
     if [ ! -f "/etc/iptables/rules.v4" ]; then
@@ -338,12 +260,16 @@ save_vm_info() {
 }
 
 main() {
+    cdn_urls=("https://cdn0.spiritlhl.top/" "http://cdn1.spiritlhl.net/" "http://cdn2.spiritlhl.net/" "http://cdn3.spiritlhl.net/" "http://cdn4.spiritlhl.net/")
+    check_cdn_file
+    load_default_config || exit 1
     setup_locale
-    init_variables "$@"
+    get_system_arch
+    init_params "$@"
     validate_vm_num || exit 1
     get_system_arch || exit 1
     check_cpu_vendor
-    check_kvm_support
+    check_kvm_support_for_macos
     check_iso_exists || exit 1
     check_ipv6_config || exit 1
     create_vm || exit 1

@@ -130,7 +130,7 @@ create_vm() {
 }
 
 configure_network() {
-    user_ip="172.16.1.${num}"
+    user_ip="172.16.1.${vm_num}"
     if [ "$independent_ipv6" == "y" ]; then
         if [ ! -z "$host_ipv6_address" ] && [ ! -z "$ipv6_prefixlen" ] && [ ! -z "$ipv6_gateway" ] && [ ! -z "$ipv6_address_without_last_segment" ]; then
             if grep -q "vmbr2" /etc/network/interfaces; then
@@ -160,7 +160,7 @@ configure_network() {
 }
 
 setup_port_forwarding() {
-    user_ip="172.16.1.${num}"
+    user_ip="172.16.1.${vm_num}"
     iptables -t nat -A PREROUTING -i vmbr0 -p tcp --dport ${sshn} -j DNAT --to-destination ${user_ip}:22
     if [ "${web1_port}" -ne 0 ]; then
         iptables -t nat -A PREROUTING -i vmbr0 -p tcp -m tcp --dport ${web1_port} -j DNAT --to-destination ${user_ip}:80

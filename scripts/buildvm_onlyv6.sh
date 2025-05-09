@@ -144,7 +144,7 @@ configure_vm() {
     qm set $vm_num --nameserver 1.1.1.1
     # qm set $vm_num --nameserver 1.0.0.1
     qm set $vm_num --searchdomain local
-    user_ip="172.16.1.${num}"
+    user_ip="172.16.1.${vm_num}"
     qm set $vm_num --ipconfig0 ip=${user_ip}/24,gw=172.16.1.1
     qm set $vm_num --ipconfig1 ip6="${ipv6_address_without_last_segment}${vm_num}/128",gw6="${host_ipv6_address}"
     qm set $vm_num --cipassword $password --ciuser $user
@@ -188,13 +188,9 @@ main() {
     load_default_config || exit 1
     setup_locale
     init_params "$@"
-    validate_vm_num
+    validate_vm_num || exit 1
     check_environment
-    get_system_arch
-    if [ -z "${system_arch}" ] || [ ! -v system_arch ]; then
-        _red "This script can only run on machines under x86_64 or arm architecture."
-        exit 1
-    fi
+    get_system_arch || exit 1
     check_kvm_support
     prepare_system_image
     get_ipv6_info

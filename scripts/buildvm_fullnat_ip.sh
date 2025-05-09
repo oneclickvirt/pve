@@ -239,14 +239,10 @@ main() {
     check_cdn_file
     load_default_config || exit 1
     setup_locale
-    get_system_arch
-    if [ -z "${system_arch}" ] || [ ! -v system_arch ]; then
-        _red "This script can only run on machines under x86_64 or arm architecture."
-        exit 1
-    fi
+    get_system_arch || exit 1
     check_kvm_support
     init_params "$@"
-    validate_vm_num
+    validate_vm_num || exit 1
     prepare_system_image
     check_network
     check_ipv6_config
