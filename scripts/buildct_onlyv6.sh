@@ -223,7 +223,7 @@ main() {
     cdn_urls=("https://cdn0.spiritlhl.top/" "http://cdn1.spiritlhl.net/" "http://cdn2.spiritlhl.net/" "http://cdn3.spiritlhl.net/" "http://cdn4.spiritlhl.net/")
     check_cdn_file
     load_default_config
-    setup_locale
+    set_locale
     check_requirements
     get_system_arch
     check_china
