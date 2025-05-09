@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/oneclickvirt/pve
-# 2024.03.12
+# 2025.05.09
 
 # 打印信息
 _red() { echo -e "\033[31m\033[01m$@\033[0m"; }
@@ -69,6 +69,26 @@ else
     else
         _green "Hardware passthrough is set"
         _green "已设置硬件直通"
+    fi
+fi
+
+# 检测固件安装
+arch=$(uname -m)
+if [[ "$arch" == "arm"* || "$arch" == "aarch64" ]]; then
+    pve_version=$(pveversion | cut -d '/' -f 2)
+    major=$(echo "$pve_version" | cut -d '.' -f 1)
+    minor=$(echo "$pve_version" | cut -d '.' -f 2 | cut -d '-' -f 1)
+    version=$(echo "$major.$minor" | bc)
+    _green "Detected architecture: $arch"
+    _green "Detected Proxmox VE version: $version"
+    if (( $(echo "$version < 8.1" | bc -l) )); then
+        _green "Installing pve-edk2-firmware for Proxmox VE < 8.1..."
+        apt download pve-edk2-firmware=3.20220526-1
+        dpkg -i pve-edk2-firmware_3.20220526-1_all.deb
+    else
+        _green "Installing pve-edk2-firmware-aarch64 for Proxmox VE >= 8.1..."
+        apt download pve-edk2-firmware-aarch64=3.20220526-rockchip
+        dpkg -i pve-edk2-firmware-aarch64_3.20220526-rockchip_all.deb
     fi
 fi
 

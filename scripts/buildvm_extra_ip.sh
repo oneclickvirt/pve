@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/oneclickvirt/pve
-# 2025.04.20
+# 2025.05.09
 # 自动选择要绑定的IPV4地址 额外的IPV4地址需要与本机的IPV4地址在同一个子网内，即前缀一致
 # 此时开设出的虚拟机的网关为宿主机的IPV4的网关，不需要强制约定MAC地址。
 # 此时附加的IPV4地址是宿主机目前的IPV4地址顺位后面的地址
@@ -75,7 +75,7 @@ get_system_arch() {
         system_arch="x86"
         ;;
     "armv7l" | "armv8" | "armv8l" | "aarch64")
-        system_arch="arch"
+        system_arch="arm"
         ;;
     *)
         system_arch=""
@@ -102,7 +102,11 @@ check_kvm_support() {
     fi
     _yellow "将使用QEMU软件模拟(TCG)模式，性能会受到影响。"
     _yellow "Falling back to QEMU software emulation (TCG). Performance will be affected."
-    cpu_type="qemu64"
+    if [[ "$system_arch" == "arm" ]]; then
+        cpu_type="max"
+    else
+        cpu_type="qemu64"
+    fi
     kvm_flag="--kvm 0"
     return 1
 }
@@ -159,23 +163,40 @@ download_x86_image() {
     if [ ! -f "$file_path" ]; then
         check_cdn_file
         ver=""
+        # 优先处理 cloud 镜像
         if [[ -n "$new_images" ]]; then
+            matched_images=()
             for image in "${new_images[@]}"; do
-                if [[ " ${image} " == *" $system "* ]]; then
+                if [[ "$image" == $system* ]]; then
+                    matched_images+=("$image")
+                fi
+            done
+            if [[ ${#matched_images[@]} -gt 0 ]]; then
+                sorted_images=$(printf "%s\n" "${matched_images[@]}" | sort -r)
+                # 优先选择 cloud 镜像
+                for img in $sorted_images; do
+                    if [[ "$img" == *cloud* ]]; then
+                        selected_image="$img"
+                        break
+                    fi
+                done
+                # 如果没有 cloud 镜像，则选择版本最大的镜像
+                if [[ -z "$selected_image" ]]; then
+                    selected_image=$(echo "$sorted_images" | head -n1)
+                fi
+                if [[ -n "$selected_image" ]]; then
                     ver="auto_build"
-                    url="${cdn_success_url}https://github.com/oneclickvirt/pve_kvm_images/releases/download/images/${image}.qcow2"
+                    url="${cdn_success_url}https://github.com/oneclickvirt/pve_kvm_images/releases/download/images/${selected_image}.qcow2"
                     curl -Lk -o "$file_path" "$url"
                     if [ $? -ne 0 ]; then
                         _red "Failed to download $file_path"
                         ver=""
                         rm -rf "$file_path"
-                        break
                     else
-                        _blue "Use auto-fixed image: ${image}"
-                        break
+                        _blue "Use auto-fixed image: ${selected_image}"
                     fi
                 fi
-            done
+            fi
         fi
         if [[ -z "$ver" ]]; then
             v20=("fedora34" "almalinux8" "debian11" "debian12" "ubuntu18" "ubuntu20" "ubuntu22" "centos7" "alpinelinux_edge" "alpinelinux_stable" "rockylinux8")
@@ -223,6 +244,7 @@ download_x86_image() {
 }
 
 download_arm_image() {
+    # TODO 添加 https://www.debian.org/mirror/list debian镜像
     systems=("ubuntu14" "ubuntu16" "ubuntu18" "ubuntu20" "ubuntu22")
     for sys in ${systems[@]}; do
         if [[ "$system" == "$sys" ]]; then
@@ -231,8 +253,9 @@ download_arm_image() {
         fi
     done
     if [[ -z "$file_path" ]]; then
-        _red "无法安装对应系统，请查看 http://cloud-images.ubuntu.com 支持的系统镜像 "
-        exit 1
+        _red "无法安装对应系统，请查看 http://cloud-images.ubuntu.com 支持的系统镜像。"
+        _red "当前支持的系统版本有: ${systems[*]}"
+        return 1
     fi
     if [ -n "$file_path" ] && [ ! -f "$file_path" ]; then
         case "$system" in
@@ -427,7 +450,11 @@ configure_vm() {
     qm set $vm_num --bootdisk scsi0
     qm set $vm_num --boot order=scsi0
     qm set $vm_num --memory $memory
-    qm set $vm_num --ide2 ${storage}:cloudinit
+    if [[ "$system_arch" == "arm" ]]; then
+        qm set $vm_num --scsi1 ${storage}:cloudinit
+    else
+        qm set $vm_num --ide1 ${storage}:cloudinit
+    fi
     if [ "$independent_ipv6" == "y" ]; then
         if [ ! -z "$host_ipv6_address" ] && [ ! -z "$ipv6_prefixlen" ] && [ ! -z "$ipv6_gateway" ] && [ ! -z "$ipv6_address_without_last_segment" ]; then
             if grep -q "vmbr2" /etc/network/interfaces; then
@@ -498,7 +525,7 @@ main() {
     check_kvm_support
     if [ "$system_arch" = "x86" ]; then
         download_x86_image
-    elif [ "$system_arch" = "arch" ]; then
+    elif [ "$system_arch" = "arm" ]; then
         download_arm_image
     fi
     check_ipv6_config

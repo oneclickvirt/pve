@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/oneclickvirt/pve
-# 2025.04.20
+# 2025.05.09
 # ./buildvm.sh VMID 用户名 密码 CPU核数 内存 硬盘 SSH端口 80端口 443端口 外网端口起 外网端口止 系统 存储盘 独立IPV6
 # ./buildvm.sh 102 test1 1234567 1 512 5 40001 40002 40003 50000 50025 debian11 local N
 
@@ -77,7 +77,7 @@ get_system_arch() {
         system_arch="x86"
         ;;
     "armv7l" | "armv8" | "armv8l" | "aarch64")
-        system_arch="arch"
+        system_arch="arm"
         ;;
     *)
         system_arch=""
@@ -109,7 +109,11 @@ check_kvm_support() {
     fi
     _yellow "将使用QEMU软件模拟(TCG)模式，性能会受到影响。"
     _yellow "Falling back to QEMU software emulation (TCG). Performance will be affected."
-    cpu_type="qemu64"
+    if [[ "$system_arch" == "arm" ]]; then
+        cpu_type="max"
+    else
+        cpu_type="qemu64"
+    fi
     kvm_flag="--kvm 0"
     return 1
 }
@@ -140,7 +144,7 @@ check_cdn_file() {
 prepare_system_image() {
     if [ "$system_arch" = "x86" ]; then
         prepare_x86_image
-    elif [ "$system_arch" = "arch" ]; then
+    elif [ "$system_arch" = "arm" ]; then
         prepare_arm_image
     fi
 }
@@ -200,22 +204,39 @@ download_x86_image() {
     ver=""
     # 尝试使用新镜像
     if [[ -n "$new_images" ]]; then
+        matched_images=()
         for image in "${new_images[@]}"; do
-            if [[ " ${image} " == *" $system "* ]]; then
+            if [[ "$image" == $system* ]]; then
+                matched_images+=("$image")
+            fi
+        done
+        if [[ ${#matched_images[@]} -gt 0 ]]; then
+            # 优先选择带 cloud 的，并按版本号排序
+            sorted_images=$(printf "%s\n" "${matched_images[@]}" | sort -r)
+            for img in $sorted_images; do
+                if [[ "$img" == *cloud* ]]; then
+                    selected_image="$img"
+                    break
+                fi
+            done
+            # 如果没有带 cloud 的，就取第一个版本最高的
+            if [[ -z "$selected_image" ]]; then
+                selected_image=$(echo "$sorted_images" | head -n1)
+            fi
+            if [[ -n "$selected_image" ]]; then
                 ver="auto_build"
-                url="${cdn_success_url}https://github.com/oneclickvirt/pve_kvm_images/releases/download/images/${image}.qcow2"
+                url="${cdn_success_url}https://github.com/oneclickvirt/pve_kvm_images/releases/download/images/${selected_image}.qcow2"
                 curl -Lk -o "$file_path" "$url"
                 if [ $? -ne 0 ]; then
                     _red "Failed to download $file_path"
                     ver=""
                     rm -rf "$file_path"
-                    break
                 else
-                    _blue "Use auto-fixed image: ${image}"
+                    _blue "Use auto-fixed image: ${selected_image}"
                     return 0
                 fi
             fi
-        done
+        fi
     fi
     # 如果新镜像不可用，使用旧镜像
     if [[ -z "$ver" ]]; then
@@ -268,6 +289,7 @@ download_x86_image() {
 }
 
 prepare_arm_image() {
+    # TODO 添加 https://www.debian.org/mirror/list debian镜像
     systems=("ubuntu14" "ubuntu16" "ubuntu18" "ubuntu20" "ubuntu22")
     for sys in ${systems[@]}; do
         if [[ "$system" == "$sys" ]]; then
@@ -276,9 +298,8 @@ prepare_arm_image() {
         fi
     done
     if [[ -z "$file_path" ]]; then
-        # https://www.debian.org/mirror/list
-        _red "Unable to install corresponding system, please check http://cloud-images.ubuntu.com for supported system images "
-        _red "无法安装对应系统，请查看 http://cloud-images.ubuntu.com 支持的系统镜像 "
+        _red "无法安装对应系统，请查看 http://cloud-images.ubuntu.com 支持的系统镜像。"
+        _red "当前支持的系统版本有: ${systems[*]}"
         return 1
     fi
     if [ -n "$file_path" ] && [ ! -f "$file_path" ]; then
@@ -412,7 +433,11 @@ create_vm() {
     qm set $vm_num --boot order=scsi0
     qm set $vm_num --memory $memory
     # --swap 256
-    qm set $vm_num --ide2 ${storage}:cloudinit
+    if [[ "$system_arch" == "arm" ]]; then
+        qm set $vm_num --scsi1 ${storage}:cloudinit
+    else
+        qm set $vm_num --ide1 ${storage}:cloudinit
+    fi
     configure_network
     qm resize $vm_num scsi0 ${disk}G
     if [ $? -ne 0 ]; then

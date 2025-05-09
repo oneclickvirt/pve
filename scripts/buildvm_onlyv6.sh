@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/oneclickvirt/pve
-# 2025.04.20
+# 2025.05.09
 # 自动选择要绑定的IPV6地址
 # ./buildvm_onlyv6.sh VMID 用户名 密码 CPU核数 内存 硬盘 系统 存储盘
 # ./buildvm_onlyv6.sh 152 test1 1234567 1 512 5 debian11 local
@@ -85,7 +85,7 @@ get_system_arch() {
         system_arch="x86"
         ;;
     "armv7l" | "armv8" | "armv8l" | "aarch64")
-        system_arch="arch"
+        system_arch="arm"
         ;;
     *)
         system_arch=""
@@ -112,7 +112,11 @@ check_kvm_support() {
     fi
     _yellow "将使用QEMU软件模拟(TCG)模式，性能会受到影响。"
     _yellow "Falling back to QEMU software emulation (TCG). Performance will be affected."
-    cpu_type="qemu64"
+    if [[ "$system_arch" == "arm" ]]; then
+        cpu_type="max"
+    else
+        cpu_type="qemu64"
+    fi
     kvm_flag="--kvm 0"
     return 1
 }
@@ -142,7 +146,7 @@ check_cdn_file() {
 prepare_system_image() {
     if [ "$system_arch" = "x86" ]; then
         prepare_x86_image
-    elif [ "$system_arch" = "arch" ]; then
+    elif [ "$system_arch" = "arm" ]; then
         prepare_arm_image
     fi
 }
@@ -192,24 +196,39 @@ prepare_x86_image() {
     if [ ! -f "$file_path" ]; then
         check_cdn_file
         ver=""
-        # 使用新镜像，自动修补版本
+        # 使用新镜像，自动修补版本（优先 cloud，优先高版本）
         if [[ -n "$new_images" ]]; then
+            matched_images=()
             for image in "${new_images[@]}"; do
-                if [[ " ${image} " == *" $system "* ]]; then
+                if [[ "$image" == $system* ]]; then
+                    matched_images+=("$image")
+                fi
+            done
+            if [[ ${#matched_images[@]} -gt 0 ]]; then
+                sorted_images=$(printf "%s\n" "${matched_images[@]}" | sort -r)
+
+                for img in $sorted_images; do
+                    if [[ "$img" == *cloud* ]]; then
+                        selected_image="$img"
+                        break
+                    fi
+                done
+                if [[ -z "$selected_image" ]]; then
+                    selected_image=$(echo "$sorted_images" | head -n1)
+                fi
+                if [[ -n "$selected_image" ]]; then
                     ver="auto_build"
-                    url="${cdn_success_url}https://github.com/oneclickvirt/pve_kvm_images/releases/download/images/${image}.qcow2"
+                    url="${cdn_success_url}https://github.com/oneclickvirt/pve_kvm_images/releases/download/images/${selected_image}.qcow2"
                     curl -Lk -o "$file_path" "$url"
                     if [ $? -ne 0 ]; then
                         _red "Failed to download $file_path"
                         ver=""
                         rm -rf "$file_path"
-                        break
                     else
-                        _blue "Use auto-fixed image: ${image}"
-                        break
+                        _blue "Use auto-fixed image: ${selected_image}"
                     fi
                 fi
-            done
+            fi
         fi
         # 使用旧镜像，手动修补版本
         if [[ -z "$ver" ]]; then
@@ -261,6 +280,7 @@ prepare_x86_image() {
 }
 
 prepare_arm_image() {
+    # TODO 添加 https://www.debian.org/mirror/list debian镜像
     systems=("ubuntu14" "ubuntu16" "ubuntu18" "ubuntu20" "ubuntu22")
     for sys in ${systems[@]}; do
         if [[ "$system" == "$sys" ]]; then
@@ -269,10 +289,9 @@ prepare_arm_image() {
         fi
     done
     if [[ -z "$file_path" ]]; then
-        # https://www.debian.org/mirror/list
-        _red "Unable to install corresponding system, please check http://cloud-images.ubuntu.com for supported system images "
-        _red "无法安装对应系统，请查看 http://cloud-images.ubuntu.com 支持的系统镜像 "
-        exit 1
+        _red "无法安装对应系统，请查看 http://cloud-images.ubuntu.com 支持的系统镜像。"
+        _red "当前支持的系统版本有: ${systems[*]}"
+        return 1
     fi
     if [ -n "$file_path" ] && [ ! -f "$file_path" ]; then
         case "$system" in
@@ -369,7 +388,11 @@ configure_vm() {
     qm set $vm_num --boot order=scsi0
     qm set $vm_num --memory $memory
     # --swap 256
-    qm set $vm_num --ide2 ${storage}:cloudinit
+    if [[ "$system_arch" == "arm" ]]; then
+        qm set $vm_num --scsi1 ${storage}:cloudinit
+    else
+        qm set $vm_num --ide1 ${storage}:cloudinit
+    fi
     qm set $vm_num --nameserver 1.1.1.1
     # qm set $vm_num --nameserver 1.0.0.1
     qm set $vm_num --searchdomain local

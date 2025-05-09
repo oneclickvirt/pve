@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/oneclickvirt/pve
-# 2025.04.20
+# 2025.05.09
 # 创建NAT全端口映射的虚拟机
 # 前置条件：
 # 要用到的外网IPV4地址已绑定到vmbr0网卡上(手动附加时务必在PVE安装完毕且自动配置网关后再附加)，且宿主机的IPV4地址仍为顺序第一
@@ -84,7 +84,7 @@ get_system_arch() {
         system_arch="x86"
         ;;
     "armv7l" | "armv8" | "armv8l" | "aarch64")
-        system_arch="arch"
+        system_arch="arm"
         ;;
     *)
         system_arch=""
@@ -111,7 +111,11 @@ check_kvm_support() {
     fi
     _yellow "将使用QEMU软件模拟(TCG)模式，性能会受到影响。"
     _yellow "Falling back to QEMU software emulation (TCG). Performance will be affected."
-    cpu_type="qemu64"
+    if [[ "$system_arch" == "arm" ]]; then
+        cpu_type="max"
+    else
+        cpu_type="qemu64"
+    fi
     kvm_flag="--kvm 0"
     return 1
 }
@@ -153,22 +157,9 @@ download_image() {
         file_path=""
         # 过去手动修补的镜像
         old_images=(
-            "debian10"
-            "debian11"
-            "debian12"
-            "ubuntu18"
-            "ubuntu20"
-            "ubuntu22"
-            "centos7"
-            "archlinux"
-            "almalinux8"
-            "fedora33"
-            "fedora34"
-            "opensuse-leap-15"
-            "alpinelinux_edge"
-            "alpinelinux_stable"
-            "rockylinux8"
-            "centos8-stream"
+            "debian10" "debian11" "debian12" "ubuntu18" "ubuntu20" "ubuntu22" "centos7" "archlinux"
+            "almalinux8" "fedora33" "fedora34" "opensuse-leap-15" "alpinelinux_edge" "alpinelinux_stable"
+            "rockylinux8" "centos8-stream"
         )
         new_images=($(curl -slk -m 6 https://down.idc.wiki/Image/realServer-Template/current/qcow2/ | grep -o '<a href="[^"]*">' | awk -F'"' '{print $2}' | sed -n '/qcow2$/s#/Image/realServer-Template/current/qcow2/##p'))
         if [[ -n "$new_images" ]]; then
@@ -195,22 +186,37 @@ download_image() {
             check_cdn_file
             ver=""
             if [[ -n "$new_images" ]]; then
+                matched_images=()
                 for image in "${new_images[@]}"; do
-                    if [[ " ${image} " == *" $system "* ]]; then
+                    if [[ "$image" == $system* ]]; then
+                        matched_images+=("$image")
+                    fi
+                done
+                if [[ ${#matched_images[@]} -gt 0 ]]; then
+                    sorted_images=$(printf "%s\n" "${matched_images[@]}" | sort -r)
+
+                    for img in $sorted_images; do
+                        if [[ "$img" == *cloud* ]]; then
+                            selected_image="$img"
+                            break
+                        fi
+                    done
+                    if [[ -z "$selected_image" ]]; then
+                        selected_image=$(echo "$sorted_images" | head -n1)
+                    fi
+                    if [[ -n "$selected_image" ]]; then
                         ver="auto_build"
-                        url="${cdn_success_url}https://github.com/oneclickvirt/pve_kvm_images/releases/download/images/${image}.qcow2"
+                        url="${cdn_success_url}https://github.com/oneclickvirt/pve_kvm_images/releases/download/images/${selected_image}.qcow2"
                         curl -Lk -o "$file_path" "$url"
                         if [ $? -ne 0 ]; then
                             _red "Failed to download $file_path"
                             ver=""
                             rm -rf "$file_path"
-                            break
                         else
-                            _blue "Use auto-fixed image: ${image}"
-                            break
+                            _blue "Use auto-fixed image: ${selected_image}"
                         fi
                     fi
-                done
+                fi
             fi
             if [[ -z "$ver" ]]; then
                 v20=("fedora34" "almalinux8" "debian11" "debian12" "ubuntu18" "ubuntu20" "ubuntu22" "centos7" "alpinelinux_edge" "alpinelinux_stable" "rockylinux8")
@@ -258,7 +264,8 @@ download_image() {
                 fi
             fi
         fi
-    elif [ "$system_arch" = "arch" ]; then
+    elif [ "$system_arch" = "arm" ]; then
+        # TODO 添加 https://www.debian.org/mirror/list debian镜像
         systems=("ubuntu14" "ubuntu16" "ubuntu18" "ubuntu20" "ubuntu22")
         for sys in ${systems[@]}; do
             if [[ "$system" == "$sys" ]]; then
@@ -267,10 +274,9 @@ download_image() {
             fi
         done
         if [[ -z "$file_path" ]]; then
-            # https://www.debian.org/mirror/list
-            _red "Unable to install corresponding system, please check http://cloud-images.ubuntu.com for supported system images "
-            _red "无法安装对应系统，请查看 http://cloud-images.ubuntu.com 支持的系统镜像 "
-            exit 1
+            _red "无法安装对应系统，请查看 http://cloud-images.ubuntu.com 支持的系统镜像。"
+            _red "当前支持的系统版本有: ${systems[*]}"
+            return 1
         fi
         if [ -n "$file_path" ] && [ ! -f "$file_path" ]; then
             case "$system" in
@@ -426,7 +432,11 @@ create_vm() {
     qm set $vm_num --boot order=scsi0
     qm set $vm_num --memory $memory
     # --swap 256
-    qm set $vm_num --ide2 ${storage}:cloudinit
+    if [[ "$system_arch" == "arm" ]]; then
+        qm set $vm_num --scsi1 ${storage}:cloudinit
+    else
+        qm set $vm_num --ide1 ${storage}:cloudinit
+    fi
 }
 
 configure_network() {

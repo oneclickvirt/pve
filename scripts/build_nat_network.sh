@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/oneclickvirt/pve
-# 2025.04.21
+# 2025.05.09
 
 ########## 预设部分输出和部分中间变量
 
@@ -55,7 +55,7 @@ get_system_arch() {
         system_arch="x86"
         ;;
     "armv7l" | "armv8" | "armv8l" | "aarch64")
-        system_arch="arch"
+        system_arch="arm"
         ;;
     *)
         system_arch=""
@@ -336,7 +336,7 @@ if [ ! -z "$ipv6_address" ] && [ ! -z "$ipv6_prefixlen" ] && [ ! -z "$ipv6_gatew
         wget ${cdn_success_url}https://raw.githubusercontent.com/oneclickvirt/pve/main/extra_scripts/ndpresponder.service -O /etc/systemd/system/ndpresponder.service
         chmod 777 /usr/local/bin/ndpresponder
         chmod 777 /etc/systemd/system/ndpresponder.service
-    elif [ "$system_arch" = "arch" ]; then
+    elif [ "$system_arch" = "arm" ]; then
         wget ${cdn_success_url}https://github.com/oneclickvirt/pve/releases/download/ndpresponder_aarch64/ndpresponder -O /usr/local/bin/ndpresponder
         wget ${cdn_success_url}https://raw.githubusercontent.com/oneclickvirt/pve/main/extra_scripts/ndpresponder.service -O /etc/systemd/system/ndpresponder.service
         chmod 777 /usr/local/bin/ndpresponder
