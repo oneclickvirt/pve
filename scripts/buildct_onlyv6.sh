@@ -225,12 +225,12 @@ main() {
     load_default_config
     set_locale
     check_requirements
-    get_system_arch
+    get_system_arch || exit 1
     check_china
     init "$@"
-    validate_ctid
+    validate_ctid || exit 1
     get_ipv6_info
-    prepare_system_image
+    prepare_system_image || exit 1
     create_container
     setup_container_os
     finalize_container

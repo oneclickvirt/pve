@@ -247,12 +247,12 @@ main() {
     check_cdn_file
     load_default_config
     set_locale
-    get_system_arch
+    get_system_arch || exit 1
     check_china
     init "$@"
-    validate_ctid
+    validate_ctid || exit 1
     check_ipv6_setup
-    prepare_system_image
+    prepare_system_image || exit 1
     create_container
     configure_networking
     configure_os

@@ -39,8 +39,9 @@ get_system_arch() {
     esac
     if [ -z "${system_arch}" ] || [ ! -v system_arch ]; then
         _red "This script can only run on machines under x86_64 or arm architecture."
-        exit 1
+        return 1
     fi
+    return 0
 }
 
 check_china() {
@@ -91,7 +92,7 @@ check_ipv6_setup() {
         else
             _green "The status of the ndpresponder service is abnormal and the host may not open a service with a separate IPV6 address."
             _green "ndpresponder服务状态异常，宿主机不可开设带独立IPV6地址的服务。"
-            exit 1
+            return 1
         fi
         if [ -f /usr/local/bin/pve_check_ipv6 ]; then
             host_ipv6_address=$(cat /usr/local/bin/pve_check_ipv6)
@@ -131,11 +132,12 @@ check_ipv6_setup() {
 
 prepare_system_image() {
     if [ "$system_arch" = "x86" ]; then
-        find_and_download_system_image_x86
+        return find_and_download_system_image_x86
     elif [ "$system_arch" = "arm" ]; then
-        find_and_download_system_image_arm
+        return find_and_download_system_image_arm
     else
         echo "Unknown architecture: $system_arch"
+        return 1
     fi
 }
 
@@ -186,7 +188,7 @@ find_and_download_system_image_arm() {
     fi
     if [ ${#system_names[@]} -eq 0 ] && [ -z "$system_name" ]; then
         _red "No suitable system names found."
-        exit 1
+        return 1
     else
         for sy in "${system_names[@]}"; do
             if [[ $sy == "${system_name}"* ]]; then
@@ -197,7 +199,7 @@ find_and_download_system_image_arm() {
     fi
     if [ "$usable_system" = false ]; then
         _red "Invalid system version."
-        exit 1
+        return 1
     fi
     if [ -n "${system_name}" ]; then
         if [ ! -f "/var/lib/vz/template/cache/${system_name}" ]; then
@@ -207,6 +209,7 @@ find_and_download_system_image_arm() {
         fi
         fixed_system=true
     fi
+    return 0
 }
 
 find_and_download_system_image_x86() {
@@ -310,7 +313,7 @@ find_and_download_system_image_x86() {
             system_name=$(pveam available --section system | grep "$en_system" | awk '{print $2}' | head -n1)
             if ! pveam available --section system | grep "$en_system" >/dev/null; then
                 _red "No such system"
-                exit 1
+                return 1
             else
                 _green "Use $system_name"
             fi
@@ -321,7 +324,7 @@ find_and_download_system_image_x86() {
             system_name=$(pveam available --section system | grep "$system" | awk '{print $2}' | head -n1)
             if ! pveam available --section system | grep "$system" >/dev/null; then
                 _red "No such system"
-                exit 1
+                return 1
             else
                 _green "Use $system_name"
             fi
@@ -330,4 +333,5 @@ find_and_download_system_image_x86() {
             fi
         fi
     fi
+    return 0
 }

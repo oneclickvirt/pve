@@ -104,9 +104,12 @@ check_kvm_support() {
 
 prepare_system_image() {
     if [ "$system_arch" = "x86" ]; then
-        prepare_x86_image
+        return prepare_x86_image
     elif [ "$system_arch" = "arm" ]; then
-        prepare_arm_image
+        return prepare_arm_image
+    else
+        echo "Unknown architecture: $system_arch"
+        return 1
     fi
 }
 
