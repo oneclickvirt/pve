@@ -34,6 +34,8 @@
 
 [https://github.com/oneclickvirt/kvm_images](https://github.com/oneclickvirt/kvm_images)
 
+[https://github.com/oneclickvirt/macos](https://github.com/oneclickvirt/macos)
+
 自修补容器镜像源：
 
 [https://github.com/oneclickvirt/lxc_amd64_images](https://github.com/oneclickvirt/lxc_amd64_images)
@@ -54,13 +56,15 @@ Self-patching VM image sources:
 
 [https://github.com/oneclickvirt/pve_kvm_images](https://github.com/oneclickvirt/pve_kvm_images)
 
-[https://github.com/oneclickvirt/pve_lxc_images](https://github.com/oneclickvirt/pve_lxc_images)
-
 [https://github.com/oneclickvirt/kvm_images](https://github.com/oneclickvirt/kvm_images)
+
+[https://github.com/oneclickvirt/macos](https://github.com/oneclickvirt/macos)
 
 Self-patching container image source:
 
 [https://github.com/oneclickvirt/lxc_amd64_images](https://github.com/oneclickvirt/lxc_amd64_images)
+
+[https://github.com/oneclickvirt/pve_lxc_images](https://github.com/oneclickvirt/pve_lxc_images)
 
 [https://github.com/oneclickvirt/lxc_arm_images](https://github.com/oneclickvirt/lxc_arm_images)
 
@@ -74,4 +78,4 @@ https://github.com/spiritLHLS/ecs
 
 ## Stargazers over time
 
-[![Stargazers over time](https://starchart.cc/oneclickvirt/pve.svg)](https://starchart.cc/oneclickvirt/pve)
+[![Stargazers over time](https://starchart.cc/oneclickvirt/pve.svg)](https://github.com/oneclickvirt/ecs)
