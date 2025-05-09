@@ -188,7 +188,7 @@ main() {
     load_default_config || exit 1
     setup_locale
     init_params "$@"
-    validate_params
+    validate_vm_num
     check_environment
     get_system_arch
     if [ -z "${system_arch}" ] || [ ! -v system_arch ]; then

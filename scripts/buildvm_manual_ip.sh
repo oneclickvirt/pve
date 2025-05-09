@@ -298,7 +298,7 @@ main() {
     fi
     check_kvm_support
     init_params "$@"
-    validate_params
+    validate_vm_num
     get_network_info
     check_subnet
     check_ipv6_config

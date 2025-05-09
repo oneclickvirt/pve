@@ -266,7 +266,7 @@ main() {
     fi
     check_kvm_support
     init_params "$@"
-    validate_params
+    validate_vm_num
     get_host_network_info
     create_vm
     configure_vm

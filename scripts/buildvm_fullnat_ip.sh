@@ -246,7 +246,7 @@ main() {
     fi
     check_kvm_support
     init_params "$@"
-    validate_params
+    validate_vm_num
     prepare_system_image
     check_network
     check_ipv6_config
