@@ -169,12 +169,17 @@ find_and_download_system_image_arm() {
             fi
         done
     elif [ -z $num_system ]; then
+        matched_systems=()
         for ((i = 0; i < ${#system_names[@]}; i++)); do
             if [[ "${system_names[$i]}" == "${en_system}_"* ]]; then
-                system_name="${system_names[$i]}"
-                break
+                matched_systems+=("${system_names[$i]}")
             fi
         done
+        if [ ${#matched_systems[@]} -gt 0 ]; then
+            IFS=$'\n' sorted_systems=($(sort <<<"${matched_systems[*]}"))
+            unset IFS
+            system_name="${sorted_systems[-1]}"
+        fi
     else
         version="$num_system"
         system_name="${en_system}_${version}"
