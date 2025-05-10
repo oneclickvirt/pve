@@ -910,40 +910,50 @@ collect_ip_info() {
     if [ ! -f /usr/local/bin/pve_main_ipv4 ]; then
         main_ipv4=$(ip -4 addr show | grep global | awk '{print $2}' | cut -d '/' -f1 | head -n 1)
         if is_private_ipv4 "$main_ipv4"; then
-            # 查询公网IPV4
-            check_ipv4
-            main_ipv4="$IPV4"
+            _green "Detected that the main IP is a private IPv4 address: $main_ipv4"
+            _green "检测到主 IP 是私有 IPv4 地址：$main_ipv4"
+            echo
+            _green "The detected IP is private. If your host is a cloud VPS/cloud dedicated server, please use a public IPv4 address as the main PVE IP."
+            _green "If your host is a local physical machine without a fixed public IP, you can use the current private IP."
+            _green "当前检测到的是私有地址。如果你的宿主机是云服务器/云独立服务器，请选择公网 IPv4 作为 PVE 的主 IP。"
+            _green "如果你的宿主机是本地物理机，且没有固定公网 IPv4，可以使用当前私有地址。"
+            echo
+            reading "Use the current private IPv4 address as the main PVE IP? (y/n) [Default: n]: " use_private
+            _green "是否使用当前私有 IPv4 地址作为 PVE 的主 IP？(y/n) [默认: n]: "
+            use_private=${use_private:-n}
+            if [[ "$use_private" =~ ^[Yy]$ ]]; then
+                _green "Using private IP: $main_ipv4"
+                _green "使用私有 IP：$main_ipv4"
+            else
+                check_ipv4
+                main_ipv4="$IPV4"
+                _green "Using public IP: $main_ipv4"
+                _green "使用公网 IP：$main_ipv4"
+            fi
         fi
         echo "$main_ipv4" >/usr/local/bin/pve_main_ipv4
     fi
-
     # 提取主IPV4地址
     main_ipv4=$(cat /usr/local/bin/pve_main_ipv4)
-
     # 收集IPV4地址(含子网长度)
     if [ ! -f /usr/local/bin/pve_ipv4_address ]; then
         ipv4_address=$(ip addr show | awk '/inet .*global/ && !/inet6/ {print $2}' | sed -n '1p')
         echo "$ipv4_address" >/usr/local/bin/pve_ipv4_address
     fi
-
     # 提取IPV4地址 含子网长度
     ipv4_address=$(cat /usr/local/bin/pve_ipv4_address)
-
     # 收集IPV4网关
     if [ ! -f /usr/local/bin/pve_ipv4_gateway ]; then
         ipv4_gateway=$(ip route | awk '/default/ {print $3}' | sed -n '1p')
         echo "$ipv4_gateway" >/usr/local/bin/pve_ipv4_gateway
     fi
-
     # 提取IPV4网关
     ipv4_gateway=$(cat /usr/local/bin/pve_ipv4_gateway)
-
     # 收集IPV4子网掩码
     if [ ! -f /usr/local/bin/pve_ipv4_subnet ]; then
         ipv4_subnet=$(ipcalc -n "$ipv4_address" | grep -oP 'Netmask:\s+\K.*' | awk '{print $1}')
         echo "$ipv4_subnet" >/usr/local/bin/pve_ipv4_subnet
     fi
-
     # 提取Netmask
     ipv4_subnet=$(cat /usr/local/bin/pve_ipv4_subnet)
 }
@@ -1789,11 +1799,8 @@ configure_firewall_and_proxy
 
 ########## 打印安装成功的信息
 
-# 查询公网IPV4
-check_ipv4
-
 # 打印安装后的信息
-url="https://${IPV4}:8006/"
+url="https://${main_ipv4}:8006/"
 
 # 打印内核
 running_kernel=$(uname -r)
