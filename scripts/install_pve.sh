@@ -666,7 +666,6 @@ check_interface() {
 }
 
 ########## 前置环境检测和组件安装
-#!/bin/bash
 
 # 配置网络优先级和环境检测
 configure_network_priority() {
@@ -690,14 +689,12 @@ check_and_configure_environment() {
         _red "This script must be run as root"
         exit 1
     fi
-
     # 检查系统架构
     get_system_arch
     if [ -z "${system_arch}" ] || [ ! -v system_arch ]; then
         _red "This script can only run on machines under x86_64 or arm architecture."
         exit 1
     fi
-
     # ARM架构特殊处理
     if [ "$system_arch" = "arm" ]; then
         systemctl disable NetworkManager
@@ -719,7 +716,7 @@ setup_dns_check_service() {
 }
 
 # 修复APT源问题
-fix_apt_issues() {
+fix_apt_issues1() {
     # 确保apt没有问题
     /usr/local/bin/check-dns.sh
     apt-get update -y
@@ -728,7 +725,6 @@ fix_apt_issues() {
         apt-get install debian-keyring debian-archive-keyring -y
         apt-get update -y && apt-get full-upgrade -y
     fi
-
     # 处理缺失的公钥
     apt_update_output=$(apt-get update 2>&1)
     echo "$apt_update_output" >"$temp_file_apt_fix"
@@ -743,8 +739,6 @@ fix_apt_issues() {
         fi
     fi
     rm "$temp_file_apt_fix"
-
-    # 尝试更新源
     apt-get update -y
     if [ $? -ne 0 ]; then
         switch_mirrors
@@ -810,7 +804,6 @@ install_base_packages() {
     install_package iputils-ping
     install_package iproute2
     install_package lsb-release
-
     # 获取ethtool路径
     ethtool_path=$(which ethtool)
     check_haveged
@@ -860,10 +853,8 @@ check_system_requirements() {
 detect_system_info() {
     _yellow "Detecting system information, will probably stay on the page for up to 1~2 minutes"
     _yellow "正在检测系统信息，大概会停留在该页面最多1~2分钟"
-
     # 重启网络服务
     restart_network_service
-
     # 收集IP地址信息
     collect_ip_info
 }
@@ -1027,7 +1018,6 @@ check_slaac_status() {
     mac_end_suffix=$(echo $mac_address | awk -F: '{print $4$5}')
     ipv6_end_suffix=${ipv6_address##*:}
     slaac_status=false
-
     if [[ $ipv6_address == *"ff:fe"* ]]; then
         _blue "Since the IPV6 address contains the ff:fe block, the probability is that the IPV6 address assigned out through SLAAC"
         _green "由于IPV6地址含有ff:fe块，大概率通过SLAAC分配出的IPV6地址"
@@ -1041,7 +1031,6 @@ check_slaac_status() {
         _green "由于IPV6的地址和mac地址后缀相同，大概率通过SLAAC分配出的IPV6地址"
         slaac_status=true
     fi
-
     if [[ $slaac_status == true ]] && [ ! -f /usr/local/bin/pve_slaac_status ]; then
         _blue "Since IPV6 addresses are assigned via SLAAC, the subsequent one-click script installation process needs to determine whether to use the largest subnet"
         _blue "If using the largest subnet make sure that the host is assigned an entire subnet and not just an IPV6 address"
@@ -1192,7 +1181,7 @@ configure_network_priority
 run_preliminary_checks
 check_and_configure_environment
 setup_dns_check_service
-fix_apt_issues
+fix_apt_issues1
 ensure_system_paths
 install_base_packages
 handle_special_environments
@@ -1541,7 +1530,7 @@ confirm_continue() {
 }
 
 # 修复APT问题函数
-fix_apt_issues() {
+fix_apt_issues2() {
     apt-get update -y && apt-get full-upgrade -y
     if [ $? -ne 0 ]; then
         apt-get install debian-keyring debian-archive-keyring -y
@@ -1786,7 +1775,7 @@ elif [ "$system_arch" = "arm" ]; then
     setup_arm_pve_repo "$version"
 fi
 rebuild_interfaces
-fix_apt_issues
+fix_apt_issues2
 fix_network_configs
 fix_ipv6_configs
 configure_dns
