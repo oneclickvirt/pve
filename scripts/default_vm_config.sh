@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/oneclickvirt/pve
-# 2025.05.09
+# 2025.05.10
 
 _red() { echo -e "\033[31m\033[01m$@\033[0m"; }
 _green() { echo -e "\033[32m\033[01m$@\033[0m"; }
@@ -104,9 +104,9 @@ check_kvm_support() {
 
 prepare_system_image() {
     if [ "$system_arch" = "x86" ]; then
-        return prepare_x86_image
+        prepare_x86_image || return 1
     elif [ "$system_arch" = "arm" ]; then
-        return prepare_arm_image
+        prepare_arm_image || return 1
     else
         echo "Unknown architecture: $system_arch"
         return 1
