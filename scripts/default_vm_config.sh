@@ -111,6 +111,7 @@ prepare_system_image() {
         echo "Unknown architecture: $system_arch"
         return 1
     fi
+    return 0
 }
 
 prepare_x86_image() {
