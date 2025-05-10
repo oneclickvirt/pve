@@ -341,7 +341,7 @@ check_fe80_gateway() {
 }
 
 # 配置ndpresponder守护进程
-setup_ndpresponder() {
+install_ndpresponder() {
     if [ ! -z "$ipv6_address" ] && [ ! -z "$ipv6_prefixlen" ] && [ ! -z "$ipv6_gateway" ]; then
         if [ -f /usr/local/bin/pve_maximum_subset ] && [ $(cat /usr/local/bin/pve_maximum_subset) = false ]; then
             _blue "No install ndpresponder"
@@ -754,7 +754,7 @@ get_system_arch
 sysctl_path=$(which sysctl)
 detect_network_interfaces
 detect_he_tunnel
-setup_ndpresponder
+install_ndpresponder
 detect_ipv4_info
 prepare_network_interfaces
 configure_vmbr0
