@@ -28,7 +28,7 @@ check_requirements() {
     if ! grep -q "vmbr2" /etc/network/interfaces; then
         _yellow "No vmbr2 exists to open a server with a standalone IPV6 address"
     fi
-    
+
     service_status=$(systemctl is-active ndpresponder.service)
     if [ "$service_status" == "active" ]; then
         _green "The ndpresponder service started successfully and is running, and the host can open a service with a separate IPV6 address."

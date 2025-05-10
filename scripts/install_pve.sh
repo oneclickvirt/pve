@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/oneclickvirt/pve
-# 2025.04.20
+# 2025.05.10
 
 ########## 预设部分输出和部分中间变量
 
@@ -590,7 +590,7 @@ get_system_arch() {
         system_arch="x86"
         ;;
     "armv7l" | "armv8" | "armv8l" | "aarch64")
-        system_arch="arch"
+        system_arch="arm"
         ;;
     *)
         system_arch=""
@@ -666,61 +666,94 @@ check_interface() {
 }
 
 ########## 前置环境检测和组件安装
+#!/bin/bash
 
-# 更改网络优先级为IPV4优先
-sed -i 's/.*precedence ::ffff:0:0\/96.*/precedence ::ffff:0:0\/96  100/g' /etc/gai.conf
-# ChinaIP检测
-check_china
-# cdn检测
-cdn_urls=("https://cdn0.spiritlhl.top/" "http://cdn1.spiritlhl.net/" "http://cdn2.spiritlhl.net/" "http://cdn3.spiritlhl.net/" "http://cdn4.spiritlhl.net/")
-check_cdn_file
-# 前置环境安装与配置
-if [ "$(id -u)" != "0" ]; then
-    _red "This script must be run as root"
-    exit 1
-fi
-get_system_arch
-if [ -z "${system_arch}" ] || [ ! -v system_arch ]; then
-    _red "This script can only run on machines under x86_64 or arm architecture."
-    exit 1
-fi
-if [ "$system_arch" = "arch" ]; then
-    systemctl disable NetworkManager
-    systemctl stop NetworkManager
-fi
-if [ ! -f "/usr/local/bin/check-dns.sh" ]; then
-    wget ${cdn_success_url}https://raw.githubusercontent.com/oneclickvirt/pve/main/extra_scripts/check-dns.sh -O /usr/local/bin/check-dns.sh
-    wget ${cdn_success_url}https://raw.githubusercontent.com/oneclickvirt/pve/main/extra_scripts/check-dns.service -O /etc/systemd/system/check-dns.service
-    chmod +x /usr/local/bin/check-dns.sh
-    chmod +x /etc/systemd/system/check-dns.service
-    systemctl daemon-reload
-    systemctl enable check-dns.service
-    systemctl start check-dns.service
-fi
+# 配置网络优先级和环境检测
+configure_network_priority() {
+    # 更改网络优先级为IPV4优先
+    sed -i 's/.*precedence ::ffff:0:0\/96.*/precedence ::ffff:0:0\/96  100/g' /etc/gai.conf
+}
 
-# 确保apt没有问题
-/usr/local/bin/check-dns.sh
-apt-get update -y
-apt-get full-upgrade -y
-if [ $? -ne 0 ]; then
-    apt-get install debian-keyring debian-archive-keyring -y
-    apt-get update -y && apt-get full-upgrade -y
-fi
-apt_update_output=$(apt-get update 2>&1)
-echo "$apt_update_output" >"$temp_file_apt_fix"
-if grep -q 'NO_PUBKEY' "$temp_file_apt_fix"; then
-    public_keys=$(grep -oE 'NO_PUBKEY [0-9A-F]+' "$temp_file_apt_fix" | awk '{ print $2 }')
-    joined_keys=$(echo "$public_keys" | paste -sd " ")
-    _yellow "No Public Keys: ${joined_keys}"
-    apt-key adv --keyserver keyserver.ubuntu.com --recv-keys ${joined_keys}
-    apt-get update
-    if [ $? -eq 0 ]; then
-        _green "Fixed"
+# 运行前置检查
+run_preliminary_checks() {
+    # ChinaIP检测
+    check_china
+    # cdn检测
+    cdn_urls=("https://cdn0.spiritlhl.top/" "http://cdn1.spiritlhl.net/" "http://cdn2.spiritlhl.net/" "http://cdn3.spiritlhl.net/" "http://cdn4.spiritlhl.net/")
+    check_cdn_file
+}
+
+# 检查运行环境并配置
+check_and_configure_environment() {
+    # 检查root权限
+    if [ "$(id -u)" != "0" ]; then
+        _red "This script must be run as root"
+        exit 1
     fi
-fi
-rm "$temp_file_apt_fix"
-apt-get update -y
-if [ $? -ne 0 ]; then
+
+    # 检查系统架构
+    get_system_arch
+    if [ -z "${system_arch}" ] || [ ! -v system_arch ]; then
+        _red "This script can only run on machines under x86_64 or arm architecture."
+        exit 1
+    fi
+
+    # ARM架构特殊处理
+    if [ "$system_arch" = "arm" ]; then
+        systemctl disable NetworkManager
+        systemctl stop NetworkManager
+    fi
+}
+
+# 设置DNS检查服务
+setup_dns_check_service() {
+    if [ ! -f "/usr/local/bin/check-dns.sh" ]; then
+        wget ${cdn_success_url}https://raw.githubusercontent.com/oneclickvirt/pve/main/extra_scripts/check-dns.sh -O /usr/local/bin/check-dns.sh
+        wget ${cdn_success_url}https://raw.githubusercontent.com/oneclickvirt/pve/main/extra_scripts/check-dns.service -O /etc/systemd/system/check-dns.service
+        chmod +x /usr/local/bin/check-dns.sh
+        chmod +x /etc/systemd/system/check-dns.service
+        systemctl daemon-reload
+        systemctl enable check-dns.service
+        systemctl start check-dns.service
+    fi
+}
+
+# 修复APT源问题
+fix_apt_issues() {
+    # 确保apt没有问题
+    /usr/local/bin/check-dns.sh
+    apt-get update -y
+    apt-get full-upgrade -y
+    if [ $? -ne 0 ]; then
+        apt-get install debian-keyring debian-archive-keyring -y
+        apt-get update -y && apt-get full-upgrade -y
+    fi
+
+    # 处理缺失的公钥
+    apt_update_output=$(apt-get update 2>&1)
+    echo "$apt_update_output" >"$temp_file_apt_fix"
+    if grep -q 'NO_PUBKEY' "$temp_file_apt_fix"; then
+        public_keys=$(grep -oE 'NO_PUBKEY [0-9A-F]+' "$temp_file_apt_fix" | awk '{ print $2 }')
+        joined_keys=$(echo "$public_keys" | paste -sd " ")
+        _yellow "No Public Keys: ${joined_keys}"
+        apt-key adv --keyserver keyserver.ubuntu.com --recv-keys ${joined_keys}
+        apt-get update
+        if [ $? -eq 0 ]; then
+            _green "Fixed"
+        fi
+    fi
+    rm "$temp_file_apt_fix"
+
+    # 尝试更新源
+    apt-get update -y
+    if [ $? -ne 0 ]; then
+        switch_mirrors
+    fi
+    systemctl daemon-reload
+}
+
+# 切换镜像源
+switch_mirrors() {
     if [[ -z "${CN}" || "${CN}" != true ]]; then
         curl -lk https://raw.githubusercontent.com/SuperManito/LinuxMirrors/main/ChangeMirrors.sh -o ChangeMirrors.sh
         chmod 777 ChangeMirrors.sh
@@ -732,102 +765,132 @@ if [ $? -ne 0 ]; then
     fi
     rm -rf ChangeMirrors.sh
     apt-get update -y
+
+    # 如果仍然报错，切换到阿里云镜像源
     if [ $? -ne 0 ]; then
-        # 如果仍然报错，切换到阿里云镜像源
         curl -lk https://gitee.com/SuperManito/LinuxMirrors/raw/main/ChangeMirrors.sh -o ChangeMirrors.sh
         chmod 777 ChangeMirrors.sh
         ./ChangeMirrors.sh --source mirrors.aliyun.com --web-protocol http --intranet false --backup true --updata-software false --clean-cache false --ignore-backup-tips
         rm -rf ChangeMirrors.sh
         apt-get update -y
     fi
-fi
-systemctl daemon-reload
+}
 
-# 检测路径
-target_paths="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
-for path in $(echo $target_paths | tr ':' ' '); do
-    if ! echo $PATH | grep -q "$path"; then
-        echo "路径 $path 不在PATH中，将被添加."
-        export PATH="$PATH:$path"
+# 确保系统路径完整
+ensure_system_paths() {
+    target_paths="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+    for path in $(echo $target_paths | tr ':' ' '); do
+        if ! echo $PATH | grep -q "$path"; then
+            echo "路径 $path 不在PATH中，将被添加."
+            export PATH="$PATH:$path"
+        fi
+    done
+    if [ ! -d /usr/local/bin ]; then
+        mkdir -p /usr/local/bin
     fi
-done
-if [ ! -d /usr/local/bin ]; then
-    mkdir -p /usr/local/bin
-fi
+}
 
-# 部分安装包提前安装
-install_package wget
-install_package curl
-install_package sudo
-install_package ping
-install_package bc
-install_package iptables
-install_package lshw
-install_package net-tools
-install_package service
-install_package ipcalc
-install_package sipcalc
-install_package dmidecode
-install_package dnsutils
-install_package ethtool
-install_package gnupg
-install_package iputils-ping
-install_package iproute2
-install_package lsb-release
-ethtool_path=$(which ethtool)
-check_haveged
-dmidecode_output=$(dmidecode -t system)
-# 特殊处理DigitalOcean的Debian12，需要抢先安装ifupdown2
-if grep -q '^VERSION_ID="12"$' /etc/os-release &&
-    grep -q '^NAME="Debian GNU/Linux"$' /etc/os-release &&
-    [[ $dmidecode_output == *"DigitalOcean"* ]] &&
-    ! dpkg -l ifupdown2 | grep -q '^ii'; then
-    install_package ifupdown2
-elif [[ $dmidecode_output == *"Hetzner_vServer"* ]] || [[ $dmidecode_output == *"Exoscale Compute Platform"* ]] || ! dpkg -l ifupdown | grep -q '^ii'; then
-    # 特殊处理Hetzner
-    prebuild_ifupdown2
-# elif dig -x $main_ipv4 | grep -q "vps.ovh"; then
-#     # 特殊处理OVH
-#     prebuild_ifupdown2
-fi
+# 安装必要的基础软件包
+install_base_packages() {
+    install_package wget
+    install_package curl
+    install_package sudo
+    install_package ping
+    install_package bc
+    install_package iptables
+    install_package lshw
+    install_package net-tools
+    install_package service
+    install_package ipcalc
+    install_package sipcalc
+    install_package dmidecode
+    install_package dnsutils
+    install_package ethtool
+    install_package gnupg
+    install_package iputils-ping
+    install_package iproute2
+    install_package lsb-release
 
-# 预检查
-if [ ! -f /etc/debian_version ] || [ $(grep MemTotal /proc/meminfo | awk '{print $2}') -lt 2000000 ] || [ $(grep -c ^processor /proc/cpuinfo) -lt 2 ] || [ $(
-    if [[ "${CN}" == true ]]; then
-        ping -c 3 baidu.com >/dev/null 2>&1
+    # 获取ethtool路径
+    ethtool_path=$(which ethtool)
+    check_haveged
+}
+
+# 特殊系统环境处理
+handle_special_environments() {
+    dmidecode_output=$(dmidecode -t system)
+    # 特殊处理DigitalOcean的Debian12，需要抢先安装ifupdown2
+    if grep -q '^VERSION_ID="12"$' /etc/os-release &&
+        grep -q '^NAME="Debian GNU/Linux"$' /etc/os-release &&
+        [[ $dmidecode_output == *"DigitalOcean"* ]] &&
+        ! dpkg -l ifupdown2 | grep -q '^ii'; then
+        install_package ifupdown2
+    elif [[ $dmidecode_output == *"Hetzner_vServer"* ]] || [[ $dmidecode_output == *"Exoscale Compute Platform"* ]] || ! dpkg -l ifupdown | grep -q '^ii'; then
+        # 特殊处理Hetzner
+        prebuild_ifupdown2
+    # elif dig -x $main_ipv4 | grep -q "vps.ovh"; then
+    #     # 特殊处理OVH
+    #     prebuild_ifupdown2
+    fi
+}
+
+# 系统最低要求检查
+check_system_requirements() {
+    if [ ! -f /etc/debian_version ] || [ $(grep MemTotal /proc/meminfo | awk '{print $2}') -lt 2000000 ] || [ $(grep -c ^processor /proc/cpuinfo) -lt 2 ] || [ $(
+        if [[ "${CN}" == true ]]; then
+            ping -c 3 baidu.com >/dev/null 2>&1
+        else
+            ping -c 3 google.com >/dev/null 2>&1
+        fi
+        echo $?
+    ) -ne 0 ]; then
+        _red "Error: This system does not meet the minimum requirements for Proxmox VE installation."
+        _yellow "Do you want to continue the installation? (Enter to not continue the installation by default) (y/[n])"
+        reading "是否要继续安装？(回车则默认不继续安装) (y/[n]) " confirm
+        echo ""
+        if [ "$confirm" != "y" ]; then
+            exit 1
+        fi
     else
-        ping -c 3 google.com >/dev/null 2>&1
+        _green "The system meets the minimum requirements for Proxmox VE installation."
     fi
-    echo $?
-) -ne 0 ]; then
-    _red "Error: This system does not meet the minimum requirements for Proxmox VE installation."
-    _yellow "Do you want to continue the installation? (Enter to not continue the installation by default) (y/[n])"
-    reading "是否要继续安装？(回车则默认不继续安装) (y/[n]) " confirm
-    echo ""
-    if [ "$confirm" != "y" ]; then
-        exit 1
-    fi
-else
-    _green "The system meets the minimum requirements for Proxmox VE installation."
-fi
+}
 
 # 检测系统信息
-_yellow "Detecting system information, will probably stay on the page for up to 1~2 minutes"
-_yellow "正在检测系统信息，大概会停留在该页面最多1~2分钟"
+detect_system_info() {
+    _yellow "Detecting system information, will probably stay on the page for up to 1~2 minutes"
+    _yellow "正在检测系统信息，大概会停留在该页面最多1~2分钟"
 
-systemctl restart networking
-if [ $? -ne 0 ] && [ -e "/etc/systemd/system/networking.service" ]; then
-    # altname=$(ip addr show eth0 | grep altname | awk '{print $NF}')
-    if [ -f /etc/network/interfaces ] && grep -q "eth0" /etc/network/interfaces; then
-        chattr -i /etc/network/interfaces
-        sed -i '/^auto ens[0-9]\+$/d' /etc/network/interfaces
-        sed -i '/^allow-hotplug ens[0-9]\+$/d' /etc/network/interfaces
-        sed -i '/^iface ens[0-9]\+ inet/d' /etc/network/interfaces
-        chattr +i /etc/network/interfaces
+    # 重启网络服务
+    restart_network_service
+
+    # 收集IP地址信息
+    collect_ip_info
+}
+
+# 重启网络服务
+restart_network_service() {
+    systemctl restart networking
+    if [ $? -ne 0 ] && [ -e "/etc/systemd/system/networking.service" ]; then
+        # 尝试修复网络接口配置
+        if [ -f /etc/network/interfaces ] && grep -q "eth0" /etc/network/interfaces; then
+            chattr -i /etc/network/interfaces
+            sed -i '/^auto ens[0-9]\+$/d' /etc/network/interfaces
+            sed -i '/^allow-hotplug ens[0-9]\+$/d' /etc/network/interfaces
+            sed -i '/^iface ens[0-9]\+ inet/d' /etc/network/interfaces
+            chattr +i /etc/network/interfaces
+        fi
     fi
-fi
-systemctl restart networking
-if [ $? -ne 0 ] && [ -e "/etc/systemd/system/networking.service" ]; then
+
+    systemctl restart networking
+    if [ $? -ne 0 ] && [ -e "/etc/systemd/system/networking.service" ]; then
+        # 安装路由缓存清理脚本
+        setup_interface_route_cache_cleaner
+    fi
+}
+
+# 设置接口路由缓存清理
+setup_interface_route_cache_cleaner() {
     if [ ! -f "/usr/local/bin/clear_interface_route_cache.sh" ]; then
         wget ${cdn_success_url}https://raw.githubusercontent.com/oneclickvirt/pve/main/extra_scripts/clear_interface_route_cache.sh -O /usr/local/bin/clear_interface_route_cache.sh
         wget ${cdn_success_url}https://raw.githubusercontent.com/oneclickvirt/pve/main/extra_scripts/clear_interface_route_cache.service -O /etc/systemd/system/clear_interface_route_cache.service
@@ -839,128 +902,122 @@ if [ $? -ne 0 ] && [ -e "/etc/systemd/system/networking.service" ]; then
         _green "检测到路由冲突存在异常，请执行 reboot 重启机器以启动修复的守护进程，再次尝试安装"
         exit 1
     fi
-fi
+}
 
-# 检测主IPV4相关信息
-if [ ! -f /usr/local/bin/pve_main_ipv4 ]; then
-    main_ipv4=$(ip -4 addr show | grep global | awk '{print $2}' | cut -d '/' -f1 | head -n 1)
-    if is_private_ipv4 "$main_ipv4"; then
-        # 查询公网IPV4
-        check_ipv4
-        main_ipv4="$IPV4"
+# 收集IP地址信息
+collect_ip_info() {
+    # 收集主IPV4地址
+    if [ ! -f /usr/local/bin/pve_main_ipv4 ]; then
+        main_ipv4=$(ip -4 addr show | grep global | awk '{print $2}' | cut -d '/' -f1 | head -n 1)
+        if is_private_ipv4 "$main_ipv4"; then
+            # 查询公网IPV4
+            check_ipv4
+            main_ipv4="$IPV4"
+        fi
+        echo "$main_ipv4" >/usr/local/bin/pve_main_ipv4
     fi
-    echo "$main_ipv4" >/usr/local/bin/pve_main_ipv4
-fi
-# 提取主IPV4地址
-main_ipv4=$(cat /usr/local/bin/pve_main_ipv4)
-if [ ! -f /usr/local/bin/pve_ipv4_address ]; then
-    ipv4_address=$(ip addr show | awk '/inet .*global/ && !/inet6/ {print $2}' | sed -n '1p')
-    echo "$ipv4_address" >/usr/local/bin/pve_ipv4_address
-fi
-# 提取IPV4地址 含子网长度
-ipv4_address=$(cat /usr/local/bin/pve_ipv4_address)
-if [ ! -f /usr/local/bin/pve_ipv4_gateway ]; then
-    ipv4_gateway=$(ip route | awk '/default/ {print $3}' | sed -n '1p')
-    echo "$ipv4_gateway" >/usr/local/bin/pve_ipv4_gateway
-fi
-# 提取IPV4网关
-ipv4_gateway=$(cat /usr/local/bin/pve_ipv4_gateway)
-if [ ! -f /usr/local/bin/pve_ipv4_subnet ]; then
-    ipv4_subnet=$(ipcalc -n "$ipv4_address" | grep -oP 'Netmask:\s+\K.*' | awk '{print $1}')
-    echo "$ipv4_subnet" >/usr/local/bin/pve_ipv4_subnet
-fi
-# 提取Netmask
-ipv4_subnet=$(cat /usr/local/bin/pve_ipv4_subnet)
 
-# 检测物理接口和MAC地址
-interface_1=$(lshw -C network | awk '/logical name:/{print $3}' | sed -n '1p')
-interface_2=$(lshw -C network | awk '/logical name:/{print $3}' | sed -n '2p')
-check_interface
-if [ ! -f /usr/local/bin/pve_mac_address ] || [ ! -s /usr/local/bin/pve_mac_address ] || [ "$(sed -e '/^[[:space:]]*$/d' /usr/local/bin/pve_mac_address)" = "" ]; then
-    mac_address=$(ip -o link show dev ${interface} | awk '{print $17}')
-    echo "$mac_address" >/usr/local/bin/pve_mac_address
-fi
-mac_address=$(cat /usr/local/bin/pve_mac_address)
-if [ ! -f /etc/systemd/network/10-persistent-net.link ]; then
-    echo '[Match]' >/etc/systemd/network/10-persistent-net.link
-    echo "MACAddress=${mac_address}" >>/etc/systemd/network/10-persistent-net.link
-    echo "" >>/etc/systemd/network/10-persistent-net.link
-    echo '[Link]' >>/etc/systemd/network/10-persistent-net.link
-    echo "Name=${interface}" >>/etc/systemd/network/10-persistent-net.link
-    /etc/init.d/udev force-reload
-fi
+    # 提取主IPV4地址
+    main_ipv4=$(cat /usr/local/bin/pve_main_ipv4)
 
-# 检测IPV6相关的信息
-if [ ! -f /usr/local/bin/pve_ipv6_gateway ] || [ ! -s /usr/local/bin/pve_ipv6_gateway ] || [ "$(sed -e '/^[[:space:]]*$/d' /usr/local/bin/pve_ipv6_gateway)" = "" ]; then
-    ipv6_gateway=$(ip -6 route show | awk '/default via/{print $3}' | head -n1)
-    # output=$(ip -6 route show | awk '/default via/{print $3}')
-    # num_lines=$(echo "$output" | wc -l)
-    # ipv6_gateway=""
-    # if [ $num_lines -eq 1 ]; then
-    #     ipv6_gateway="$output"
-    # elif [ $num_lines -ge 2 ]; then
-    #     non_fe80_lines=$(echo "$output" | grep -v '^fe80')
-    #     if [ -n "$non_fe80_lines" ]; then
-    #         ipv6_gateway=$(echo "$non_fe80_lines" | head -n 1)
-    #     else
-    #         ipv6_gateway=$(echo "$output" | head -n 1)
-    #     fi
-    # fi
-    echo "$ipv6_gateway" >/usr/local/bin/pve_ipv6_gateway
-fi
-ipv6_gateway=$(cat /usr/local/bin/pve_ipv6_gateway)
-if [ ! -f /usr/local/bin/pve_check_ipv6 ] || [ ! -s /usr/local/bin/pve_check_ipv6 ] || [ "$(sed -e '/^[[:space:]]*$/d' /usr/local/bin/pve_check_ipv6)" = "" ]; then
-    check_ipv6
-fi
-if [ ! -f /usr/local/bin/pve_fe80_address ] || [ ! -s /usr/local/bin/pve_fe80_address ] || [ "$(sed -e '/^[[:space:]]*$/d' /usr/local/bin/pve_fe80_address)" = "" ]; then
-    fe80_address=$(ip -6 addr show dev $interface | awk '/inet6 fe80/ {print $2}')
-    echo "$fe80_address" >/usr/local/bin/pve_fe80_address
-fi
-# 判断fe80是否已加白
-if [[ $ipv6_gateway == fe80* ]]; then
-    ipv6_gateway_fe80="Y"
-else
-    ipv6_gateway_fe80="N"
-fi
-ipv6_address=$(cat /usr/local/bin/pve_check_ipv6)
-fe80_address=$(cat /usr/local/bin/pve_fe80_address)
-if [ ! -f /usr/local/bin/pve_ipv6_prefixlen ] || [ ! -s /usr/local/bin/pve_ipv6_prefixlen ] || [ "$(sed -e '/^[[:space:]]*$/d' /usr/local/bin/pve_ipv6_prefixlen)" = "" ]; then
-    ipv6_prefixlen=""
-    output=$(ifconfig ${interface} | grep -oP 'inet6 (?!fe80:).*prefixlen \K\d+')
-    num_lines=$(echo "$output" | wc -l)
-    if [ $num_lines -ge 2 ]; then
-        ipv6_prefixlen=$(echo "$output" | sort -n | head -n 1)
-    else
-        ipv6_prefixlen=$(echo "$output" | head -n 1)
+    # 收集IPV4地址(含子网长度)
+    if [ ! -f /usr/local/bin/pve_ipv4_address ]; then
+        ipv4_address=$(ip addr show | awk '/inet .*global/ && !/inet6/ {print $2}' | sed -n '1p')
+        echo "$ipv4_address" >/usr/local/bin/pve_ipv4_address
     fi
-    echo "$ipv6_prefixlen" >/usr/local/bin/pve_ipv6_prefixlen
-fi
-ipv6_prefixlen=$(cat /usr/local/bin/pve_ipv6_prefixlen)
-# if [[ "${ipv6_gateway_fe80}" == "Y" ]]; then
-#     if ping -c 1 -6 -W 3 $ipv6_address >/dev/null 2>&1; then
-#         echo "IPv6 address is reachable."
-#     else
-#         echo "IPv6 address is not reachable. Setting to empty."
-#         echo "" >/usr/local/bin/pve_check_ipv6
-#     fi
-#     if ping -c 1 -6 -W 3 $ipv6_gateway >/dev/null 2>&1; then
-#         echo "IPv6 gateway is reachable."
-#     else
-#         echo "IPv6 gateway is not reachable. Setting to empty."
-#         echo "" >/usr/local/bin/pve_ipv6_gateway
-#     fi
-# fi
-ipv6_address=$(cat /usr/local/bin/pve_check_ipv6)
-ipv6_gateway=$(cat /usr/local/bin/pve_ipv6_gateway)
 
-if [ -z "$ipv6_address" ] || [ -z "$ipv6_prefixlen" ] || [ -z "$ipv6_gateway" ]; then
-    echo "" >/usr/local/bin/pve_slaac_status
-    echo "" >/usr/local/bin/fix_interfaces_ipv6_auto_type
-else
-    # 判断是否存在SLAAC机制
+    # 提取IPV4地址 含子网长度
+    ipv4_address=$(cat /usr/local/bin/pve_ipv4_address)
+
+    # 收集IPV4网关
+    if [ ! -f /usr/local/bin/pve_ipv4_gateway ]; then
+        ipv4_gateway=$(ip route | awk '/default/ {print $3}' | sed -n '1p')
+        echo "$ipv4_gateway" >/usr/local/bin/pve_ipv4_gateway
+    fi
+
+    # 提取IPV4网关
+    ipv4_gateway=$(cat /usr/local/bin/pve_ipv4_gateway)
+
+    # 收集IPV4子网掩码
+    if [ ! -f /usr/local/bin/pve_ipv4_subnet ]; then
+        ipv4_subnet=$(ipcalc -n "$ipv4_address" | grep -oP 'Netmask:\s+\K.*' | awk '{print $1}')
+        echo "$ipv4_subnet" >/usr/local/bin/pve_ipv4_subnet
+    fi
+
+    # 提取Netmask
+    ipv4_subnet=$(cat /usr/local/bin/pve_ipv4_subnet)
+}
+
+# 检测网络接口和MAC地址
+detect_network_interfaces() {
+    # 检测物理接口
+    interface_1=$(lshw -C network | awk '/logical name:/{print $3}' | sed -n '1p')
+    interface_2=$(lshw -C network | awk '/logical name:/{print $3}' | sed -n '2p')
+    check_interface
+
+    # 收集MAC地址
+    if [ ! -f /usr/local/bin/pve_mac_address ] || [ ! -s /usr/local/bin/pve_mac_address ] || [ "$(sed -e '/^[[:space:]]*$/d' /usr/local/bin/pve_mac_address)" = "" ]; then
+        mac_address=$(ip -o link show dev ${interface} | awk '{print $17}')
+        echo "$mac_address" >/usr/local/bin/pve_mac_address
+    fi
+    mac_address=$(cat /usr/local/bin/pve_mac_address)
+
+    # 配置持久化网络接口名称
+    setup_persistent_network_interface
+}
+
+# 设置持久化网络接口名称
+setup_persistent_network_interface() {
+    if [ ! -f /etc/systemd/network/10-persistent-net.link ]; then
+        echo '[Match]' >/etc/systemd/network/10-persistent-net.link
+        echo "MACAddress=${mac_address}" >>/etc/systemd/network/10-persistent-net.link
+        echo "" >>/etc/systemd/network/10-persistent-net.link
+        echo '[Link]' >>/etc/systemd/network/10-persistent-net.link
+        echo "Name=${interface}" >>/etc/systemd/network/10-persistent-net.link
+        /etc/init.d/udev force-reload
+    fi
+}
+
+# 获取IPV6网关信息
+get_ipv6_gateway() {
+    if [ ! -f /usr/local/bin/pve_ipv6_gateway ] || [ ! -s /usr/local/bin/pve_ipv6_gateway ] || [ "$(sed -e '/^[[:space:]]*$/d' /usr/local/bin/pve_ipv6_gateway)" = "" ]; then
+        ipv6_gateway=$(ip -6 route show | awk '/default via/{print $3}' | head -n1)
+        echo "$ipv6_gateway" >/usr/local/bin/pve_ipv6_gateway
+    fi
+    ipv6_gateway=$(cat /usr/local/bin/pve_ipv6_gateway)
+}
+
+# 获取fe80地址
+get_fe80_address() {
+    if [ ! -f /usr/local/bin/pve_fe80_address ] || [ ! -s /usr/local/bin/pve_fe80_address ] || [ "$(sed -e '/^[[:space:]]*$/d' /usr/local/bin/pve_fe80_address)" = "" ]; then
+        fe80_address=$(ip -6 addr show dev $interface | awk '/inet6 fe80/ {print $2}')
+        echo "$fe80_address" >/usr/local/bin/pve_fe80_address
+    fi
+    fe80_address=$(cat /usr/local/bin/pve_fe80_address)
+}
+
+# 获取IPV6前缀长度
+get_ipv6_prefixlen() {
+    if [ ! -f /usr/local/bin/pve_ipv6_prefixlen ] || [ ! -s /usr/local/bin/pve_ipv6_prefixlen ] || [ "$(sed -e '/^[[:space:]]*$/d' /usr/local/bin/pve_ipv6_prefixlen)" = "" ]; then
+        ipv6_prefixlen=""
+        output=$(ifconfig ${interface} | grep -oP 'inet6 (?!fe80:).*prefixlen \K\d+')
+        num_lines=$(echo "$output" | wc -l)
+        if [ $num_lines -ge 2 ]; then
+            ipv6_prefixlen=$(echo "$output" | sort -n | head -n 1)
+        else
+            ipv6_prefixlen=$(echo "$output" | head -n 1)
+        fi
+        echo "$ipv6_prefixlen" >/usr/local/bin/pve_ipv6_prefixlen
+    fi
+    ipv6_prefixlen=$(cat /usr/local/bin/pve_ipv6_prefixlen)
+}
+
+# 检查IPV6是否使用SLAAC分配
+check_slaac_status() {
     mac_end_suffix=$(echo $mac_address | awk -F: '{print $4$5}')
     ipv6_end_suffix=${ipv6_address##*:}
     slaac_status=false
+
     if [[ $ipv6_address == *"ff:fe"* ]]; then
         _blue "Since the IPV6 address contains the ff:fe block, the probability is that the IPV6 address assigned out through SLAAC"
         _green "由于IPV6地址含有ff:fe块，大概率通过SLAAC分配出的IPV6地址"
@@ -974,6 +1031,7 @@ else
         _green "由于IPV6的地址和mac地址后缀相同，大概率通过SLAAC分配出的IPV6地址"
         slaac_status=true
     fi
+
     if [[ $slaac_status == true ]] && [ ! -f /usr/local/bin/pve_slaac_status ]; then
         _blue "Since IPV6 addresses are assigned via SLAAC, the subsequent one-click script installation process needs to determine whether to use the largest subnet"
         _blue "If using the largest subnet make sure that the host is assigned an entire subnet and not just an IPV6 address"
@@ -983,9 +1041,11 @@ else
         _green "无法在宿主机内部判断上游给了本机多大的子网，详情请询问上游技术人员"
         echo "" >/usr/local/bin/pve_slaac_status
     fi
-    # 提示是否在SLAAC分配的情况下还使用最大IPV6子网范围
+}
+
+# 询问是否使用最大子网
+ask_maximum_subnet() {
     if [ -f /usr/local/bin/pve_slaac_status ] && [ ! -f /usr/local/bin/pve_maximum_subset ] && [ ! -f /usr/local/bin/fix_interfaces_ipv6_auto_type ]; then
-        # 大概率由SLAAC动态分配，需要询问使用的子网范围 仅本机IPV6 或 最大子网
         _blue "It is detected that IPV6 addresses are most likely to be dynamically assigned by SLAAC, and if there is no subsequent need to assign separate IPV6 addresses to VMs/containers, the following option is best selected n"
         _green "检测到IPV6地址大概率由SLAAC动态分配，若后续不需要分配独立的IPV6地址给虚拟机/容器，则下面选项最好选 n"
         _blue "Is the maximum subnet range feasible with IPV6 used?([n]/y)"
@@ -997,11 +1057,13 @@ else
         fi
         echo "" >/usr/local/bin/fix_interfaces_ipv6_auto_type
     fi
-    # 不存在SLAAC机制的情况下或存在时使用最大IPV6子网范围，需要重构IPV6地址
+}
+
+# 重构IPV6地址
+rebuild_ipv6_address() {
     if [ ! -f /usr/local/bin/pve_maximum_subset ] || [ $(cat /usr/local/bin/pve_maximum_subset) = true ]; then
         ipv6_address_without_last_segment="${ipv6_address%:*}:"
         if [[ $ipv6_address != *:: && $ipv6_address_without_last_segment != *:: ]]; then
-            # 重构IPV6地址，使用该IPV6子网内的0001结尾的地址
             ipv6_address=$(sipcalc -i ${ipv6_address}/${ipv6_prefixlen} | grep "Subnet prefix (masked)" | cut -d ' ' -f 4 | cut -d '/' -f 1 | sed 's/:0:0:0:0:/::/' | sed 's/:0:0:0:/::/')
             ipv6_address="${ipv6_address%:*}:1"
             if [ "$ipv6_address" == "$ipv6_gateway" ]; then
@@ -1021,175 +1083,235 @@ else
             echo "${ipv6_address}" >/usr/local/bin/pve_check_ipv6
         fi
     fi
-fi
+}
 
-# 检查50-cloud-init是否存在特定配置
-if [ -f "/etc/network/interfaces.d/50-cloud-init" ]; then
-    if grep -Fxq "# /etc/cloud/cloud.cfg.d/99-disable-network-config.cfg with the following:" /etc/network/interfaces.d/50-cloud-init && grep -Fxq "# network: {config: disabled}" /etc/network/interfaces.d/50-cloud-init; then
-        if [ ! -f "/etc/cloud/cloud.cfg.d/99-disable-network-config.cfg" ]; then
-            echo "Creating /etc/cloud/cloud.cfg.d/99-disable-network-config.cfg."
-            echo "network: {config: disabled}" >/etc/cloud/cloud.cfg.d/99-disable-network-config.cfg
+# 检查并配置cloud-init
+configure_cloud_init() {
+    if [ -f "/etc/network/interfaces.d/50-cloud-init" ]; then
+        if grep -Fxq "# /etc/cloud/cloud.cfg.d/99-disable-network-config.cfg with the following:" /etc/network/interfaces.d/50-cloud-init && grep -Fxq "# network: {config: disabled}" /etc/network/interfaces.d/50-cloud-init; then
+            if [ ! -f "/etc/cloud/cloud.cfg.d/99-disable-network-config.cfg" ]; then
+                echo "Creating /etc/cloud/cloud.cfg.d/99-disable-network-config.cfg."
+                echo "network: {config: disabled}" >/etc/cloud/cloud.cfg.d/99-disable-network-config.cfg
+            fi
         fi
     fi
-fi
+}
 
-# 特殊化处理各虚拟化
-if [ ! -f "/etc/network/interfaces" ]; then
-    touch "/etc/network/interfaces"
-    chattr -i /etc/network/interfaces
-    echo "auto lo" >>/etc/network/interfaces
-    echo "iface lo inet loopback" >>/etc/network/interfaces
-    echo "iface $interface inet static" >>/etc/network/interfaces
-    echo "    address $ipv4_address" >>/etc/network/interfaces
-    echo "    netmask $ipv4_subnet" >>/etc/network/interfaces
-    echo "    gateway $ipv4_gateway" >>/etc/network/interfaces
-    if [[ -z "${CN}" || "${CN}" != true ]]; then
-        echo "    dns-nameservers 8.8.8.8 8.8.4.4" >>/etc/network/interfaces
-    else
-        echo "    dns-nameservers 8.8.8.8 223.5.5.5" >>/etc/network/interfaces
+# 创建网络接口配置文件
+create_network_interfaces() {
+    if [ ! -f "/etc/network/interfaces" ]; then
+        touch "/etc/network/interfaces"
+        chattr -i /etc/network/interfaces
+        echo "auto lo" >>/etc/network/interfaces
+        echo "iface lo inet loopback" >>/etc/network/interfaces
+        echo "iface $interface inet static" >>/etc/network/interfaces
+        echo "    address $ipv4_address" >>/etc/network/interfaces
+        echo "    netmask $ipv4_subnet" >>/etc/network/interfaces
+        echo "    gateway $ipv4_gateway" >>/etc/network/interfaces
+        if [[ -z "${CN}" || "${CN}" != true ]]; then
+            echo "    dns-nameservers 8.8.8.8 8.8.4.4" >>/etc/network/interfaces
+        else
+            echo "    dns-nameservers 8.8.8.8 223.5.5.5" >>/etc/network/interfaces
+        fi
+        chattr +i /etc/network/interfaces
     fi
-    chattr +i /etc/network/interfaces
-fi
+}
 
-# 网络配置修改
+# 清理DNS配置行
+clean_dns_config() {
+    dns_lines=$(grep -c "dns-nameservers" /etc/network/interfaces)
+    if [ $dns_lines -gt 1 ]; then
+        rm -rf /tmp/interfaces.tmp
+        original_lines=$(wc -l </etc/network/interfaces)
+        current_dns_lines=0
+        while read -r line; do
+            if echo "$line" | grep -q "dns-nameservers"; then
+                current_dns_lines=$((current_dns_lines + 1))
+                if [ $current_dns_lines -lt $dns_lines ]; then
+                    continue
+                fi
+            fi
+            echo "$line" >>/tmp/interfaces.tmp
+        done </etc/network/interfaces
+        chattr -i /etc/network/interfaces
+        mv /tmp/interfaces.tmp /etc/network/interfaces
+        chattr +i /etc/network/interfaces
+        rm -rf /tmp/interfaces.tmp
+    fi
+}
+
+# 清理手动IPv6配置
+clean_manual_ipv6() {
+    if grep -q "iface ${interface} inet6 manual" /etc/network/interfaces && grep -q "try_dhcp 1" /etc/network/interfaces; then
+        chattr -i /etc/network/interfaces
+        sed -i '/iface ${interface} inet6 manual/d' /etc/network/interfaces
+        sed -i '/try_dhcp 1/d' /etc/network/interfaces
+        chattr +i /etc/network/interfaces
+    fi
+}
+
+# 配置fe80地址白名单
+configure_fe80_whitelist() {
+    if [[ "${ipv6_gateway_fe80}" == "N" ]]; then
+        chattr -i /etc/network/interfaces
+        echo "        up ip addr del $fe80_address dev $interface" >>/etc/network/interfaces
+        remove_duplicate_lines "/etc/network/interfaces"
+        chattr +i /etc/network/interfaces
+    fi
+}
+
+# 系统重启检查
+check_reboot_status() {
+    if [ ! -f "/usr/local/bin/reboot_pve.txt" ]; then
+        check_time_zone
+        if [[ $dmidecode_output == *"Microsoft Corporation"* ]]; then
+            sed -i 's#http://debian-archive.trafficmanager.net/debian#http://deb.debian.org/debian#g' /etc/apt/sources.list
+            sed -i 's#http://debian-archive.trafficmanager.net/debian-security#http://security.debian.org/debian-security#g' /etc/apt/sources.list
+            sed -i 's#http://debian-archive.trafficmanager.net/debian bullseye-updates#http://deb.debian.org/debian bullseye-updates#g' /etc/apt/sources.list
+            sed -i 's#http://debian-archive.trafficmanager.net/debian bullseye-backports#http://deb.debian.org/debian bullseye-backports#g' /etc/apt/sources.list
+        fi
+        echo "1" >"/usr/local/bin/reboot_pve.txt"
+        _green "Please execute reboot to reboot the system and then execute this script again"
+        _green "Please wait for at least 20 seconds without automatically rebooting the system before executing this script."
+        _green "请执行 reboot 重启系统后再次执行本脚本，再次使用SSH登录后请等待至少20秒未自动重启系统再执行本脚本"
+        exit 1
+    fi
+}
+
+configure_network_priority
+run_preliminary_checks
+check_and_configure_environment
+setup_dns_check_service
+fix_apt_issues
+ensure_system_paths
+install_base_packages
+handle_special_environments
+check_system_requirements
+detect_system_info
+detect_network_interfaces
+get_ipv6_gateway
+if [ ! -f /usr/local/bin/pve_check_ipv6 ] || [ ! -s /usr/local/bin/pve_check_ipv6 ] || [ "$(sed -e '/^[[:space:]]*$/d' /usr/local/bin/pve_check_ipv6)" = "" ]; then
+    check_ipv6
+fi
+get_fe80_address
+if [[ $ipv6_gateway == fe80* ]]; then
+    ipv6_gateway_fe80="Y"
+else
+    ipv6_gateway_fe80="N"
+fi
+ipv6_address=$(cat /usr/local/bin/pve_check_ipv6)
+get_ipv6_prefixlen
+ipv6_address=$(cat /usr/local/bin/pve_check_ipv6)
+ipv6_gateway=$(cat /usr/local/bin/pve_ipv6_gateway)
+if [ -z "$ipv6_address" ] || [ -z "$ipv6_prefixlen" ] || [ -z "$ipv6_gateway" ]; then
+    echo "" >/usr/local/bin/pve_slaac_status
+    echo "" >/usr/local/bin/fix_interfaces_ipv6_auto_type
+else
+    check_slaac_status
+    ask_maximum_subnet
+    rebuild_ipv6_address
+fi
+configure_cloud_init
+create_network_interfaces
 rebuild_interfaces
-# 去除空行之外的重复行
 remove_duplicate_lines "/etc/network/interfaces"
 if [ -f "/etc/network/interfaces.new" ]; then
     remove_duplicate_lines "/etc/network/interfaces.new"
 fi
-# 删除可能的多个dns-nameservers的行只保留一行
-dns_lines=$(grep -c "dns-nameservers" /etc/network/interfaces)
-if [ $dns_lines -gt 1 ]; then
-    rm -rf /tmp/interfaces.tmp
-    original_lines=$(wc -l </etc/network/interfaces)
-    current_dns_lines=0
-    while read -r line; do
-        if echo "$line" | grep -q "dns-nameservers"; then
-            current_dns_lines=$((current_dns_lines + 1))
-            if [ $current_dns_lines -lt $dns_lines ]; then
-                continue
-            fi
-        fi
-        echo "$line" >>/tmp/interfaces.tmp
-    done </etc/network/interfaces
-    chattr -i /etc/network/interfaces
-    mv /tmp/interfaces.tmp /etc/network/interfaces
-    chattr +i /etc/network/interfaces
-    rm -rf /tmp/interfaces.tmp
-fi
-
-# 当v6是共存的类型时删除v6
-if grep -q "iface ${interface} inet6 manual" /etc/network/interfaces && grep -q "try_dhcp 1" /etc/network/interfaces; then
-    chattr -i /etc/network/interfaces
-    # sed -i 's/iface ${interface} inet6 manual/iface ${interface} inet6 dhcp/' /etc/network/interfaces
-    sed -i '/iface ${interface} inet6 manual/d' /etc/network/interfaces
-    sed -i '/try_dhcp 1/d' /etc/network/interfaces
-    chattr +i /etc/network/interfaces
-fi
-
-# cloudinit 重构
+clean_dns_config
+clean_manual_ipv6
 rebuild_cloud_init
 fix_interfaces_ipv6_auto_type
-
-# 判断是否需要IPV6加白
-if [[ "${ipv6_gateway_fe80}" == "N" ]]; then
-    chattr -i /etc/network/interfaces
-    echo "        up ip addr del $fe80_address dev $interface" >>/etc/network/interfaces
-    remove_duplicate_lines "/etc/network/interfaces"
-    chattr +i /etc/network/interfaces
-fi
-
-# 统计运行次数
+configure_fe80_whitelist
 statistics_of_run_times
-
-# 检测是否已重启过
-if [ ! -f "/usr/local/bin/reboot_pve.txt" ]; then
-    # 确保时间没问题
-    check_time_zone
-    # 特殊处理Azure
-    if [[ $dmidecode_output == *"Microsoft Corporation"* ]]; then
-        sed -i 's#http://debian-archive.trafficmanager.net/debian#http://deb.debian.org/debian#g' /etc/apt/sources.list
-        sed -i 's#http://debian-archive.trafficmanager.net/debian-security#http://security.debian.org/debian-security#g' /etc/apt/sources.list
-        sed -i 's#http://debian-archive.trafficmanager.net/debian bullseye-updates#http://deb.debian.org/debian bullseye-updates#g' /etc/apt/sources.list
-        sed -i 's#http://debian-archive.trafficmanager.net/debian bullseye-backports#http://deb.debian.org/debian bullseye-backports#g' /etc/apt/sources.list
-    fi
-    echo "1" >"/usr/local/bin/reboot_pve.txt"
-    _green "Please execute reboot to reboot the system and then execute this script again"
-    _green "Please wait for at least 20 seconds without automatically rebooting the system before executing this script."
-    _green "请执行 reboot 重启系统后再次执行本脚本，再次使用SSH登录后请等待至少20秒未自动重启系统再执行本脚本"
-    exit 1
-fi
+check_reboot_status
 
 ########## 正式开始PVE相关配置文件修改
 
-# 如果是CN的IP则增加DNS先
-if [[ "${CN}" == true ]]; then
-    echo "\nnameserver 223.5.5.5" >>/etc/resolv.conf
-fi
-
-# cloud-init文件修改
-rebuild_cloud_init
-
-# /etc/hosts文件修改
-while true; do
-    _green "Please enter a new host name (can only contain English letters and numbers, not pure numbers or special characters, enter the default pve):"
-    reading "请输入新的主机名(只能包含英文字母和数字,不能是纯数字或特殊字符,回车默认为pve):" new_hostname
-    if [ -z "$new_hostname" ]; then
-        new_hostname="pve"
-        break
-    elif ! [[ "$new_hostname" =~ ^[a-zA-Z0-9]+$ ]]; then
-        _yellow "The hostname entered can only contain English letters and numbers, please re-enter it."
-        _yellow "输入的主机名只能包含英文字母和数字,请重新输入。"
-    else
-        break
+# 处理中国IP的DNS配置
+setup_cn_dns() {
+    if [[ "${CN}" == true ]]; then
+        echo "\nnameserver 223.5.5.5" >>/etc/resolv.conf
     fi
-done
-hostname=$(hostname)
-if [ "${hostname}" != "$new_hostname" ]; then
+}
+
+# 设置新的主机名
+setup_hostname() {
+    # 获取用户输入的新主机名
+    local new_hostname=""
+    while true; do
+        _green "Please enter a new host name (can only contain English letters and numbers, not pure numbers or special characters, enter the default pve):"
+        reading "请输入新的主机名(只能包含英文字母和数字,不能是纯数字或特殊字符,回车默认为pve):" new_hostname
+        if [ -z "$new_hostname" ]; then
+            new_hostname="pve"
+            break
+        elif ! [[ "$new_hostname" =~ ^[a-zA-Z0-9]+$ ]]; then
+            _yellow "The hostname entered can only contain English letters and numbers, please re-enter it."
+            _yellow "输入的主机名只能包含英文字母和数字,请重新输入。"
+        else
+            break
+        fi
+    done
+    # 仅在主机名不同时进行更改
+    hostname=$(hostname)
+    if [ "${hostname}" != "$new_hostname" ]; then
+        update_hosts_file "$new_hostname"
+        update_hostname "$new_hostname"
+    fi
+}
+
+# 更新hosts文件
+update_hosts_file() {
+    local new_hostname="$1"
+    local hostname=$(hostname)
     chattr -i /etc/hosts
     hosts=$(grep -E "^[^#]*\s+${hostname}\s+${hostname}\$" /etc/hosts | grep -v "${main_ipv4}")
     if [ -n "${hosts}" ]; then
         # 注释掉查询到的行
         sudo sed -i "s/^$(echo ${hosts} | sed 's/\//\\\//g')/# &/" /etc/hosts
-        # 添加新行
-        # echo "${main_ipv4} ${new_hostname} ${new_hostname}" | sudo tee -a /etc/hosts > /dev/null
-        # echo "已将 ${main_ipv4} ${new_hostname} ${new_hostname} 添加到 /etc/hosts 文件中"
     else
         echo "A record for ${main_ipv4} ${new_hostname} ${new_hostname} already exists, no need to add it"
         echo "已存在 ${main_ipv4} ${new_hostname} ${new_hostname} 的记录,无需添加"
     fi
-    chattr -i /etc/hostname
-    hostnamectl set-hostname "$new_hostname"
-    chattr +i /etc/hostname
-    hostname=$(hostname)
+    # 添加IPv6 localhost记录（如果不存在）
     if ! grep -q "::1 localhost" /etc/hosts; then
         echo "::1 localhost" >>/etc/hosts
         echo "Added ::1 localhost to /etc/hosts"
     fi
+    # 注释掉127.0.1.1开头的行
     if grep -q "^127\.0\.1\.1" /etc/hosts; then
         sed -i '/^127\.0\.1\.1/s/^/#/' /etc/hosts
         echo "Commented out lines starting with 127.0.1.1 in /etc/hosts"
     fi
+    # 处理主机名记录
     hostname_bak=$(cat /etc/hostname.bak)
     if grep -q "^127\.0\.0\.1 ${hostname_bak}\.localdomain ${hostname_bak}$" /etc/hosts; then
         sed -i "s/^127\.0\.0\.1 ${hostname_bak}\.localdomain ${hostname_bak}/&\n${main_ipv4} ${new_hostname}.localdomain ${new_hostname}/" /etc/hosts
         echo "Replaced the line for ${hostname_bak} in /etc/hosts"
     elif ! grep -q "^127\.0\.0\.1 localhost\.localdomain localhost$" /etc/hosts; then
-        # 127.0.1.1
         echo "${main_ipv4} ${new_hostname}.localdomain ${new_hostname}" >>/etc/hosts
         echo "Added ${main_ipv4} ${new_hostname}.localdomain ${new_hostname} to /etc/hosts"
     fi
-    hostname_check=$(cat /etc/hosts)
+    # 确保新主机名记录存在
     if ! grep -q "$new_hostname$" /etc/hosts; then
         echo "${main_ipv4} ${new_hostname}.localdomain ${new_hostname}" >>/etc/hosts
     fi
     chattr +i /etc/hosts
-fi
+}
 
-# 新增pve源
-version=$(lsb_release -cs)
-if [ "$system_arch" = "x86" ]; then
+# 更新系统主机名
+update_hostname() {
+    local new_hostname="$1"
+    chattr -i /etc/hostname
+    hostnamectl set-hostname "$new_hostname"
+    chattr +i /etc/hostname
+}
+
+# 添加PVE源(x86架构)
+setup_x86_pve_repo() {
+    local version="$1"
+    local repo_url=""
+    # 根据Debian版本选择合适的仓库URL
     case $version in
     stretch | buster | bullseye | bookworm)
         if [[ -z "${CN}" || "${CN}" != true ]]; then
@@ -1200,10 +1322,7 @@ if [ "$system_arch" = "x86" ]; then
         ;;
     *)
         _red "Error: Unsupported Debian version"
-        _yellow "Do you want to continue the installation? (Enter to not continue the installation by default) (y/[n])"
-        reading "是否要继续安装(识别到不是Debian9~Debian12的范围)？(回车则默认不继续安装) (y/[n]) " confirm
-        echo ""
-        if [ "$confirm" != "y" ]; then
+        if ! confirm_continue "是否要继续安装(识别到不是Debian9~Debian12的范围)？"; then
             exit 1
         fi
         if [[ -z "${CN}" || "${CN}" != true ]]; then
@@ -1213,6 +1332,21 @@ if [ "$system_arch" = "x86" ]; then
         fi
         ;;
     esac
+    # 添加GPG密钥
+    add_pve_gpg_key "$version"
+    # 添加软件源到sources.list
+    if ! grep -q "^deb.*pve-no-subscription" /etc/apt/sources.list; then
+        echo "$repo_url" >>/etc/apt/sources.list
+    fi
+    # 在CN模式下测试和切换镜像源
+    if [[ "${CN}" == true ]]; then
+        test_and_switch_mirrors "$version"
+    fi
+}
+
+# 添加PVE GPG密钥
+add_pve_gpg_key() {
+    local version="$1"
     case $version in
     stretch)
         if [ ! -f "/etc/apt/trusted.gpg.d/proxmox-ve-release-4.x.gpg" ]; then
@@ -1252,60 +1386,93 @@ if [ "$system_arch" = "x86" ]; then
         ;;
     *)
         _red "Error: Unsupported Debian version"
-        _yellow "Do you want to continue the installation? (Enter to not continue the installation by default) (y/[n])"
-        reading "是否要继续安装(识别到不是Debian9~Debian12的范围)？(回车则默认不继续安装) (y/[n]) " confirm
-        echo ""
-        if [ "$confirm" != "y" ]; then
+        if ! confirm_continue "是否要继续安装(识别到不是Debian9~Debian12的范围)？"; then
             exit 1
         fi
         ;;
     esac
-    # 添加软件源到sources.list
-    if ! grep -q "^deb.*pve-no-subscription" /etc/apt/sources.list; then
-        echo "$repo_url" >>/etc/apt/sources.list
-    fi
-    # 仅在CN模式下测试和切换镜像源
-    if [[ "${CN}" == true ]]; then
-        # 尝试运行apt-get update
-        if ! apt-get update >/dev/null 2>&1; then
-            _yellow "当前镜像源连接失败，将尝试切换其他镜像源..."
-            # 定义备选镜像源数组
-            mirrors=(
-                "https://mirrors.bfsu.edu.cn/proxmox/debian/pve"          # 北京外国语大学镜像源
-                "https://mirrors.nju.edu.cn/proxmox/debian/pve"           # 南京大学镜像源
-                "https://mirrors.tuna.tsinghua.edu.cn/proxmox/debian/pve" # 清华大学镜像源
-            )
-            # 标记是否找到可用镜像源
-            success=false
-            # 遍历所有备选镜像源进行测试
-            for mirror in "${mirrors[@]}"; do
-                _green "正在测试镜像源: $mirror"
-                # 替换sources.list中的仓库地址
-                sed -i "s|^deb.*pve-no-subscription|deb $mirror $version pve-no-subscription|" /etc/apt/sources.list
+}
 
-                # 测试新镜像源
-                if apt-get update >/dev/null 2>&1; then
-                    _green "成功切换到镜像源: $mirror"
-                    success=true
-                    break
-                else
-                    _red "镜像源 $mirror 连接失败，尝试下一个..."
-                fi
-            done
-            # 如果所有镜像源都失败，询问用户是否继续
-            if [[ "$success" != true ]]; then
-                _red "所有镜像源均连接失败。请检查网络连接或稍后重试。"
-                _yellow "是否仍要继续安装？(y/[n])"
-                reading "是否仍然继续？(回车默认为否) (y/[n]) " confirm
-                echo ""
-                if [ "$confirm" != "y" ]; then
-                    exit 1
-                fi
+# 测试和切换镜像源
+test_and_switch_mirrors() {
+    local version="$1"
+    # 尝试运行apt-get update
+    if ! apt-get update >/dev/null 2>&1; then
+        _yellow "当前镜像源连接失败，将尝试切换其他镜像源..."
+        # 定义备选镜像源数组
+        mirrors=(
+            "https://mirrors.bfsu.edu.cn/proxmox/debian/pve"          # 北京外国语大学镜像源
+            "https://mirrors.nju.edu.cn/proxmox/debian/pve"           # 南京大学镜像源
+            "https://mirrors.tuna.tsinghua.edu.cn/proxmox/debian/pve" # 清华大学镜像源
+        )
+        # 标记是否找到可用镜像源
+        success=false
+        # 遍历所有备选镜像源进行测试
+        for mirror in "${mirrors[@]}"; do
+            _green "正在测试镜像源: $mirror"
+            # 替换sources.list中的仓库地址
+            sed -i "s|^deb.*pve-no-subscription|deb $mirror $version pve-no-subscription|" /etc/apt/sources.list
+            # 测试新镜像源
+            if apt-get update >/dev/null 2>&1; then
+                _green "成功切换到镜像源: $mirror"
+                success=true
+                break
+            else
+                _red "镜像源 $mirror 连接失败，尝试下一个..."
+            fi
+        done
+        # 如果所有镜像源都失败，询问用户是否继续
+        if [[ "$success" != true ]]; then
+            _red "所有镜像源均连接失败。请检查网络连接或稍后重试。"
+            if ! confirm_continue "是否仍然继续？"; then
+                exit 1
             fi
         fi
     fi
-elif [ "$system_arch" = "arch" ]; then
-    # https://github.com/jiangcuo/Proxmox-Port/wiki/Proxmox%E2%80%90Port--Repo-List
+}
+
+# 设置ARM架构的PVE源
+setup_arm_pve_repo() {
+    local version="$1"
+    local min_ping_url=""
+    # 获取最佳镜像源
+    min_ping_url=${min_ping_url}
+    if [ -z "$min_ping_url" ]; then
+        _red "Unable to get ping value for any URL"
+        exit 1
+    fi
+    # 根据Debian版本选择合适的仓库
+    case $version in
+    stretch | buster)
+        # https://gitlab.com/minkebox/pimox
+        curl https://gitlab.com/minkebox/pimox/-/raw/master/dev/KEY.gpg | apt-key add -
+        curl https://gitlab.com/minkebox/pimox/-/raw/master/dev/pimox.list >/etc/apt/sources.list.d/pimox.list
+        ;;
+    bullseye)
+        echo "deb ${min_ping_url}/proxmox/debian/pve bullseye port" >/etc/apt/sources.list.d/pveport.list
+        curl "${min_ping_url}/proxmox/debian/pveport.gpg" -o /etc/apt/trusted.gpg.d/pveport.gpg
+        ;;
+    bookworm)
+        echo "deb https://download.lierfang.com/pxcloud/pxvirt bookworm main" >/etc/apt/sources.list.d/pveport.list
+        curl -L https://download.lierfang.com/pxcloud/pxvirt/pveport.gpg -o /etc/apt/trusted.gpg.d/pveport.gpg
+        ;;
+    trixie)
+        echo "deb https://download.lierfang.com/pxcloud/pxvirt trixie main" >/etc/apt/sources.list.d/pveport.list
+        curl -L https://download.lierfang.com/pxcloud/pxvirt/pveport.gpg -o /etc/apt/trusted.gpg.d/pveport.gpg
+        ;;
+    *)
+        _red "Error: Unsupported Debian version"
+        if ! confirm_continue "是否要继续安装(识别到不是Debian9~Debian13的范围)？"; then
+            exit 1
+        fi
+        echo "deb ${min_ping_url}/proxmox/debian/pve bullseye port" >/etc/apt/sources.list.d/pveport.list
+        curl "${min_ping_url}/proxmox/debian/pveport.gpg" -o /etc/apt/trusted.gpg.d/pveport.gpg
+        ;;
+    esac
+}
+
+# 查找最佳ARM镜像源
+find_best_arm_mirror() {
     arch_pve_urls=(
         "https://global.mirrors.apqa.cn"
         "https://mirrors.apqa.cn"
@@ -1329,138 +1496,123 @@ elif [ "$system_arch" = "arch" ]; then
             _yellow "Unable to get ping [$url_without_protocol]"
         fi
     done
-    if [ -z "$min_ping_url" ]; then
-        _red "Unable to get ping value for any URL"
+    # 验证最佳镜像源连接是否正常
+    if [ -n "$min_ping_url" ]; then
+        echo "Trying to fetch the page using curl from: $min_ping_url"
+        if curl -s -o /dev/null "$min_ping_url"; then
+            echo "curl succeeded, using the URL: $min_ping_url"
+        else
+            echo "curl failed with URL: $min_ping_url"
+            # 尝试其他镜像源
+            for url in "${arch_pve_urls[@]}"; do
+                if [ "$url" != "$min_ping_url" ]; then
+                    echo "Trying the next URL: $url"
+                    if curl -s -o /dev/null "$url"; then
+                        echo "curl succeeded, using the URL: $url"
+                        min_ping_url="$url"
+                        break
+                    else
+                        echo "curl failed with URL: $url"
+                    fi
+                fi
+            done
+        fi
+    fi
+}
+
+# 用户确认是否继续
+confirm_continue() {
+    local prompt_text="$1"
+    local confirm=""
+    _yellow "Do you want to continue the installation? (Enter to not continue the installation by default) (y/[n])"
+    reading "$prompt_text(回车则默认不继续安装) (y/[n]) " confirm
+    echo ""
+    [ "$confirm" == "y" ]
+}
+
+# 修复APT问题函数
+fix_apt_issues() {
+    apt-get update -y && apt-get full-upgrade -y
+    if [ $? -ne 0 ]; then
+        apt-get install debian-keyring debian-archive-keyring -y
+        apt-get update -y && apt-get full-upgrade -y
+    fi
+    apt_update_output=$(apt-get update 2>&1)
+    echo "$apt_update_output" >"$temp_file_apt_fix"
+    if grep -q 'NO_PUBKEY' "$temp_file_apt_fix"; then
+        public_keys=$(grep -oE 'NO_PUBKEY [0-9A-F]+' "$temp_file_apt_fix" | awk '{ print $2 }')
+        joined_keys=$(echo "$public_keys" | paste -sd " ")
+        _yellow "No Public Keys: ${joined_keys}"
+        apt-key adv --keyserver keyserver.ubuntu.com --recv-keys ${joined_keys}
+        apt-get update
+        if [ $? -eq 0 ]; then
+            _green "Fixed"
+        fi
+    fi
+    rm "$temp_file_apt_fix"
+    output=$(apt-get update 2>&1)
+    if echo $output | grep -q "NO_PUBKEY"; then
+        _yellow "try sudo apt-key adv --keyserver keyserver.ubuntu.com --recvrebuild_interface-keys missing key"
         exit 1
     fi
-    echo "Trying to fetch the page using curl from: $min_ping_url"
-    if curl -s -o /dev/null "$min_ping_url"; then
-        echo "curl succeeded, using the URL: $min_ping_url"
-    else
-        echo "curl failed with URL: $min_ping_url"
-        for url in "${arch_pve_urls[@]}"; do
-            if [ "$url" != "$min_ping_url" ]; then
-                echo "Trying the next URL: $url"
-                if curl -s -o /dev/null "$url"; then
-                    echo "curl succeeded, using the URL: $url"
-                    min_ping_url="$url"
-                    break
-                else
-                    echo "curl failed with URL: $url"
-                fi
-            fi
-        done
-    fi
-    case $version in
-    stretch | buster)
-        # https://gitlab.com/minkebox/pimox
-        curl https://gitlab.com/minkebox/pimox/-/raw/master/dev/KEY.gpg | apt-key add -
-        curl https://gitlab.com/minkebox/pimox/-/raw/master/dev/pimox.list >/etc/apt/sources.list.d/pimox.list
-        ;;
-    bullseye)
-        # https://github.com/pimox/pimox7
-        # echo "deb https://raw.githubusercontent.com/pimox/pimox7/master/ dev/" > /etc/apt/sources.list.d/pimox.list
-        # curl https://raw.githubusercontent.com/pimox/pimox7/master/KEY.gpg | apt-key add -
-        # https://github.com/jiangcuo/Proxmox-Port/wiki
-        echo "deb ${min_ping_url}/proxmox/debian/pve bullseye port" >/etc/apt/sources.list.d/pveport.list
-        curl "${min_ping_url}/proxmox/debian/pveport.gpg" -o /etc/apt/trusted.gpg.d/pveport.gpg
-        ;;
-    bookworm)
-        echo "deb ${min_ping_url}/proxmox/debian/pve bookworm port" >/etc/apt/sources.list.d/pveport.list
-        curl "${min_ping_url}/proxmox/debian/pveport.gpg" -o /etc/apt/trusted.gpg.d/pveport.gpg
-        ;;
-    *)
-        _red "Error: Unsupported Debian version"
-        _yellow "Do you want to continue the installation? (Enter to not continue the installation by default) (y/[n])"
-        reading "是否要继续安装(识别到不是Debian9~Debian12的范围)？(回车则默认不继续安装) (y/[n]) " confirm
-        echo ""
-        if [ "$confirm" != "y" ]; then
-            exit 1
+}
+
+# 修复网络接口配置
+fix_network_configs() {
+    # 修复网卡可能存在的auto类型
+    rebuild_interfaces
+    fix_interfaces_ipv6_auto_type
+    # 特殊处理Hetzner和Azure的情况
+    if [[ $dmidecode_output == *"Hetzner_vServer"* ]] || [[ $dmidecode_output == *"Microsoft Corporation"* ]] || [[ $dmidecode_output == *"Exoscale Compute Platform"* ]]; then
+        auto_interface=$(grep '^auto ' /etc/network/interfaces | grep -v '^auto lo' | awk '{print $2}' | head -n 1)
+        if ! grep -q "^post-up ${ethtool_path}" /etc/network/interfaces; then
+            chattr -i /etc/network/interfaces
+            echo "post-up ${ethtool_path} -K $auto_interface tx off rx off" >>/etc/network/interfaces
+            chattr +i /etc/network/interfaces
         fi
-        echo "deb ${min_ping_url}/proxmox/debian/pve bullseye port" >/etc/apt/sources.list.d/pveport.list
-        curl "${min_ping_url}/proxmox/debian/pveport.gpg" -o /etc/apt/trusted.gpg.d/pveport.gpg
-        ;;
-    esac
-fi
-rebuild_interfaces
-
-# 确保apt没有问题
-apt-get update -y && apt-get full-upgrade -y
-if [ $? -ne 0 ]; then
-    apt-get install debian-keyring debian-archive-keyring -y
-    apt-get update -y && apt-get full-upgrade -y
-fi
-apt_update_output=$(apt-get update 2>&1)
-echo "$apt_update_output" >"$temp_file_apt_fix"
-if grep -q 'NO_PUBKEY' "$temp_file_apt_fix"; then
-    public_keys=$(grep -oE 'NO_PUBKEY [0-9A-F]+' "$temp_file_apt_fix" | awk '{ print $2 }')
-    joined_keys=$(echo "$public_keys" | paste -sd " ")
-    _yellow "No Public Keys: ${joined_keys}"
-    apt-key adv --keyserver keyserver.ubuntu.com --recv-keys ${joined_keys}
-    apt-get update
-    if [ $? -eq 0 ]; then
-        _green "Fixed"
     fi
-fi
-rm "$temp_file_apt_fix"
-output=$(apt-get update 2>&1)
-if echo $output | grep -q "NO_PUBKEY"; then
-    _yellow "try sudo apt-key adv --keyserver keyserver.ubuntu.com --recvrebuild_interface-keys missing key"
-    exit 1
-fi
+}
 
-# 修复网卡可能存在的auto类型
-rebuild_interfaces
-fix_interfaces_ipv6_auto_type
-
-# 特殊处理Hetzner和Azure的情况
-if [[ $dmidecode_output == *"Hetzner_vServer"* ]] || [[ $dmidecode_output == *"Microsoft Corporation"* ]] || [[ $dmidecode_output == *"Exoscale Compute Platform"* ]]; then
-    auto_interface=$(grep '^auto ' /etc/network/interfaces | grep -v '^auto lo' | awk '{print $2}' | head -n 1)
-    if ! grep -q "^post-up ${ethtool_path}" /etc/network/interfaces; then
+# 检查并修复IPV6配置
+fix_ipv6_configs() {
+    # 检测IPV6是不是启用了dhcp但未分配IPV6地址
+    if [ -z "$ipv6_address" ] || [ -z "$ipv6_prefixlen" ] || [ -z "$ipv6_gateway" ]; then
+        if [ -f /etc/network/if-pre-up.d/cloud_inet6 ]; then
+            rm -rf /etc/network/if-pre-up.d/cloud_inet6
+        fi
         chattr -i /etc/network/interfaces
-        echo "post-up ${ethtool_path} -K $auto_interface tx off rx off" >>/etc/network/interfaces
+        sed -i '/iface ens4 inet6 \(manual\|dhcp\)/d' /etc/network/interfaces
         chattr +i /etc/network/interfaces
     fi
-fi
+}
 
-# 检测IPV6是不是启用了dhcp但未分配IPV6地址
-if [ -z "$ipv6_address" ] || [ -z "$ipv6_prefixlen" ] || [ -z "$ipv6_gateway" ]; then
-    if [ -f /etc/network/if-pre-up.d/cloud_inet6 ]; then
-        rm -rf /etc/network/if-pre-up.d/cloud_inet6
+# 安装必需包
+install_proxmox_packages() {
+    # 部分机器中途service丢失了，尝试修复
+    install_package service
+    # esxi 开设的部分机器中含有冲突组件 firmware-ath9k-htc ，需要预先卸载
+    if dpkg -S firmware-ath9k-htc >/dev/null 2>&1; then
+        dpkg --remove --force-remove-reinstreq firmware-ath9k-htc
+        apt --fix-broken install
+        dpkg --configure -a
     fi
+    # 正式安装PVE
+    install_package proxmox-ve
+    install_package postfix
+    install_package open-iscsi
+    rebuild_interfaces
+}
+
+# 配置vmbr0桥接接口
+configure_vmbr0_bridge() {
     chattr -i /etc/network/interfaces
-    sed -i '/iface ens4 inet6 \(manual\|dhcp\)/d' /etc/network/interfaces
-    chattr +i /etc/network/interfaces
-fi
-
-# 保证DNS有效
-/usr/local/bin/check-dns.sh
-
-# 部分机器中途service丢失了，尝试修复
-install_package service
-
-# esxi 开设的部分机器中含有冲突组件 firmware-ath9k-htc ，需要预先卸载
-if dpkg -S firmware-ath9k-htc >/dev/null 2>&1; then
-    dpkg --remove --force-remove-reinstreq firmware-ath9k-htc
-    apt --fix-broken install
-    dpkg --configure -a
-fi
-
-# 正式安装PVE
-install_package proxmox-ve
-install_package postfix
-install_package open-iscsi
-rebuild_interfaces
-
-# 配置vmbr0
-chattr -i /etc/network/interfaces
-if grep -q "vmbr0" "/etc/network/interfaces"; then
-    _blue "vmbr0 already exists in /etc/network/interfaces"
-    _blue "vmbr0 已存在在 /etc/network/interfaces"
-else
-    # 没有IPV6地址，不存在slaac机制
-    if [ -z "$ipv6_address" ] || [ -z "$ipv6_prefixlen" ] || [ -z "$ipv6_gateway" ] && [ ! -f /usr/local/bin/pve_last_ipv6 ]; then
-        cat <<EOF | sudo tee -a /etc/network/interfaces
+    if grep -q "vmbr0" "/etc/network/interfaces"; then
+        _blue "vmbr0 already exists in /etc/network/interfaces"
+        _blue "vmbr0 已存在在 /etc/network/interfaces"
+    else
+        # 没有IPV6地址，不存在slaac机制
+        if [ -z "$ipv6_address" ] || [ -z "$ipv6_prefixlen" ] || [ -z "$ipv6_gateway" ] && [ ! -f /usr/local/bin/pve_last_ipv6 ]; then
+            cat <<EOF | sudo tee -a /etc/network/interfaces
 auto vmbr0
 iface vmbr0 inet static
     address $ipv4_address
@@ -1469,9 +1621,9 @@ iface vmbr0 inet static
     bridge_stp off
     bridge_fd 0
 EOF
-    # 有IPV6地址，只有一个IPV6地址，且后续仅使用一个IPV6地址，存在slaac机制
-    elif [ -f /usr/local/bin/pve_slaac_status ] && [ $(cat /usr/local/bin/pve_maximum_subset) = false ] && [ ! -f /usr/local/bin/pve_last_ipv6 ]; then
-        cat <<EOF | sudo tee -a /etc/network/interfaces
+        # 有IPV6地址，只有一个IPV6地址，且后续仅使用一个IPV6地址，存在slaac机制
+        elif [ -f /usr/local/bin/pve_slaac_status ] && [ $(cat /usr/local/bin/pve_maximum_subset) = false ] && [ ! -f /usr/local/bin/pve_last_ipv6 ]; then
+            cat <<EOF | sudo tee -a /etc/network/interfaces
 auto vmbr0
 iface vmbr0 inet static
     address $ipv4_address
@@ -1483,10 +1635,10 @@ iface vmbr0 inet static
 iface vmbr0 inet6 auto
     bridge_ports $interface
 EOF
-    # 有IPV6地址，不只一个IPV6地址，一个用作网关，一个用作实际地址，二者不在同一子网内，不存在slaac机制
-    elif [ -f /usr/local/bin/pve_last_ipv6 ]; then
-        last_ipv6=$(cat /usr/local/bin/pve_last_ipv6)
-        cat <<EOF | sudo tee -a /etc/network/interfaces
+        # 有IPV6地址，不只一个IPV6地址，一个用作网关，一个用作实际地址，二者不在同一子网内，不存在slaac机制
+        elif [ -f /usr/local/bin/pve_last_ipv6 ]; then
+            last_ipv6=$(cat /usr/local/bin/pve_last_ipv6)
+            cat <<EOF | sudo tee -a /etc/network/interfaces
 auto vmbr0
 iface vmbr0 inet static
     address $ipv4_address
@@ -1502,9 +1654,9 @@ iface vmbr0 inet6 static
 iface vmbr0 inet6 static
     address ${ipv6_address}/128
 EOF
-    # 有IPV6地址，只有一个IPV6地址，但后续使用最大IPV6子网范围，不存在slaac机制
-    else
-        cat <<EOF | sudo tee -a /etc/network/interfaces
+        # 有IPV6地址，只有一个IPV6地址，但后续使用最大IPV6子网范围，不存在slaac机制
+        else
+            cat <<EOF | sudo tee -a /etc/network/interfaces
 auto vmbr0
 iface vmbr0 inet static
     address $ipv4_address
@@ -1517,96 +1669,123 @@ iface vmbr0 inet6 static
     address ${ipv6_address}/128
     gateway ${ipv6_gateway}
 EOF
-    fi
-fi
-chattr +i /etc/network/interfaces
-
-# 如果是国内服务器则替换CT源为国内镜像源
-if [ "$system_arch" = "x86" ]; then
-    if [[ "${CN}" == true ]]; then
-        cp -rf /usr/share/perl5/PVE/APLInfo.pm /usr/share/perl5/PVE/APLInfo.pm.bak
-        sed -i 's|http://download.proxmox.com|https://mirrors.tuna.tsinghua.edu.cn/proxmox|g' /usr/share/perl5/PVE/APLInfo.pm
-        sed -i 's|http://mirrors.ustc.edu.cn/proxmox|https://mirrors.tuna.tsinghua.edu.cn/proxmox|g' /usr/share/perl5/PVE/APLInfo.pm
-    fi
-fi
-
-# 确保DNS有效
-if [ ! -s "/etc/resolv.conf" ] || [ -z "$(grep -vE '^\s*#' /etc/resolv.conf)" ]; then
-    cp /etc/resolv.conf /etc/resolv.conf.bak
-    if [[ "${CN}" == true ]]; then
-        if [ -z "$ipv6_address" ] || [ -z "$ipv6_prefixlen" ] || [ -z "$ipv6_gateway" ]; then
-            echo -e "\nnameserver 8.8.8.8\nnameserver 223.5.5.5\n" >/etc/resolv.conf
-        else
-            echo -e "\nnameserver 8.8.8.8\nnameserver 223.5.5.5\nnameserver 2001:4860:4860::8888\nnameserver 2001:4860:4860::8844" >/etc/resolv.conf
-        fi
-    else
-        if [ -z "$ipv6_address" ] || [ -z "$ipv6_prefixlen" ] || [ -z "$ipv6_gateway" ]; then
-            echo -e "\nnameserver 8.8.8.8\nnameserver 8.8.4.4\n" >/etc/resolv.conf
-        else
-            echo -e "\nnameserver 8.8.8.8\nnameserver 8.8.4.4\nnameserver 2001:4860:4860::8888\nnameserver 2001:4860:4860::8844" >/etc/resolv.conf
         fi
     fi
-fi
+    chattr +i /etc/network/interfaces
+}
 
-# 删除可能存在的原有的网卡配置
-cp /etc/network/interfaces /etc/network/interfaces_nat.bak
-chattr -i /etc/network/interfaces
-input_file="/etc/network/interfaces"
-output_file="/etc/network/interfaces.tmp"
-start_pattern="iface lo inet loopback"
-end_pattern="auto vmbr0"
-delete_lines=0
-while IFS= read -r line; do
-    if [[ $line == *"$start_pattern"* ]]; then
-        delete_lines=1
+# 配置CT源和订阅
+configure_pve_sources() {
+    # 如果是国内服务器则替换CT源为国内镜像源
+    if [ "$system_arch" = "x86" ]; then
+        if [[ "${CN}" == true ]]; then
+            cp -rf /usr/share/perl5/PVE/APLInfo.pm /usr/share/perl5/PVE/APLInfo.pm.bak
+            sed -i 's|http://download.proxmox.com|https://mirrors.tuna.tsinghua.edu.cn/proxmox|g' /usr/share/perl5/PVE/APLInfo.pm
+            sed -i 's|http://mirrors.ustc.edu.cn/proxmox|https://mirrors.tuna.tsinghua.edu.cn/proxmox|g' /usr/share/perl5/PVE/APLInfo.pm
+        fi
     fi
-    if [ $delete_lines -eq 0 ] || [[ $line == *"$start_pattern"* ]] || [[ $line == *"$end_pattern"* ]]; then
-        echo "$line" >>"$output_file"
-    fi
-    if [[ $line == *"$end_pattern"* ]]; then
-        delete_lines=0
-    fi
-done <"$input_file"
-mv "$output_file" "$input_file"
-chattr +i /etc/network/interfaces
+    # 替换apt源中的无效订阅
+    cp /etc/apt/sources.list.d/pve-enterprise.list /etc/apt/sources.list.d/pve-enterprise.list.bak
+    # echo "deb http://download.proxmox.com/debian/pve $(lsb_release -sc) pve-no-subscription" > /etc/apt/sources.list.d/pve-enterprise.list
+    rm -rf /etc/apt/sources.list.d/pve-enterprise.list
+}
 
-# 安装必备模块并替换apt源中的无效订阅
-cp /etc/apt/sources.list.d/pve-enterprise.list /etc/apt/sources.list.d/pve-enterprise.list.bak
-# echo "deb http://download.proxmox.com/debian/pve $(lsb_release -sc) pve-no-subscription" > /etc/apt/sources.list.d/pve-enterprise.list
-rm -rf /etc/apt/sources.list.d/pve-enterprise.list
-/usr/local/bin/check-dns.sh
-apt-get update
-install_package sudo
-install_package iproute2
-case $version in
-stretch)
-    install_package ifupdown
-    ;;
-buster)
-    install_package ifupdown2
-    ;;
-bullseye)
-    install_package ifupdown2
-    ;;
-bookworm)
-    install_package ifupdown2
-    ;;
-*)
-    exit 1
-    ;;
-esac
-install_package novnc
-install_package cloud-init
+# 确保DNS配置有效
+configure_dns() {
+    /usr/local/bin/check-dns.sh
+    if [ ! -s "/etc/resolv.conf" ] || [ -z "$(grep -vE '^\s*#' /etc/resolv.conf)" ]; then
+        cp /etc/resolv.conf /etc/resolv.conf.bak
+        if [[ "${CN}" == true ]]; then
+            if [ -z "$ipv6_address" ] || [ -z "$ipv6_prefixlen" ] || [ -z "$ipv6_gateway" ]; then
+                echo -e "\nnameserver 8.8.8.8\nnameserver 223.5.5.5\n" >/etc/resolv.conf
+            else
+                echo -e "\nnameserver 8.8.8.8\nnameserver 223.5.5.5\nnameserver 2001:4860:4860::8888\nnameserver 2001:4860:4860::8844" >/etc/resolv.conf
+            fi
+        else
+            if [ -z "$ipv6_address" ] || [ -z "$ipv6_prefixlen" ] || [ -z "$ipv6_gateway" ]; then
+                echo -e "\nnameserver 8.8.8.8\nnameserver 8.8.4.4\n" >/etc/resolv.conf
+            else
+                echo -e "\nnameserver 8.8.8.8\nnameserver 8.8.4.4\nnameserver 2001:4860:4860::8888\nnameserver 2001:4860:4860::8844" >/etc/resolv.conf
+            fi
+        fi
+    fi
+}
+
+# 清理原有网卡配置
+clean_network_interfaces() {
+    cp /etc/network/interfaces /etc/network/interfaces_nat.bak
+    chattr -i /etc/network/interfaces
+    input_file="/etc/network/interfaces"
+    output_file="/etc/network/interfaces.tmp"
+    start_pattern="iface lo inet loopback"
+    end_pattern="auto vmbr0"
+    delete_lines=0
+    while IFS= read -r line; do
+        if [[ $line == *"$start_pattern"* ]]; then
+            delete_lines=1
+        fi
+        if [ $delete_lines -eq 0 ] || [[ $line == *"$start_pattern"* ]] || [[ $line == *"$end_pattern"* ]]; then
+            echo "$line" >>"$output_file"
+        fi
+        if [[ $line == *"$end_pattern"* ]]; then
+            delete_lines=0
+        fi
+    done <"$input_file"
+    mv "$output_file" "$input_file"
+    chattr +i /etc/network/interfaces
+}
+
+# 安装额外软件包
+install_additional_packages() {
+    /usr/local/bin/check-dns.sh
+    apt-get update
+    install_package sudo
+    install_package iproute2
+    case $version in
+    stretch)
+        install_package ifupdown
+        ;;
+    buster | bullseye | bookworm | trixie)
+        install_package ifupdown2
+        ;;
+    *)
+        exit 1
+        ;;
+    esac
+    install_package novnc
+    install_package cloud-init
+    rebuild_cloud_init
+    # install_package isc-dhcp-server
+    chattr +i /etc/network/interfaces
+}
+
+# 配置防火墙和PVE代理
+configure_firewall_and_proxy() {
+    install_package ufw
+    ufw disable
+    echo LISTEN_IP="0.0.0.0" >/etc/default/pveproxy
+}
+
+setup_cn_dns
 rebuild_cloud_init
-# install_package isc-dhcp-server
-chattr +i /etc/network/interfaces
-
-# 清除防火墙
-install_package ufw
-ufw disable
-
-# 强制WEB面板使用IPV4地址
-echo LISTEN_IP="0.0.0.0" >/etc/default/pveproxy
+setup_hostname
+version=$(lsb_release -cs)
+if [ "$system_arch" = "x86" ]; then
+    setup_x86_pve_repo "$version"
+elif [ "$system_arch" = "arm" ]; then
+    setup_arm_pve_repo "$version"
+fi
+rebuild_interfaces
+fix_apt_issues
+fix_network_configs
+fix_ipv6_configs
+configure_dns
+install_proxmox_packages
+configure_vmbr0_bridge
+configure_pve_sources
+clean_network_interfaces
+install_additional_packages
+configure_firewall_and_proxy
 
 ########## 打印安装成功的信息
 

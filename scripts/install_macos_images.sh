@@ -257,7 +257,7 @@ show_extracts() {
     done <"$DECOMPRESS_TASKS"
     if [[ ! -s "$DECOMPRESS_TASKS" ]]; then
         _yellow "$(_text "没有活跃的解压任务" "No active extraction tasks")"
-        > "$DECOMPRESS_TASKS"
+        >"$DECOMPRESS_TASKS"
         if [[ -d "$DOWNLOAD_DIR/output" && -z "$(ls -A "$DOWNLOAD_DIR/output" 2>/dev/null)" ]]; then
             rm -rf "$DOWNLOAD_DIR/output"
         fi

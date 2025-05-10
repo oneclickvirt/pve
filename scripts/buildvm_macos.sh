@@ -3,7 +3,6 @@
 # https://github.com/oneclickvirt/pve
 # 2025.05.09
 
-
 # ./build_macos_vm.sh VMID CPU核数 内存 硬盘 SSH端口 VNC端口 系统 存储盘 独立IPV6
 # ./build_macos_vm.sh 100 2 4096 45 44022 45901 high-sierra local N
 
@@ -181,13 +180,13 @@ create_vm() {
     qm set $vm_num --ide0 ${storage}:iso/opencore.iso,media=cdrom,cache=unsafe
     qm set $vm_num --ide1 ${storage}:iso/${system}.iso,media=cdrom,cache=unsafe
     if [[ "$system" == "high-sierra" || "$system" == "mojave" ]]; then
-        grep -q '^boot:' /etc/pve/qemu-server/${vm_num}.conf && \
-            sed -i 's/^boot:.*/boot: order=ide0;ide1;sata0;net0/' /etc/pve/qemu-server/${vm_num}.conf || \
-            echo 'boot: order=ide0;ide1;sata0;net0' >> /etc/pve/qemu-server/${vm_num}.conf
+        grep -q '^boot:' /etc/pve/qemu-server/${vm_num}.conf &&
+            sed -i 's/^boot:.*/boot: order=ide0;ide1;sata0;net0/' /etc/pve/qemu-server/${vm_num}.conf ||
+            echo 'boot: order=ide0;ide1;sata0;net0' >>/etc/pve/qemu-server/${vm_num}.conf
     else
-        grep -q '^boot:' /etc/pve/qemu-server/${vm_num}.conf && \
-            sed -i 's/^boot:.*/boot: order=ide0;ide1;virtio0;net0/' /etc/pve/qemu-server/${vm_num}.conf || \
-            echo 'boot: order=ide0;ide1;virtio0;net0' >> /etc/pve/qemu-server/${vm_num}.conf
+        grep -q '^boot:' /etc/pve/qemu-server/${vm_num}.conf &&
+            sed -i 's/^boot:.*/boot: order=ide0;ide1;virtio0;net0/' /etc/pve/qemu-server/${vm_num}.conf ||
+            echo 'boot: order=ide0;ide1;virtio0;net0' >>/etc/pve/qemu-server/${vm_num}.conf
     fi
     sed -i 's/media=cdrom/media=disk/' /etc/pve/qemu-server/${vm_num}.conf
     qemu_needs_fix=0

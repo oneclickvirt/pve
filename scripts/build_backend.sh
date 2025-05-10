@@ -81,7 +81,7 @@ if [[ "$arch" == "arm"* || "$arch" == "aarch64" ]]; then
     version=$(echo "$major.$minor" | bc)
     _green "Detected architecture: $arch"
     _green "Detected Proxmox VE version: $version"
-    if (( $(echo "$version < 8.1" | bc -l) )); then
+    if (($(echo "$version < 8.1" | bc -l))); then
         _green "Installing pve-edk2-firmware for Proxmox VE < 8.1..."
         apt download pve-edk2-firmware=3.20220526-1
         dpkg -i pve-edk2-firmware_3.20220526-1_all.deb

@@ -241,7 +241,7 @@ prepare_arm_image() {
     url=""
     declare -A ubuntu_map=(
         [ubuntu14]=trusty [ubuntu16]=xenial [ubuntu18]=bionic
-        [ubuntu20]=focal  [ubuntu22]=jammy
+        [ubuntu20]=focal [ubuntu22]=jammy
     )
     declare -A debian_map=(
         [10]=buster [11]=bullseye [12]=bookworm [13]=trixie
