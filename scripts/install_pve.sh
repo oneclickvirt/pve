@@ -1440,10 +1440,14 @@ setup_arm_pve_repo() {
     fi
     # 根据Debian版本选择合适的仓库
     case $version in
-    stretch | buster)
+    stretch)
         # https://gitlab.com/minkebox/pimox
         curl https://gitlab.com/minkebox/pimox/-/raw/master/dev/KEY.gpg | apt-key add -
         curl https://gitlab.com/minkebox/pimox/-/raw/master/dev/pimox.list >/etc/apt/sources.list.d/pimox.list
+        ;;
+    buster)
+        echo "deb ${min_ping_url}/proxmox/debian/pve buster port" >/etc/apt/sources.list.d/pveport.list
+        curl "${min_ping_url}/proxmox/debian/pveport.gpg" -o /etc/apt/trusted.gpg.d/pveport.gpg
         ;;
     bullseye)
         echo "deb ${min_ping_url}/proxmox/debian/pve bullseye port" >/etc/apt/sources.list.d/pveport.list
@@ -1462,8 +1466,8 @@ setup_arm_pve_repo() {
         if ! confirm_continue "是否要继续安装(识别到不是Debian9~Debian13的范围)？"; then
             exit 1
         fi
-        echo "deb ${min_ping_url}/proxmox/debian/pve bullseye port" >/etc/apt/sources.list.d/pveport.list
-        curl "${min_ping_url}/proxmox/debian/pveport.gpg" -o /etc/apt/trusted.gpg.d/pveport.gpg
+        echo "deb https://download.lierfang.com/pxcloud/pxvirt bookworm main" >/etc/apt/sources.list.d/pveport.list
+        curl -L https://download.lierfang.com/pxcloud/pxvirt/pveport.gpg -o /etc/apt/trusted.gpg.d/pveport.gpg
         ;;
     esac
 }
@@ -1770,7 +1774,9 @@ version=$(lsb_release -cs)
 if [ "$system_arch" = "x86" ]; then
     setup_x86_pve_repo "$version"
 elif [ "$system_arch" = "arm" ]; then
-    find_best_arm_mirror
+    if [ "$version" = "bullseye" ] || [ "$version" = "buster" ]; then
+        find_best_arm_mirror
+    fi
     setup_arm_pve_repo "$version"
 fi
 rebuild_interfaces
