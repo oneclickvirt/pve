@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/oneclickvirt/pve
-# 2025.05.10
+# 2025.05.16
 
 ########## 预设部分输出和部分中间变量
 
@@ -1433,9 +1433,7 @@ test_and_switch_mirrors() {
 # 设置ARM架构的PVE源
 setup_arm_pve_repo() {
     local version="$1"
-    local min_ping_url=""
     # 获取最佳镜像源
-    min_ping_url=${min_ping_url}
     if [ -z "$min_ping_url" ]; then
         _red "Unable to get ping value for any URL"
         exit 1
@@ -1772,6 +1770,7 @@ version=$(lsb_release -cs)
 if [ "$system_arch" = "x86" ]; then
     setup_x86_pve_repo "$version"
 elif [ "$system_arch" = "arm" ]; then
+    find_best_arm_mirror
     setup_arm_pve_repo "$version"
 fi
 rebuild_interfaces
