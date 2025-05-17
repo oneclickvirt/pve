@@ -3,6 +3,9 @@
 # https://github.com/oneclickvirt/pve
 # 2025.05.17
 
+
+# 设置 echo "kvm64" > /usr/local/bin/cpu_type 可方便虚拟机进行迁移
+
 _red() { echo -e "\033[31m\033[01m$@\033[0m"; }
 _green() { echo -e "\033[32m\033[01m$@\033[0m"; }
 _yellow() { echo -e "\033[33m\033[01m$@\033[0m"; }
@@ -82,7 +85,12 @@ check_kvm_support() {
         if [ -r /dev/kvm ] && [ -w /dev/kvm ]; then
             _green "KVM硬件加速可用，将使用硬件加速。"
             _green "KVM hardware acceleration is available. Using hardware acceleration."
-            cpu_type="kvm64"
+            if [ -s /usr/local/bin/cpu_type ]; then
+                cpu_type=$(cat /usr/local/bin/cpu_type) # 设置为kvm64可方便迁移
+                _green "检测到自定义 CPU 类型配置：$cpu_type"
+            else
+                cpu_type="host"
+            fi
             kvm_flag="--kvm 1"
             return 0
         fi
