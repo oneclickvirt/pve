@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/oneclickvirt/pve
-# 2025.05.09
+# 2025.05.17
 # 自动选择要绑定的IPV6地址
 # ./buildvm_onlyv6.sh VMID 用户名 密码 CPU核数 内存 硬盘 系统 存储盘
 # ./buildvm_onlyv6.sh 152 test1 1234567 1 512 5 debian11 local
@@ -91,6 +91,7 @@ create_vm() {
         --cpu $cpu_type \
         --net0 virtio,bridge=vmbr1,firewall=0 \
         --net1 virtio,bridge=vmbr2,firewall=0 \
+        --ostype l26 \
         ${kvm_flag}
     if [ "$system_arch" = "x86" ]; then
         qm importdisk $vm_num /root/qcow/${system}.qcow2 ${storage}

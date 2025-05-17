@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/oneclickvirt/pve
-# 2025.05.09
+# 2025.05.17
 # ./buildvm.sh VMID 用户名 密码 CPU核数 内存 硬盘 SSH端口 80端口 443端口 外网端口起 外网端口止 系统 存储盘 独立IPV6
 # ./buildvm.sh 102 test1 1234567 1 512 5 40001 40002 40003 50000 50025 debian11 local N
 
@@ -62,12 +62,14 @@ create_vm() {
         qm create $vm_num --agent 1 --scsihw virtio-scsi-single --serial0 socket \
             --cores $core --sockets 1 --cpu $cpu_type \
             --net0 virtio,bridge=vmbr1,firewall=0 \
+            --ostype l26 \
             ${kvm_flag}
     else
         qm create $vm_num --agent 1 --scsihw virtio-scsi-single --serial0 socket \
             --cores $core --sockets 1 --cpu $cpu_type \
             --net0 virtio,bridge=vmbr1,firewall=0 \
             --net1 virtio,bridge=vmbr2,firewall=0 \
+            --ostype l26 \
             ${kvm_flag}
     fi
     if [ "$system_arch" = "x86" ]; then

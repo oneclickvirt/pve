@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/oneclickvirt/pve
-# 2025.05.09
+# 2025.05.17
 # 创建NAT全端口映射的虚拟机
 # 前置条件：
 # 要用到的外网IPV4地址已绑定到vmbr0网卡上(手动附加时务必在PVE安装完毕且自动配置网关后再附加)，且宿主机的IPV4地址仍为顺序第一
@@ -96,6 +96,7 @@ create_vm() {
             --sockets 1 \
             --cpu "$cpu_type" \
             --net0 virtio,bridge=vmbr1,firewall=0 \
+            --ostype l26 \
             ${kvm_flag}
     elif [ "$independent_ipv6" = "y" ]; then
         qm create "$vm_num" \
@@ -107,6 +108,7 @@ create_vm() {
             --cpu "$cpu_type" \
             --net0 virtio,bridge=vmbr1,firewall=0 \
             --net1 virtio,bridge=vmbr2,firewall=0 \
+            --ostype l26 \
             ${kvm_flag}
     fi
     if [ "$system_arch" = "x86" ]; then

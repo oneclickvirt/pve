@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/oneclickvirt/pve
-# 2025.05.09
+# 2025.05.17
 # 手动指定要绑定的IPV4地址
 # 情况1: 额外的IPV4地址需要与本机的IPV4地址在不同的子网内，即前缀不一致
 # 此时开设出的虚拟机的网关为宿主机的IPV4地址，它充当透明网桥，并且不是路由路径的一部分。
@@ -166,6 +166,7 @@ create_vm() {
         --cpu "$cpu_type" \
         $net0 \
         $net1 \
+        --ostype l26 \
         $kvm_flag
 }
 

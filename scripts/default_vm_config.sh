@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/oneclickvirt/pve
-# 2025.05.10
+# 2025.05.17
 
 _red() { echo -e "\033[31m\033[01m$@\033[0m"; }
 _green() { echo -e "\033[32m\033[01m$@\033[0m"; }
@@ -57,14 +57,17 @@ get_system_arch() {
     fi
     # 根据架构信息设置系统位数并下载文件,其余 * 包括了 x86_64
     case "${sysarch}" in
-    "i386" | "i686" | "x86_64")
+    "i386" | "i686" | "x86")
         system_arch="x86"
         ;;
     "armv7l" | "armv8" | "armv8l" | "aarch64")
         system_arch="arm"
         ;;
+    "x86_64" | "amd64")
+        system_arch="x86_64"
+        ;;
     *)
-        system_arch=""
+        system_arch="x86_64"
         ;;
     esac
     if [ -z "${system_arch}" ] || [ ! -v system_arch ]; then
@@ -93,11 +96,20 @@ check_kvm_support() {
     fi
     _yellow "将使用QEMU软件模拟(TCG)模式，性能会受到影响。"
     _yellow "Falling back to QEMU software emulation (TCG). Performance will be affected."
-    if [[ "$system_arch" == "arm" ]]; then
-        cpu_type="max"
-    else
-        cpu_type="qemu64"
-    fi
+    case "$system_arch" in
+        "arm")
+            cpu_type="max"
+            ;;
+        "x86")
+            cpu_type="qemu32"
+            ;;
+        "x86_64")
+            cpu_type="qemu64"
+            ;;
+        *)
+            cpu_type="max"
+            ;;
+    esac
     kvm_flag="--kvm 0"
     return 1
 }

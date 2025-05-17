@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/oneclickvirt/pve
-# 2025.05.09
+# 2025.05.17
 # 自动选择要绑定的IPV4地址 额外的IPV4地址需要与本机的IPV4地址在同一个子网内，即前缀一致
 # 此时开设出的虚拟机的网关为宿主机的IPV4的网关，不需要强制约定MAC地址。
 # 此时附加的IPV4地址是宿主机目前的IPV4地址顺位后面的地址
@@ -135,6 +135,7 @@ create_vm() {
             --sockets 1 \
             --cpu $cpu_type \
             --net0 virtio,bridge=vmbr0,firewall=0 \
+            --ostype l26 \
             ${kvm_flag}
     else
         qm create $vm_num \
@@ -146,6 +147,7 @@ create_vm() {
             --cpu $cpu_type \
             --net0 virtio,bridge=vmbr0,firewall=0 \
             --net1 virtio,bridge=vmbr2,firewall=0 \
+            --ostype l26 \
             ${kvm_flag}
     fi
     if [ "$system_arch" = "x86" ]; then
