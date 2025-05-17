@@ -91,7 +91,11 @@ check_kvm_support() {
             else
                 cpu_type="host"
             fi
-            kvm_flag="--kvm 1"
+            if [[ "$cpu_type" == "qemu64" || "$cpu_type" == "qemu32" ]]; then
+                kvm_flag="--kvm 0"
+            else
+                kvm_flag="--kvm 1"
+            fi
             return 0
         fi
     fi
