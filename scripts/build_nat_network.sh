@@ -340,21 +340,41 @@ check_fe80_gateway() {
     fe80_address=$(cat /usr/local/bin/pve_fe80_address)
 }
 
+# 配置文件重试下载，避免网络原因导致配置失败
+download_with_retry() {
+    local url="$1"
+    local output="$2"
+    local max_attempts=5
+    local attempt=1
+    local delay=1
+    while [ $attempt -le $max_attempts ]; do
+        wget -q "$url" -O "$output" && return 0
+        echo "下载失败：$url，尝试第 $attempt 次，等待 $delay 秒后重试..."
+        sleep $delay
+        attempt=$((attempt + 1))
+        delay=$((delay * 2))
+        [ $delay -gt 30 ] && delay=30
+    done
+    red “Download failed: $url, maximum number of attempts exceeded ($max_attempts)”
+    red "下载失败：$url，超过最大尝试次数 ($max_attempts)"
+    return 1
+}
+
 # 配置ndpresponder守护进程
 install_ndpresponder() {
-    if [ ! -z "$ipv6_address" ] && [ ! -z "$ipv6_prefixlen" ] && [ ! -z "$ipv6_gateway" ]; then
-        if [ -f /usr/local/bin/pve_maximum_subset ] && [ $(cat /usr/local/bin/pve_maximum_subset) = false ]; then
+    if [ -n "$ipv6_address" ] && [ -n "$ipv6_prefixlen" ] && [ -n "$ipv6_gateway" ]; then
+        if [ -f /usr/local/bin/pve_maximum_subset ] && [ "$(cat /usr/local/bin/pve_maximum_subset)" = false ]; then
             _blue "No install ndpresponder"
         elif [ "$system_arch" = "x86" ]; then
-            wget ${cdn_success_url}https://github.com/oneclickvirt/pve/releases/download/ndpresponder_x86/ndpresponder -O /usr/local/bin/ndpresponder
-            wget ${cdn_success_url}https://raw.githubusercontent.com/oneclickvirt/pve/main/extra_scripts/ndpresponder.service -O /etc/systemd/system/ndpresponder.service
-            chmod 777 /usr/local/bin/ndpresponder
-            chmod 777 /etc/systemd/system/ndpresponder.service
+            download_with_retry "${cdn_success_url}https://github.com/oneclickvirt/pve/releases/download/ndpresponder_x86/ndpresponder" "/usr/local/bin/ndpresponder" || return 1
+            download_with_retry "${cdn_success_url}https://raw.githubusercontent.com/oneclickvirt/pve/main/extra_scripts/ndpresponder.service" "/etc/systemd/system/ndpresponder.service" || return 1
+            chmod 755 /usr/local/bin/ndpresponder
+            chmod 644 /etc/systemd/system/ndpresponder.service
         elif [ "$system_arch" = "arm" ]; then
-            wget ${cdn_success_url}https://github.com/oneclickvirt/pve/releases/download/ndpresponder_aarch64/ndpresponder -O /usr/local/bin/ndpresponder
-            wget ${cdn_success_url}https://raw.githubusercontent.com/oneclickvirt/pve/main/extra_scripts/ndpresponder.service -O /etc/systemd/system/ndpresponder.service
-            chmod 777 /usr/local/bin/ndpresponder
-            chmod 777 /etc/systemd/system/ndpresponder.service
+            download_with_retry "${cdn_success_url}https://github.com/oneclickvirt/pve/releases/download/ndpresponder_aarch64/ndpresponder" "/usr/local/bin/ndpresponder" || return 1
+            download_with_retry "${cdn_success_url}https://raw.githubusercontent.com/oneclickvirt/pve/main/extra_scripts/ndpresponder.service" "/etc/systemd/system/ndpresponder.service" || return 1
+            chmod 755 /usr/local/bin/ndpresponder
+            chmod 644 /etc/systemd/system/ndpresponder.service
         fi
     fi
 }
