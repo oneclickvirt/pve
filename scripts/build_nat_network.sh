@@ -326,6 +326,7 @@ reconfigure_ipv6_address() {
         if [ "$ipv6_address" == "$ipv6_gateway" ]; then
             ipv6_address="${ipv6_address%:*}:2"
         fi
+        ipv6_address_without_last_segment="${ipv6_address%:*}:"
         echo "${ipv6_address}" >/usr/local/bin/pve_check_ipv6
     fi
 }
