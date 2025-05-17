@@ -82,7 +82,7 @@ check_kvm_support() {
         if [ -r /dev/kvm ] && [ -w /dev/kvm ]; then
             _green "KVM硬件加速可用，将使用硬件加速。"
             _green "KVM hardware acceleration is available. Using hardware acceleration."
-            cpu_type="host"
+            cpu_type="kvm64"
             kvm_flag="--kvm 1"
             return 0
         fi
