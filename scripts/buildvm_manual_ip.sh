@@ -75,9 +75,36 @@ check_cdn_file() {
     fi
 }
 
+download_with_retry() {
+    local url="$1"
+    local output="$2"
+    local max_attempts=5
+    local attempt=1
+    local delay=1
+    while [ $attempt -le $max_attempts ]; do
+        wget -q "$url" -O "$output" && return 0
+        echo "Download failed: $url, try $attempt, wait $delay seconds and retry..."
+        echo "下载失败：$url，尝试第 $attempt 次，等待 $delay 秒后重试..."
+        sleep $delay
+        attempt=$((attempt + 1))
+        delay=$((delay * 2))
+        [ $delay -gt 30 ] && delay=30
+    done
+    echo -e "\e[31mDownload failed: $url, maximum number of attempts exceeded ($max_attempts)\e[0m"
+    echo -e "\e[31m下载失败：$url，超过最大尝试次数 ($max_attempts)\e[0m"
+    return 1
+}
+
 load_default_config() {
-    curl -L "${cdn_success_url}https://raw.githubusercontent.com/oneclickvirt/pve/main/scripts/default_vm_config.sh" -o default_vm_config.sh
-    . ./default_vm_config.sh
+    local config_url="${cdn_success_url}https://raw.githubusercontent.com/oneclickvirt/pve/main/scripts/default_vm_config.sh"
+    local config_file="default_vm_config.sh"
+    if download_with_retry "$config_url" "$config_file"; then
+        . "./$config_file"
+    else
+        echo -e "\e[31mUnable to load default configuration, script terminated.\e[0m"
+        echo -e "\e[31m无法加载默认配置，脚本终止。\e[0m"
+        exit 1
+    fi
 }
 
 get_network_info() {

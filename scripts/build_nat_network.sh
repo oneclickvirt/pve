@@ -350,6 +350,7 @@ download_with_retry() {
     local delay=1
     while [ $attempt -le $max_attempts ]; do
         wget -q "$url" -O "$output" && return 0
+        echo "Download failed: $url, try $attempt, wait $delay seconds and retry..."
         echo "下载失败：$url，尝试第 $attempt 次，等待 $delay 秒后重试..."
         sleep $delay
         attempt=$((attempt + 1))
