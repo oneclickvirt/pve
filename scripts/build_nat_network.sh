@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/oneclickvirt/pve
-# 2025.05.09
+# 2025.05.17
 
 ########## 预设部分输出和部分中间变量
 
@@ -595,7 +595,7 @@ EOF
 
 # 配置vmbr2网桥（如果需要）
 configure_vmbr2() {
-    if [ -n "$ipv6_prefixlen" ] && [ "$((ipv6_prefixlen))" -le 64 ]; then
+    if [ -n "$ipv6_prefixlen" ] && [ "$((ipv6_prefixlen))" -le 112 ]; then
         if grep -q "vmbr2" /etc/network/interfaces; then
             _blue "vmbr2 already exists in /etc/network/interfaces"
             _blue "vmbr2 已存在在 /etc/network/interfaces"
