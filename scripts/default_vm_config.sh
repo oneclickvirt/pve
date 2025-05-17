@@ -89,7 +89,7 @@ check_kvm_support() {
                 cpu_type=$(cat /usr/local/bin/cpu_type) # 设置为kvm64可方便迁移
                 _green "检测到自定义 CPU 类型配置：$cpu_type"
             else
-                cpu_type="host-model" # 兼顾host的性能和kvm64迁移可用性
+                cpu_type="host"
             fi
             kvm_flag="--kvm 1"
             return 0
