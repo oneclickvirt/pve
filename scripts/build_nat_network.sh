@@ -670,7 +670,7 @@ iface vmbr2 inet6 static
     bridge_fd 0
 EOF
     if [ -f "/usr/local/bin/ndpresponder" ]; then
-        new_exec_start="ExecStart=/usr/local/bin/ndpresponder -i vmbr0 -n ${ipv6_address_without_last_segment}/${ipv6_prefixlen}"
+        new_exec_start="ExecStart=/usr/local/bin/ndpresponder -i vmbr0 -n ${ipv6_address_without_last_segment}0/${ipv6_prefixlen}"
         file_path="/etc/systemd/system/ndpresponder.service"
         line_number=6
         sed -i "${line_number}s|.*|${new_exec_start}|" "$file_path"
