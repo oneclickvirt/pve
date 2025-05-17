@@ -355,7 +355,7 @@ download_with_retry() {
         delay=$((delay * 2))
         [ $delay -gt 30 ] && delay=30
     done
-    red “Download failed: $url, maximum number of attempts exceeded ($max_attempts)”
+    red "Download failed: $url, maximum number of attempts exceeded ($max_attempts)"
     red "下载失败：$url，超过最大尝试次数 ($max_attempts)"
     return 1
 }
