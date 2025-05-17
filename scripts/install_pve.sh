@@ -1678,7 +1678,7 @@ EOF
 # 配置CT源和订阅
 configure_pve_sources() {
     # 如果是国内服务器则替换CT源为国内镜像源
-    if [ "$system_arch" = "x86" ]; then
+    if [ "$system_arch" = "x86" ] || [ "$system_arch" = "x86_64" ]; then
         if [[ "${CN}" == true ]]; then
             cp -rf /usr/share/perl5/PVE/APLInfo.pm /usr/share/perl5/PVE/APLInfo.pm.bak
             sed -i 's|http://download.proxmox.com|https://mirrors.tuna.tsinghua.edu.cn/proxmox|g' /usr/share/perl5/PVE/APLInfo.pm
@@ -1771,7 +1771,7 @@ setup_cn_dns
 rebuild_cloud_init
 setup_hostname
 version=$(lsb_release -cs)
-if [ "$system_arch" = "x86" ]; then
+if [ "$system_arch" = "x86" ] || [ "$system_arch" = "x86_64" ]; then
     setup_x86_pve_repo "$version"
 elif [ "$system_arch" = "arm" ]; then
     if [ "$version" = "bullseye" ] || [ "$version" = "buster" ]; then

@@ -93,7 +93,7 @@ create_vm() {
         --net1 virtio,bridge=vmbr2,firewall=0 \
         --ostype l26 \
         ${kvm_flag}
-    if [ "$system_arch" = "x86" ]; then
+    if [ "$system_arch" = "x86" ] || [ "$system_arch" = "x86_64" ]; then
         qm importdisk $vm_num /root/qcow/${system}.qcow2 ${storage}
     else
         qm set $vm_num --bios ovmf

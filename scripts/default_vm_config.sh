@@ -115,7 +115,7 @@ check_kvm_support() {
 }
 
 prepare_system_image() {
-    if [ "$system_arch" = "x86" ]; then
+    if [ "$system_arch" = "x86" ] || [ "$system_arch" = "x86_64" ]; then
         prepare_x86_image || return 1
     elif [ "$system_arch" = "arm" ]; then
         prepare_arm_image || return 1

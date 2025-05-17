@@ -365,7 +365,7 @@ install_ndpresponder() {
     if [ -n "$ipv6_address" ] && [ -n "$ipv6_prefixlen" ] && [ -n "$ipv6_gateway" ]; then
         if [ -f /usr/local/bin/pve_maximum_subset ] && [ "$(cat /usr/local/bin/pve_maximum_subset)" = false ]; then
             _blue "No install ndpresponder"
-        elif [ "$system_arch" = "x86" ]; then
+        elif [ "$system_arch" = "x86" ] || [ "$system_arch" = "x86_64" ]; then
             download_with_retry "${cdn_success_url}https://github.com/oneclickvirt/pve/releases/download/ndpresponder_x86/ndpresponder" "/usr/local/bin/ndpresponder" || return 1
             download_with_retry "${cdn_success_url}https://raw.githubusercontent.com/oneclickvirt/pve/main/extra_scripts/ndpresponder.service" "/etc/systemd/system/ndpresponder.service" || return 1
             chmod 755 /usr/local/bin/ndpresponder

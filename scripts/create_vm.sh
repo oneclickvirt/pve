@@ -174,7 +174,7 @@ build_new_vms() {
             _yellow "输入无效，请输入一个正整数。"
         fi
     done
-    if [ "$system_arch" = "x86" ]; then
+    if [ "$system_arch" = "x86" ] || [ "$system_arch" = "x86_64" ]; then
         while true; do
             sys_status="false"
             _green "What system does each virtual machine use? (Leave blank or enter debian11 if all use debian11):"

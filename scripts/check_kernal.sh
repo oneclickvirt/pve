@@ -249,7 +249,7 @@ if [ "$system_arch" = "arch" ]; then
         _yellow "Error: 识别为不支持的Debian版本，但你可以强行安装尝试或使用自定义分区的方法安装PVE"
         ;;
     esac
-elif [ "$system_arch" = "x86" ]; then
+elif [ "$system_arch" = "x86" ] || [ "$system_arch" = "x86_64" ]; then
     _blue "system_arch: x86"
     _green "架构：x86"
     case $version in

@@ -72,7 +72,7 @@ create_vm() {
             --ostype l26 \
             ${kvm_flag}
     fi
-    if [ "$system_arch" = "x86" ]; then
+    if [ "$system_arch" = "x86" ] || [ "$system_arch" = "x86_64" ]; then
         qm importdisk $vm_num /root/qcow/${system}.qcow2 ${storage}
     else
         qm set $vm_num --bios ovmf

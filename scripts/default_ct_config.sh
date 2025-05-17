@@ -131,7 +131,7 @@ check_ipv6_setup() {
 }
 
 prepare_system_image() {
-    if [ "$system_arch" = "x86" ]; then
+    if [ "$system_arch" = "x86" ] || [ "$system_arch" = "x86_64" ]; then
         find_and_download_system_image_x86 || return 1
     elif [ "$system_arch" = "arm" ]; then
         find_and_download_system_image_arm || return 1
