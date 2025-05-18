@@ -1,8 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/oneclickvirt/pve
-# 2025.05.17
-
+# 2025.05.18
 
 # 设置 echo "kvm64" > /usr/local/bin/cpu_type 可方便虚拟机进行迁移
 
@@ -109,18 +108,18 @@ check_kvm_support() {
     _yellow "将使用QEMU软件模拟(TCG)模式，性能会受到影响。"
     _yellow "Falling back to QEMU software emulation (TCG). Performance will be affected."
     case "$system_arch" in
-        "arm")
-            cpu_type="max"
-            ;;
-        "x86")
-            cpu_type="qemu32"
-            ;;
-        "x86_64")
-            cpu_type="qemu64"
-            ;;
-        *)
-            cpu_type="max"
-            ;;
+    "arm")
+        cpu_type="max"
+        ;;
+    "x86")
+        cpu_type="qemu32"
+        ;;
+    "x86_64")
+        cpu_type="qemu64"
+        ;;
+    *)
+        cpu_type="max"
+        ;;
     esac
     kvm_flag="--kvm 0"
     return 1
@@ -138,23 +137,46 @@ prepare_system_image() {
     return 0
 }
 
+get_new_images() {
+    local source=$1
+    local attempts=0
+    local max_attempts=5
+    local delay=1
+    local output
+    while ((attempts < max_attempts)); do
+        if [[ "$source" == "idc" ]]; then
+            output=$(curl -slk -m 6 https://down.idc.wiki/Image/realServer-Template/current/qcow2/ |
+                grep -o '<a href="[^"]*">' | awk -F'"' '{print $2}' | sed -n '/qcow2$/s#/Image/realServer-Template/current/qcow2/##p')
+        else
+            output=$(curl -s https://api.github.com/repos/oneclickvirt/pve_kvm_images/releases/tags/images |
+                jq -r '.assets[].name' | sed -n '/qcow2$/s/.qcow2$//p')
+        fi
+        if [[ -n "$output" ]]; then
+            echo "$output"
+            return 0
+        fi
+        sleep "$delay"
+        ((attempts++))
+        delay=$((delay * 2))
+        [[ $delay -gt 16 ]] && delay=16
+    done
+    return 1
+}
+
 prepare_x86_image() {
     file_path=""
-    # 过去手动修补的镜像
     old_images=("debian10" "debian11" "debian12" "ubuntu18" "ubuntu20" "ubuntu22" "centos7" "archlinux" "almalinux8" "fedora33" "fedora34" "opensuse-leap-15" "alpinelinux_edge" "alpinelinux_stable" "rockylinux8" "centos8-stream")
-    # 获取新的自动修补的镜像列表
-    new_images=($(curl -slk -m 6 https://down.idc.wiki/Image/realServer-Template/current/qcow2/ | grep -o '<a href="[^"]*">' | awk -F'"' '{print $2}' | sed -n '/qcow2$/s#/Image/realServer-Template/current/qcow2/##p'))
-    if [[ -n "$new_images" ]]; then
-        for ((i = 0; i < ${#new_images[@]}; i++)); do
-            new_images[i]=${new_images[i]%.qcow2}
-        done
+    new_images=($(get_new_images "idc"))
+    if [[ -z "${new_images[*]}" ]]; then
+        new_images=($(get_new_images "github"))
+    fi
+    if [[ -n "${new_images[*]}" ]]; then
         combined=($(echo "${old_images[@]}" "${new_images[@]}" | tr ' ' '\n' | sort -u))
         systems=("${combined[@]}")
     else
         systems=("${old_images[@]}")
     fi
-    # 检查是否支持指定系统
-    for sys in ${systems[@]}; do
+    for sys in "${systems[@]}"; do
         if [[ "$system" == "$sys" ]]; then
             file_path="/root/qcow/${system}.qcow2"
             break
@@ -169,6 +191,26 @@ prepare_x86_image() {
         download_x86_image
     fi
     return 0
+}
+
+_download_with_retry() {
+    local url="$1"
+    local output="$2"
+    local max_attempts=5
+    local attempt=1
+    local wait_time=1
+    while ((attempt <= max_attempts)); do
+        curl -Lk --connect-timeout 10 --retry 0 -o "$output" "$url"
+        if [ $? -eq 0 ]; then
+            return 0
+        else
+            _yellow "Download attempt $attempt failed. Retrying in $wait_time seconds..."
+            sleep $wait_time
+            wait_time=$((wait_time * 2))
+            ((attempt++))
+        fi
+    done
+    return 1
 }
 
 download_x86_image() {
@@ -197,8 +239,7 @@ download_x86_image() {
             if [[ -n "$selected_image" ]]; then
                 ver="auto_build"
                 url="${cdn_success_url}https://github.com/oneclickvirt/pve_kvm_images/releases/download/images/${selected_image}.qcow2"
-                curl -Lk -o "$file_path" "$url"
-                if [ $? -ne 0 ]; then
+                if ! _download_with_retry "$url" "$file_path"; then
                     _red "Failed to download $file_path"
                     ver=""
                     rm -rf "$file_path"
@@ -227,8 +268,7 @@ download_x86_image() {
         done
         if [[ "$system" == "centos8-stream" ]]; then
             url="https://api.ilolicon.com/centos8-stream.qcow2"
-            curl -Lk -o "$file_path" "$url"
-            if [ $? -ne 0 ]; then
+            if ! _download_with_retry "$url" "$file_path"; then
                 _red "Unable to download corresponding system, please check https://github.com/oneclickvirt/kvm_images/ for supported system images "
                 _red "无法下载对应系统，请查看 https://github.com/oneclickvirt/kvm_images/ 支持的系统镜像 "
                 rm -rf "$file_path"
@@ -240,8 +280,7 @@ download_x86_image() {
         else
             if [[ -n "$ver" ]]; then
                 url="${cdn_success_url}https://github.com/oneclickvirt/kvm_images/releases/download/${ver}/${system}.qcow2"
-                curl -Lk -o "$file_path" "$url"
-                if [ $? -ne 0 ]; then
+                if ! _download_with_retry "$url" "$file_path"; then
                     _red "Unable to download corresponding system, please check https://github.com/oneclickvirt/kvm_images/ for supported system images "
                     _red "无法下载对应系统，请查看 https://github.com/oneclickvirt/kvm_images/ 支持的系统镜像 "
                     rm -rf "$file_path"

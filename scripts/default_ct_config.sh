@@ -142,13 +142,54 @@ prepare_system_image() {
     return 0
 }
 
+_download_with_retry() {
+    local url="$1"
+    local output="$2"
+    local max_attempts=5
+    local attempt=1
+    local wait_time=1
+    while ((attempt <= max_attempts)); do
+        curl -Lk --connect-timeout 10 --retry 0 -o "$output" "$url"
+        if [ $? -eq 0 ]; then
+            return 0
+        else
+            _yellow "Download attempt $attempt failed. Retrying in $wait_time seconds..."
+            sleep $wait_time
+            wait_time=$((wait_time * 2))
+            ((attempt++))
+        fi
+    done
+    return 1
+}
+
+_fetch_list_with_retry() {
+    local url="$1"
+    local attempts=0
+    local max_attempts=5
+    local delay=1
+    fetch_list_response=""
+    while ((attempts < max_attempts)); do
+        response=$(curl -slk -m 6 "${url}")
+        if [[ $? -eq 0 && -n "$response" ]]; then
+            fetch_list_response="$response"
+            return 0
+        fi
+
+        sleep "$delay"
+        ((attempts++))
+        delay=$((delay * 2))
+        [[ $delay -gt 16 ]] && delay=16
+    done
+    return 1
+}
+
 find_and_download_system_image_arm() {
     system_name=""
     system_names=()
     usable_system=false
-    response=$(curl -slk -m 6 "${cdn_success_url}https://raw.githubusercontent.com/oneclickvirt/lxc_arm_images/main/fixed_images.txt")
-    if [ $? -eq 0 ] && [ -n "$response" ]; then
-        system_names+=($(echo "$response"))
+    # 获取可用列表，带指数退避，结果赋值到 system_names
+    if _fetch_list_with_retry "${cdn_success_url}https://raw.githubusercontent.com/oneclickvirt/lxc_arm_images/main/fixed_images.txt"; then
+        mapfile -t system_names <<<"$fetch_list_response"
     fi
     ubuntu_versions=("18.04" "20.04" "22.04" "23.04" "23.10" "24.04")
     ubuntu_names=("bionic" "focal" "jammy" "lunar" "mantic" "noble")
@@ -171,30 +212,29 @@ find_and_download_system_image_arm() {
                 break
             fi
         done
-    elif [ -z $num_system ]; then
+    elif [ -z "$num_system" ]; then
         matched_systems=()
-        for ((i = 0; i < ${#system_names[@]}; i++)); do
-            if [[ "${system_names[$i]}" == "${en_system}_"* ]]; then
-                matched_systems+=("${system_names[$i]}")
+        for sy in "${system_names[@]}"; do
+            if [[ "$sy" == "${en_system}_"* ]]; then
+                matched_systems+=("$sy")
             fi
         done
         if [ ${#matched_systems[@]} -gt 0 ]; then
-            IFS=$'\n' sorted_systems=($(sort <<<"${matched_systems[*]}"))
+            IFS=$'\n' sorted=($(sort <<<"${matched_systems[*]}"))
             unset IFS
-            system_name="${sorted_systems[-1]}"
+            system_name="${sorted[-1]}"
         fi
     else
         version="$num_system"
         system_name="${en_system}_${version}"
     fi
-    if [ ${#system_names[@]} -eq 0 ] && [ -z "$system_name" ]; then
-        _red "No suitable system names found."
-        return 1
-    else
+    # 校验是否在列表中
+    if [ ${#system_names[@]} -gt 0 ] && [ -n "$system_name" ]; then
         for sy in "${system_names[@]}"; do
-            if [[ $sy == "${system_name}"* ]]; then
+            if [[ "$sy" == "${system_name}"* ]]; then
                 usable_system=true
                 system_name="$sy"
+                break
             fi
         done
     fi
@@ -202,11 +242,17 @@ find_and_download_system_image_arm() {
         _red "Invalid system version."
         return 1
     fi
-    if [ -n "${system_name}" ]; then
-        if [ ! -f "/var/lib/vz/template/cache/${system_name}" ]; then
-            curl -o "/var/lib/vz/template/cache/${system_name}" "${cdn_success_url}https://github.com/oneclickvirt/lxc_arm_images/releases/download/${en_system}/${system_name}"
+    # 开始下载
+    if [ -n "$system_name" ]; then
+        target="/var/lib/vz/template/cache/${system_name}"
+        if [ ! -f "$target" ]; then
+            url="${cdn_success_url}https://github.com/oneclickvirt/lxc_arm_images/releases/download/${en_system}/${system_name}"
+            if ! _download_with_retry "$url" "$target"; then
+                _red "Failed to download ${system_name}"
+                return 1
+            fi
         else
-            echo "File already exists: /var/lib/vz/template/cache/${system_name}"
+            _blue "File already exists: ${target}"
         fi
         fixed_system=true
     fi
@@ -218,121 +264,76 @@ find_and_download_system_image_x86() {
     system="${en_system}-${num_system}"
     system_name=""
     system_names=()
-    response=$(curl -slk -m 6 "${cdn_success_url}https://raw.githubusercontent.com/oneclickvirt/lxc_amd64_images/main/fixed_images.txt")
-    if [ $? -eq 0 ] && [ -n "$response" ]; then
-        system_names+=($(echo "$response"))
+    # 优先从 lxc_amd64_images 列表获取，带指数退避
+    if _fetch_list_with_retry "${cdn_success_url}https://raw.githubusercontent.com/oneclickvirt/lxc_amd64_images/main/fixed_images.txt"; then
+        mapfile -t system_names <<<"$fetch_list_response"
     fi
     for image_name in "${system_names[@]}"; do
-        if [ -z "${num_system}" ]; then
-            if [[ "$image_name" == "${en_system}"* ]]; then
-                fixed_system=true
-                image_download_url="https://github.com/oneclickvirt/lxc_amd64_images/releases/download/${en_system}/${image_name}"
-                if [ ! -f "/var/lib/vz/template/cache/${image_name}" ]; then
-                    curl -o "/var/lib/vz/template/cache/${image_name}" "${cdn_success_url}${image_download_url}"
-                    if [ $? -ne 0 ]; then
-                        _red "Failed to download ${system_name}"
-                        fixed_system=false
-                        rm -rf "/var/lib/vz/template/cache/${system_name}"
-                    fi
-                fi
-                echo "A matching image exists and will be created using ${image_name}"
-                echo "匹配的镜像存在，将使用 ${image_name} 进行创建"
-                system_name="$image_name"
-                break
-            fi
-        else
-            if [[ "$image_name" == "${en_system}_${num_system}"* ]]; then
-                fixed_system=true
-                image_download_url="https://github.com/oneclickvirt/lxc_amd64_images/releases/download/${en_system}/${image_name}"
-                if [ ! -f "/var/lib/vz/template/cache/${image_name}" ]; then
-                    curl -o "/var/lib/vz/template/cache/${image_name}" "${cdn_success_url}${image_download_url}"
-                    if [ $? -ne 0 ]; then
-                        _red "Failed to download ${system_name}"
-                        fixed_system=false
-                        rm -rf "/var/lib/vz/template/cache/${system_name}"
-                    fi
-                fi
-                echo "A matching image exists and will be created using ${image_name}"
-                echo "匹配的镜像存在，将使用 ${image_name} 进行创建"
-                system_name="$image_name"
-                break
-            fi
+        if { [ -z "$num_system" ] && [[ "$image_name" == "${en_system}"* ]]; } ||
+            { [ -n "$num_system" ] && [[ "$image_name" == "${en_system}_${num_system}"* ]]; }; then
+            fixed_system=true
+            system_name="$image_name"
+            break
         fi
     done
-    if [ "$fixed_system" = false ] && [ -z "$system_name" ]; then
+    if [ "$fixed_system" = true ] && [ -n "$system_name" ]; then
+        target="/var/lib/vz/template/cache/${system_name}"
+        url="${cdn_success_url}https://github.com/oneclickvirt/lxc_amd64_images/releases/download/${en_system}/${system_name}"
+        if [ ! -f "$target" ]; then
+            if ! _download_with_retry "$url" "$target"; then
+                _red "Failed to download ${system_name}"
+                rm -f "$target"
+                fixed_system=false
+            fi
+        fi
+        _blue "Use matching image: ${system_name}"
+    fi
+    # 如果未找到，再从 pve_lxc_images 列表获取，带指数退避
+    if [ "$fixed_system" = false ]; then
         system_name=""
         system_names=()
-        response=$(curl -slk -m 6 "${cdn_success_url}https://raw.githubusercontent.com/oneclickvirt/pve_lxc_images/main/fixed_images.txt")
-        if [ $? -eq 0 ] && [ -n "$response" ]; then
-            system_names+=($(echo "$response"))
+        if _fetch_list_with_retry "${cdn_success_url}https://raw.githubusercontent.com/oneclickvirt/pve_lxc_images/main/fixed_images.txt"; then
+            mapfile -t system_names <<<"$fetch_list_response"
         fi
         pve_version=$(pveversion)
-        if [[ $pve_version == pve-manager/5* ]]; then
-            _blue "Detected that PVE version is too low to use zst format images"
-        else
-            if [ ${#system_names[@]} -eq 0 ]; then
-                echo "No suitable system names found."
-            elif [ -z $num_system ]; then
-                for ((i = 0; i < ${#system_names[@]}; i++)); do
-                    if [[ "${system_names[$i]}" == "${en_system}-"* ]]; then
-                        system_name="${system_names[$i]}"
-                        fixed_system=true
-                        if [ ! -f "/var/lib/vz/template/cache/${system_name}" ]; then
-                            curl -o "/var/lib/vz/template/cache/${system_name}" "${cdn_success_url}https://github.com/oneclickvirt/pve_lxc_images/releases/download/${en_system}/${system_name}"
-                            if [ $? -ne 0 ]; then
-                                _red "Failed to download ${system_name}"
-                                fixed_system=false
-                                rm -rf "/var/lib/vz/template/cache/${system_name}"
-                            fi
-                        fi
-                        _blue "Use self-fixed image: ${system_name}"
-                        break
+        allow_zst=true
+        [[ $pve_version == pve-manager/5* ]] && allow_zst=false
+        for sy in "${system_names[@]}"; do
+            if { [ -z "$num_system" ] && [[ "$sy" == "${en_system}-"* ]]; } ||
+                { [ -n "$num_system" ] && [[ "$sy" == "${system}"* ]]; }; then
+                system_name="$sy"
+                fixed_system=true
+                target="/var/lib/vz/template/cache/${system_name}"
+                url="${cdn_success_url}https://github.com/oneclickvirt/pve_lxc_images/releases/download/${en_system}/${system_name}"
+                if [ ! -f "$target" ] && { $allow_zst || [[ "$system_name" != *.zst ]]; }; then
+                    if ! _download_with_retry "$url" "$target"; then
+                        _red "Failed to download ${system_name}"
+                        rm -f "$target"
+                        fixed_system=false
                     fi
-                done
-            else
-                for sy in "${system_names[@]}"; do
-                    if [[ $sy == "${system}"* ]]; then
-                        system_name="$sy"
-                        fixed_system=true
-                        if [ ! -f "/var/lib/vz/template/cache/${system_name}" ]; then
-                            curl -o "/var/lib/vz/template/cache/${system_name}" "${cdn_success_url}https://github.com/oneclickvirt/pve_lxc_images/releases/download/${en_system}/${system_name}"
-                            if [ $? -ne 0 ]; then
-                                _red "Failed to download ${system_name}"
-                                fixed_system=false
-                                rm -rf "/var/lib/vz/template/cache/${system_name}"
-                            fi
-                        fi
-                        _blue "Use self-fixed image: ${system_name}"
-                        break
-                    fi
-                done
+                fi
+                _blue "Use self-fixed image: ${system_name}"
+                break
             fi
-        fi
+        done
     fi
-    if [ "$fixed_system" = false ] && [ -z "$system_name" ]; then
-        if [ -z $num_system ]; then
-            system_name=$(pveam available --section system | grep "$en_system" | awk '{print $2}' | head -n1)
-            if ! pveam available --section system | grep "$en_system" >/dev/null; then
-                _red "No such system"
-                return 1
-            else
-                _green "Use $system_name"
-            fi
-            if [ ! -f "/var/lib/vz/template/cache/${system_name}" ]; then
-                pveam download local $system_name
-            fi
+    # 回退到 pveam
+    if [ "$fixed_system" = false ]; then
+        if [ -z "$num_system" ]; then
+            system_name=$(pveam available --section system | grep "^${en_system}" | awk '{print $2}' | head -n1)
         else
-            system_name=$(pveam available --section system | grep "$system" | awk '{print $2}' | head -n1)
-            if ! pveam available --section system | grep "$system" >/dev/null; then
-                _red "No such system"
-                return 1
-            else
-                _green "Use $system_name"
-            fi
-            if [ ! -f "/var/lib/vz/template/cache/${system_name}" ]; then
-                pveam download local $system_name
-            fi
+            system_name=$(pveam available --section system | grep "^${system}" | awk '{print $2}' | head -n1)
         fi
+        if [ -z "$system_name" ]; then
+            _red "No such system"
+            return 1
+        fi
+        _green "Use ${system_name}"
+        target="/var/lib/vz/template/cache/${system_name}"
+        if [ ! -f "$target" ]; then
+            pveam download local "$system_name"
+        fi
+        fixed_system=true
     fi
     return 0
 }
