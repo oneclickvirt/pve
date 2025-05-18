@@ -119,7 +119,7 @@ configure_networking() {
 change_mirrors() {
     pct exec $CTID -- curl -lk https://gitee.com/SuperManito/LinuxMirrors/raw/main/ChangeMirrors.sh -o ChangeMirrors.sh
     pct exec $CTID -- chmod 777 ChangeMirrors.sh
-    pct exec $CTID -- ./ChangeMirrors.sh --source mirrors.tuna.tsinghua.edu.cn --web-protocol http --intranet false --close-firewall true --backup true --updata-software false --clean-cache false --ignore-backup-tips
+    pct exec $CTID -- ./ChangeMirrors.sh --source mirrors.tuna.tsinghua.edu.cn --web-protocol http --intranet false --close-firewall true --backup true --updata-software false --clean-cache false --ignore-backup-tips > /dev/null
     pct exec $CTID -- rm -rf ChangeMirrors.sh
 }
 
@@ -197,7 +197,7 @@ configure_os() {
             if [[ "${CN}" == true ]]; then
                 pct exec $CTID -- wget https://gitee.com/SuperManito/LinuxMirrors/raw/main/ChangeMirrors.sh
                 pct exec $CTID -- chmod 777 ChangeMirrors.sh
-                pct exec $CTID -- ./ChangeMirrors.sh --source mirrors.tuna.tsinghua.edu.cn --web-protocol http --intranet false --close-firewall true --backup true --updata-software false --clean-cache false --ignore-backup-tips
+                pct exec $CTID -- ./ChangeMirrors.sh --source mirrors.tuna.tsinghua.edu.cn --web-protocol http --intranet false --close-firewall true --backup true --updata-software false --clean-cache false --ignore-backup-tips > /dev/null
                 pct exec $CTID -- rm -rf ChangeMirrors.sh
             fi
         elif echo "$system" | grep -qiE "ubuntu|debian|devuan" >/dev/null 2>&1; then

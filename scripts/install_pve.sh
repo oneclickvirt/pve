@@ -751,11 +751,11 @@ switch_mirrors() {
     if [[ -z "${CN}" || "${CN}" != true ]]; then
         curl -lk https://raw.githubusercontent.com/SuperManito/LinuxMirrors/main/ChangeMirrors.sh -o ChangeMirrors.sh
         chmod 777 ChangeMirrors.sh
-        ./ChangeMirrors.sh --use-official-source --web-protocol http --intranet false --backup true --updata-software false --clean-cache false --ignore-backup-tips
+        ./ChangeMirrors.sh --use-official-source --web-protocol http --intranet false --backup true --updata-software false --clean-cache false --ignore-backup-tips > /dev/null
     else
         curl -lk https://gitee.com/SuperManito/LinuxMirrors/raw/main/ChangeMirrors.sh -o ChangeMirrors.sh
         chmod 777 ChangeMirrors.sh
-        ./ChangeMirrors.sh --source mirrors.tuna.tsinghua.edu.cn --web-protocol http --intranet false --backup true --updata-software false --clean-cache false --ignore-backup-tips
+        ./ChangeMirrors.sh --source mirrors.tuna.tsinghua.edu.cn --web-protocol http --intranet false --backup true --updata-software false --clean-cache false --ignore-backup-tips > /dev/null
     fi
     rm -rf ChangeMirrors.sh
     apt-get update -y
@@ -764,7 +764,7 @@ switch_mirrors() {
     if [ $? -ne 0 ]; then
         curl -lk https://gitee.com/SuperManito/LinuxMirrors/raw/main/ChangeMirrors.sh -o ChangeMirrors.sh
         chmod 777 ChangeMirrors.sh
-        ./ChangeMirrors.sh --source mirrors.aliyun.com --web-protocol http --intranet false --backup true --updata-software false --clean-cache false --ignore-backup-tips
+        ./ChangeMirrors.sh --source mirrors.aliyun.com --web-protocol http --intranet false --backup true --updata-software false --clean-cache false --ignore-backup-tips > /dev/null
         rm -rf ChangeMirrors.sh
         apt-get update -y
     fi
