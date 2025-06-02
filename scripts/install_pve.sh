@@ -684,19 +684,16 @@ run_preliminary_checks() {
 
 # 检查运行环境并配置
 check_and_configure_environment() {
-    # 检查root权限
     if [ "$(id -u)" != "0" ]; then
         _red "This script must be run as root"
         exit 1
     fi
-    # 检查系统架构
     get_system_arch
     if [ -z "${system_arch}" ] || [ ! -v system_arch ]; then
         _red "This script can only run on machines under x86_64 or arm architecture."
         exit 1
     fi
-    # ARM架构特殊处理
-    if [ "$system_arch" = "arm" ]; then
+    if systemctl list-unit-files | grep -q '^NetworkManager\.service'; then
         systemctl disable NetworkManager
         systemctl stop NetworkManager
     fi
