@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/oneclickvirt/pve
-# 2025.05.16
+# 2025.06.02
 
 ########## 预设部分输出和部分中间变量
 
@@ -245,128 +245,144 @@ rebuild_interfaces() {
     # 检测回环是否存在，不存在则插入文件的第一第二行
     if ! grep -q "auto lo" "/etc/network/interfaces"; then
         chattr -i /etc/network/interfaces
-        # echo "auto lo" >> "/etc/network/interfaces"
         sed -i '1s/^/auto lo\n/' "/etc/network/interfaces"
         chattr +i /etc/network/interfaces
         _blue "Can not find 'auto lo' in /etc/network/interfaces, add it"
     fi
     if ! grep -q "iface lo inet loopback" "/etc/network/interfaces"; then
         chattr -i /etc/network/interfaces
-        # echo "iface lo inet loopback" >> "/etc/network/interfaces"
         sed -i '2s/^/iface lo inet loopback\n/' "/etc/network/interfaces"
         chattr +i /etc/network/interfaces
         _blue "Can not find 'iface lo inet loopback' in /etc/network/interfaces, add it"
     fi
-    chattr -i /etc/network/interfaces
-    echo " " >>/etc/network/interfaces
-    chattr +i /etc/network/interfaces
-    # 合并文件
+    # 检查是否存在网络接口配置
+    interface_configured=false
+    # 检查主接口是否已配置
+    if grep -q "auto ${interface}" /etc/network/interfaces && \
+       (grep -q "iface ${interface} inet static" /etc/network/interfaces || \
+        grep -q "iface ${interface} inet dhcp" /etc/network/interfaces || \
+        grep -q "iface ${interface} inet auto" /etc/network/interfaces); then
+        interface_configured=true
+    fi
+    # 检查interfaces.d目录中是否有配置
     if [ -d "/etc/network/interfaces.d/" ]; then
-        if [ ! -f "/etc/network/interfaces" ]; then
-            touch /etc/network/interfaces
-        fi
-        if grep -q '^source \/etc\/network\/interfaces\.d\/' "/etc/network/interfaces" || grep -q '^source-directory \/etc\/network\/interfaces\.d' "/etc/network/interfaces"; then
-            chattr -i /etc/network/interfaces
-            for file in /etc/network/interfaces.d/*; do
-                if [ -f "$file" ]; then
-                    cat "$file" >>/etc/network/interfaces
-                    chattr -i "$file"
-                    rm "$file"
-                fi
-            done
-            chattr +i /etc/network/interfaces
+        for file in /etc/network/interfaces.d/*; do
+            if [ -f "$file" ] && (grep -q "auto ${interface}" "$file" || grep -q "iface ${interface}" "$file"); then
+                interface_configured=true
+                break
+            fi
+        done
+    fi
+    # 如果没有找到接口配置，说明可能是从NetworkManager切换过来的
+    if [ "$interface_configured" = false ]; then
+        _blue "No network interface configuration found, possibly switched from NetworkManager"
+        _blue "Adding static configuration for interface ${interface}"
+        chattr -i /etc/network/interfaces
+        echo "" >>/etc/network/interfaces
+        echo "# Network interface ${interface}" >>/etc/network/interfaces
+        echo "auto ${interface}" >>/etc/network/interfaces
+        if [[ -z "${CN}" || "${CN}" != true ]]; then
+            echo "iface ${interface} inet static" >>/etc/network/interfaces
+            echo "    address ${ipv4_address}" >>/etc/network/interfaces
+            echo "    netmask ${ipv4_subnet}" >>/etc/network/interfaces
+            echo "    gateway ${ipv4_gateway}" >>/etc/network/interfaces
+            echo "    dns-nameservers 8.8.8.8 8.8.4.4" >>/etc/network/interfaces
         else
-            for file in /etc/network/interfaces.d/*; do
-                if [ -f "$file" ]; then
-                    chattr -i "$file"
-                    rm "$file"
-                fi
-            done
-        fi
-    fi
-    if [ -d "/run/network/interfaces.d/" ]; then
-        if [ ! -f "/etc/network/interfaces" ]; then
-            touch /etc/network/interfaces
-        fi
-        if grep -q '^source \/run\/network\/interfaces\.d\/' "/etc/network/interfaces" || grep -q '^source-directory \/run\/network\/interfaces\.d' "/etc/network/interfaces"; then
-            chattr -i /etc/network/interfaces
-            for file in /run/network/interfaces.d/*; do
-                if [ -f "$file" ]; then
-                    cat "$file" >>/etc/network/interfaces
-                    chattr -i "$file"
-                    rm "$file"
-                fi
-            done
-            chattr +i /etc/network/interfaces
-        else
-            for file in /run/network/interfaces.d/*; do
-                if [ -f "$file" ]; then
-                    chattr -i "$file"
-                    rm "$file"
-                fi
-            done
-        fi
-    fi
-    # 修复部分网络运行部分未空
-    if [ ! -e /run/network/interfaces.d/* ]; then
-        if [ -f "/etc/network/interfaces" ]; then
-            chattr -i /etc/network/interfaces
-            if ! grep -q "^#.*source-directory \/run\/network\/interfaces\.d" /etc/network/interfaces; then
-                sed -i '/source-directory \/run\/network\/interfaces.d/s/^/#/' /etc/network/interfaces
-            fi
-            chattr +i /etc/network/interfaces
-        fi
-        if [ -f "/etc/network/interfaces.new" ]; then
-            chattr -i /etc/network/interfaces.new
-            if ! grep -q "^#.*source-directory \/run\/network\/interfaces\.d" /etc/network/interfaces.new; then
-                sed -i '/source-directory \/run\/network\/interfaces.d/s/^/#/' /etc/network/interfaces.new
-            fi
-            chattr +i /etc/network/interfaces.new
-        fi
-    fi
-    # 去除引用
-    remove_source_input
-    # 检查/etc/network/interfaces文件中是否有iface xxxx inet auto行
-    if [ -f "/etc/network/interfaces" ]; then
-        if grep -q "iface $interface inet auto" /etc/network/interfaces; then
-            chattr -i /etc/network/interfaces
-            if [[ -z "${CN}" || "${CN}" != true ]]; then
-                sed -i "/iface $interface inet auto/c\
-                iface $interface inet static\n\
-                address $ipv4_address\n\
-                netmask $ipv4_subnet\n\
-                gateway $ipv4_gateway\n\
-                dns-nameservers 8.8.8.8 8.8.4.4" /etc/network/interfaces
-            else
-                sed -i "/iface $interface inet auto/c\
-                iface $interface inet static\n\
-                address $ipv4_address\n\
-                netmask $ipv4_subnet\n\
-                gateway $ipv4_gateway\n\
-                dns-nameservers 8.8.8.8 223.5.5.5" /etc/network/interfaces
-            fi
+            echo "iface ${interface} inet static" >>/etc/network/interfaces
+            echo "    address ${ipv4_address}" >>/etc/network/interfaces
+            echo "    netmask ${ipv4_subnet}" >>/etc/network/interfaces
+            echo "    gateway ${ipv4_gateway}" >>/etc/network/interfaces
+            echo "    dns-nameservers 8.8.8.8 223.5.5.5" >>/etc/network/interfaces
         fi
         chattr +i /etc/network/interfaces
+        # 标记已配置，跳过后续的接口检查
+        interface_configured=true
     fi
-    # 检查/etc/network/interfaces文件中是否有iface xxxx inet dhcp行
-    if [[ $dmidecode_output == *"Hetzner_vServer"* ]] || [[ $dmidecode_output == *"Microsoft Corporation"* ]]; then
-        if [ -f "/etc/network/interfaces" ]; then
-            if grep -qF "inet dhcp" /etc/network/interfaces; then
-                inet_dhcp=true
-            else
-                inet_dhcp=false
+    # 只有在接口已配置的情况下才进行后续处理
+    if [ "$interface_configured" = true ]; then
+        chattr -i /etc/network/interfaces
+        echo " " >>/etc/network/interfaces
+        chattr +i /etc/network/interfaces
+        # 合并interfaces.d目录中的文件
+        if [ -d "/etc/network/interfaces.d/" ]; then
+            if [ ! -f "/etc/network/interfaces" ]; then
+                touch /etc/network/interfaces
             fi
-            if grep -q "iface $interface inet dhcp" /etc/network/interfaces; then
+            if grep -q '^source \/etc\/network\/interfaces\.d\/' "/etc/network/interfaces" || grep -q '^source-directory \/etc\/network\/interfaces\.d' "/etc/network/interfaces"; then
+                chattr -i /etc/network/interfaces
+                for file in /etc/network/interfaces.d/*; do
+                    if [ -f "$file" ]; then
+                        cat "$file" >>/etc/network/interfaces
+                        chattr -i "$file"
+                        rm "$file"
+                    fi
+                done
+                chattr +i /etc/network/interfaces
+            else
+                for file in /etc/network/interfaces.d/*; do
+                    if [ -f "$file" ]; then
+                        chattr -i "$file"
+                        rm "$file"
+                    fi
+                done
+            fi
+        fi
+        # 处理/run/network/interfaces.d/目录
+        if [ -d "/run/network/interfaces.d/" ]; then
+            if [ ! -f "/etc/network/interfaces" ]; then
+                touch /etc/network/interfaces
+            fi
+            if grep -q '^source \/run\/network\/interfaces\.d\/' "/etc/network/interfaces" || grep -q '^source-directory \/run\/network\/interfaces\.d' "/etc/network/interfaces"; then
+                chattr -i /etc/network/interfaces
+                for file in /run/network/interfaces.d/*; do
+                    if [ -f "$file" ]; then
+                        cat "$file" >>/etc/network/interfaces
+                        chattr -i "$file"
+                        rm "$file"
+                    fi
+                done
+                chattr +i /etc/network/interfaces
+            else
+                for file in /run/network/interfaces.d/*; do
+                    if [ -f "$file" ]; then
+                        chattr -i "$file"
+                        rm "$file"
+                    fi
+                done
+            fi
+        fi
+        # 修复部分网络运行部分未空
+        if [ ! -e /run/network/interfaces.d/* ]; then
+            if [ -f "/etc/network/interfaces" ]; then
+                chattr -i /etc/network/interfaces
+                if ! grep -q "^#.*source-directory \/run\/network\/interfaces\.d" /etc/network/interfaces; then
+                    sed -i '/source-directory \/run\/network\/interfaces.d/s/^/#/' /etc/network/interfaces
+                fi
+                chattr +i /etc/network/interfaces
+            fi
+            if [ -f "/etc/network/interfaces.new" ]; then
+                chattr -i /etc/network/interfaces.new
+                if ! grep -q "^#.*source-directory \/run\/network\/interfaces\.d" /etc/network/interfaces.new; then
+                    sed -i '/source-directory \/run\/network\/interfaces.d/s/^/#/' /etc/network/interfaces.new
+                fi
+                chattr +i /etc/network/interfaces.new
+            fi
+        fi
+        # 去除引用
+        remove_source_input
+        # 检查/etc/network/interfaces文件中是否有iface xxxx inet auto行
+        if [ -f "/etc/network/interfaces" ]; then
+            if grep -q "iface $interface inet auto" /etc/network/interfaces; then
                 chattr -i /etc/network/interfaces
                 if [[ -z "${CN}" || "${CN}" != true ]]; then
-                    sed -i "/iface $interface inet dhcp/c\
+                    sed -i "/iface $interface inet auto/c\
                     iface $interface inet static\n\
                     address $ipv4_address\n\
                     netmask $ipv4_subnet\n\
                     gateway $ipv4_gateway\n\
                     dns-nameservers 8.8.8.8 8.8.4.4" /etc/network/interfaces
                 else
-                    sed -i "/iface $interface inet dhcp/c\
+                    sed -i "/iface $interface inet auto/c\
                     iface $interface inet static\n\
                     address $ipv4_address\n\
                     netmask $ipv4_subnet\n\
@@ -376,18 +392,50 @@ rebuild_interfaces() {
             fi
             chattr +i /etc/network/interfaces
         fi
-    fi
-    # 检测物理接口是否已auto链接
-    if ! grep -q "auto ${interface}" /etc/network/interfaces; then
-        chattr -i /etc/network/interfaces
-        echo "auto ${interface}" >>/etc/network/interfaces
-        chattr +i /etc/network/interfaces
-    fi
-    # 反加载
-    if [[ -f "/etc/network/interfaces.new" && -f "/etc/network/interfaces" ]]; then
-        chattr -i /etc/network/interfaces.new
-        cp -f /etc/network/interfaces /etc/network/interfaces.new
-        chattr +i /etc/network/interfaces.new
+        # 检查/etc/network/interfaces文件中是否有iface xxxx inet dhcp行
+        if [[ $dmidecode_output == *"Hetzner_vServer"* ]] || [[ $dmidecode_output == *"Microsoft Corporation"* ]]; then
+            if [ -f "/etc/network/interfaces" ]; then
+                if grep -qF "inet dhcp" /etc/network/interfaces; then
+                    inet_dhcp=true
+                else
+                    inet_dhcp=false
+                fi
+                if grep -q "iface $interface inet dhcp" /etc/network/interfaces; then
+                    chattr -i /etc/network/interfaces
+                    if [[ -z "${CN}" || "${CN}" != true ]]; then
+                        sed -i "/iface $interface inet dhcp/c\
+                        iface $interface inet static\n\
+                        address $ipv4_address\n\
+                        netmask $ipv4_subnet\n\
+                        gateway $ipv4_gateway\n\
+                        dns-nameservers 8.8.8.8 8.8.4.4" /etc/network/interfaces
+                    else
+                        sed -i "/iface $interface inet dhcp/c\
+                        iface $interface inet static\n\
+                        address $ipv4_address\n\
+                        netmask $ipv4_subnet\n\
+                        gateway $ipv4_gateway\n\
+                        dns-nameservers 8.8.8.8 223.5.5.5" /etc/network/interfaces
+                    fi
+                fi
+                chattr +i /etc/network/interfaces
+            fi
+        fi
+        # 检测物理接口是否已auto链接
+        if ! grep -q "auto ${interface}" /etc/network/interfaces; then
+            chattr -i /etc/network/interfaces
+            echo "auto ${interface}" >>/etc/network/interfaces
+            chattr +i /etc/network/interfaces
+        fi
+        # 反加载
+        if [[ -f "/etc/network/interfaces.new" && -f "/etc/network/interfaces" ]]; then
+            chattr -i /etc/network/interfaces.new
+            cp -f /etc/network/interfaces /etc/network/interfaces.new
+            chattr +i /etc/network/interfaces.new
+        fi
+    else
+        _red "Warning: No network interface configuration found and unable to create one"
+        _red "Please check if the network interface variables are properly set"
     fi
 }
 
