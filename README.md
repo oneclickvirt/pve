@@ -4,13 +4,15 @@
 
 感谢 Proxmox VE 的免费订阅支持
 
-如果有未适配的商家或机器欢迎联系[@spiritlhl_bot](https://t.me/spiritlhl_bot)，有空会尝试支持一下
+如果有未适配的商家的机器欢迎联系[@spiritlhl_bot](https://t.me/spiritlhl_bot)，有空会尝试支持一下
 
 ## 更新
 
-2025.05.18
+2025.06.02
 
-- 修复CDN抽风情况下，重复尝试获取镜像列表和下载
+- 适配NetworkManager迁移场景，自动添加所需的网络接口配置
+- 检测到 NetworkManager 的时候自动进行切换，通过 networking 接管网络
+- 更新部分说明减少本项目使用歧义
 
 [更新日志](CHANGELOG.md)
 
