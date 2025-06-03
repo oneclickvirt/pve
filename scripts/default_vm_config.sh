@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/oneclickvirt/pve
-# 2025.05.18
+# 2025.06.03
 
 # 设置 echo "kvm64" > /usr/local/bin/cpu_type 可方便虚拟机进行迁移
 
@@ -10,6 +10,7 @@ _green() { echo -e "\033[32m\033[01m$@\033[0m"; }
 _yellow() { echo -e "\033[33m\033[01m$@\033[0m"; }
 _blue() { echo -e "\033[36m\033[01m$@\033[0m"; }
 reading() { read -rp "$(_green "$1")" "$2"; }
+images_output=""
 
 setup_locale() {
     utf8_locale=$(locale -a 2>/dev/null | grep -i -m 1 -E "utf8|UTF-8")
@@ -142,17 +143,15 @@ get_new_images() {
     local attempts=0
     local max_attempts=5
     local delay=1
-    local output
     while ((attempts < max_attempts)); do
         if [[ "$source" == "idc" ]]; then
-            output=$(curl -slk -m 6 https://down.idc.wiki/Image/realServer-Template/current/qcow2/ |
+            images_output=$(curl -slk -m 6 https://down.idc.wiki/Image/realServer-Template/current/qcow2/ |
                 grep -o '<a href="[^"]*">' | awk -F'"' '{print $2}' | sed -n '/qcow2$/s#/Image/realServer-Template/current/qcow2/##p')
         else
-            output=$(curl -s https://api.github.com/repos/oneclickvirt/pve_kvm_images/releases/tags/images |
+            images_output=$(curl -s https://api.github.com/repos/oneclickvirt/pve_kvm_images/releases/tags/images |
                 jq -r '.assets[].name' | sed -n '/qcow2$/s/.qcow2$//p')
         fi
         if [[ -n "$output" ]]; then
-            echo "$output"
             return 0
         fi
         sleep "$delay"
@@ -166,9 +165,11 @@ get_new_images() {
 prepare_x86_image() {
     file_path=""
     old_images=("debian10" "debian11" "debian12" "ubuntu18" "ubuntu20" "ubuntu22" "centos7" "archlinux" "almalinux8" "fedora33" "fedora34" "opensuse-leap-15" "alpinelinux_edge" "alpinelinux_stable" "rockylinux8" "centos8-stream")
-    new_images=($(get_new_images "idc"))
+    get_new_images "idc"
+    new_images=$images_output
     if [[ -z "${new_images[*]}" ]]; then
-        new_images=($(get_new_images "github"))
+        get_new_images "github"
+        new_images=$images_output
     fi
     if [[ -n "${new_images[*]}" ]]; then
         combined=($(echo "${old_images[@]}" "${new_images[@]}" | tr ' ' '\n' | sort -u))
