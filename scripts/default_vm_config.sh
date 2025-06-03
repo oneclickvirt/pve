@@ -145,13 +145,13 @@ get_new_images() {
     local delay=1
     while ((attempts < max_attempts)); do
         if [[ "$source" == "idc" ]]; then
-            images_output=$(curl -slk -m 6 https://down.idc.wiki/Image/realServer-Template/current/qcow2/ |
+            images_output=$(curl -slk -m 6 https://down.idc.wiki/Image/realServer-Template/current/qcow2/ 2>/dev/null |
                 grep -o '<a href="[^"]*">' | awk -F'"' '{print $2}' | sed -n '/qcow2$/s#/Image/realServer-Template/current/qcow2/##p')
         else
-            images_output=$(curl -s https://api.github.com/repos/oneclickvirt/pve_kvm_images/releases/tags/images |
-                jq -r '.assets[].name' | sed -n '/qcow2$/s/.qcow2$//p')
+            images_output=$(curl -s https://api.github.com/repos/oneclickvirt/pve_kvm_images/releases/tags/images 2>/dev/null |
+                jq -r '.assets[].name' 2>/dev/null | sed -n '/qcow2$/s/.qcow2$//p')
         fi
-        if [[ -n "$output" ]]; then
+        if [[ -n "$images_output" ]] && [[ "$images_output" != *"error"* ]] && [[ "$images_output" != *"failed"* ]]; then
             return 0
         fi
         sleep "$delay"
