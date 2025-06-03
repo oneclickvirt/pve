@@ -165,13 +165,13 @@ get_new_images() {
 prepare_x86_image() {
     file_path=""
     old_images=("debian10" "debian11" "debian12" "ubuntu18" "ubuntu20" "ubuntu22" "centos7" "archlinux" "almalinux8" "fedora33" "fedora34" "opensuse-leap-15" "alpinelinux_edge" "alpinelinux_stable" "rockylinux8" "centos8-stream")
-    get_new_images "idc"
-    new_images=$images_output
-    if [[ -z "${new_images[*]}" ]]; then
-        get_new_images "github"
-        new_images=$images_output
+    new_images=()
+    if get_new_images "idc"; then
+        new_images=($images_output)
+    elif get_new_images "github"; then
+        new_images=($images_output)
     fi
-    if [[ -n "${new_images[*]}" ]]; then
+    if [[ ${#new_images[@]} -gt 0 ]]; then
         combined=($(echo "${old_images[@]}" "${new_images[@]}" | tr ' ' '\n' | sort -u))
         systems=("${combined[@]}")
     else
