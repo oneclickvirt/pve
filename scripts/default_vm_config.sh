@@ -230,12 +230,14 @@ download_x86_image() {
             for img in $sorted_images; do
                 if [[ "$img" == *cloud* ]]; then
                     selected_image="$img"
+                    selected_image=${selected_image%.qcow2}
                     break
                 fi
             done
             # 如果没有带 cloud 的，就取第一个版本最高的
             if [[ -z "$selected_image" ]]; then
                 selected_image=$(echo "$sorted_images" | head -n1)
+                selected_image=${selected_image%.qcow2}
             fi
             if [[ -n "$selected_image" ]]; then
                 ver="auto_build"
