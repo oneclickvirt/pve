@@ -240,6 +240,7 @@ download_x86_image() {
             if [[ -n "$selected_image" ]]; then
                 ver="auto_build"
                 url="${cdn_success_url}https://github.com/oneclickvirt/pve_kvm_images/releases/download/images/${selected_image}.qcow2"
+                echo "$url"
                 if ! _download_with_retry "$url" "$file_path"; then
                     _red "Failed to download $file_path"
                     ver=""
@@ -269,6 +270,7 @@ download_x86_image() {
         done
         if [[ "$system" == "centos8-stream" ]]; then
             url="https://api.ilolicon.com/centos8-stream.qcow2"
+            echo "$url"
             if ! _download_with_retry "$url" "$file_path"; then
                 _red "Unable to download corresponding system, please check https://github.com/oneclickvirt/kvm_images/ for supported system images "
                 _red "无法下载对应系统，请查看 https://github.com/oneclickvirt/kvm_images/ 支持的系统镜像 "
@@ -281,6 +283,7 @@ download_x86_image() {
         else
             if [[ -n "$ver" ]]; then
                 url="${cdn_success_url}https://github.com/oneclickvirt/kvm_images/releases/download/${ver}/${system}.qcow2"
+                echo "$url"
                 if ! _download_with_retry "$url" "$file_path"; then
                     _red "Unable to download corresponding system, please check https://github.com/oneclickvirt/kvm_images/ for supported system images "
                     _red "无法下载对应系统，请查看 https://github.com/oneclickvirt/kvm_images/ 支持的系统镜像 "
