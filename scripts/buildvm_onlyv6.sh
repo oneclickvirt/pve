@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/oneclickvirt/pve
-# 2025.05.17
+# 2025.06.06
 # 自动选择要绑定的IPV6地址
 # ./buildvm_onlyv6.sh VMID 用户名 密码 CPU核数 内存 硬盘 系统 存储盘
 # ./buildvm_onlyv6.sh 152 test1 1234567 1 512 5 debian11 local
@@ -169,8 +169,7 @@ configure_vm() {
     else
         qm set $vm_num --ide1 ${storage}:cloudinit
     fi
-    qm set $vm_num --nameserver 1.1.1.1
-    # qm set $vm_num --nameserver 1.0.0.1
+    qm set $vm_num --nameserver 1.1.1.1,2606:4700:4700::1111 || qm set $vm_num --nameserver 1.1.1.1
     qm set $vm_num --searchdomain local
     user_ip="172.16.1.${vm_num}"
     qm set $vm_num --ipconfig0 ip=${user_ip}/24,gw=172.16.1.1
