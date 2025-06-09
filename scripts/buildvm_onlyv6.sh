@@ -111,59 +111,6 @@ get_ipv6_info() {
     fi
 }
 
-get_available_vmbr1_ipv6() {
-    local appended_file="/usr/local/bin/pve_appended_content.txt"
-    local used_ips_file="/usr/local/bin/pve_used_vmbr1_ips.txt"
-    if [ ! -f "$used_ips_file" ]; then
-        touch "$used_ips_file"
-    fi
-    local available_ips=()
-    if [ -f "$appended_file" ]; then
-        while IFS= read -r line; do
-            if [[ "$line" =~ ^#[[:space:]]*control-alias ]]; then
-                read -r next_line
-                if [[ "$next_line" =~ ^iface[[:space:]]+.*[[:space:]]+inet6[[:space:]]+static ]]; then
-                    read -r addr_line
-                    if [[ "$addr_line" =~ ^[[:space:]]*address[[:space:]]+([^/]+) ]]; then
-                        available_ips+=("${BASH_REMATCH[1]}")
-                    fi
-                fi
-            fi
-        done < "$appended_file"
-    fi
-    for ip in "${available_ips[@]}"; do
-        if ! grep -q "^$ip$" "$used_ips_file"; then
-            echo "$ip" >> "$used_ips_file"
-            echo "$ip"
-            return 0
-        fi
-    done
-    echo ""
-    return 1
-}
-
-setup_nat_mapping() {
-    local vm_internal_ipv6="$1"
-    local host_external_ipv6="$2"
-    local rules_file="/usr/local/bin/ipv6_nat_rules.sh"
-    if [ ! -f "$rules_file" ]; then
-        cat > "$rules_file" << 'EOF'
-#!/bin/bash
-EOF
-        chmod +x "$rules_file"
-    fi
-    ip6tables -t nat -A PREROUTING -d "$host_external_ipv6" -j DNAT --to-destination "$vm_internal_ipv6"
-    ip6tables -t nat -A POSTROUTING -s "$vm_internal_ipv6" -j SNAT --to-source "$host_external_ipv6"
-    echo "ip6tables -t nat -A PREROUTING -d $host_external_ipv6 -j DNAT --to-destination $vm_internal_ipv6" >> "$rules_file"
-    echo "ip6tables -t nat -A POSTROUTING -s $vm_internal_ipv6 -j SNAT --to-source $host_external_ipv6" >> "$rules_file"
-    if ! grep -q "@reboot root /usr/local/bin/ipv6_nat_rules.sh" /etc/crontab; then
-        echo "@reboot root /usr/local/bin/ipv6_nat_rules.sh" >> /etc/crontab
-    fi
-    if ! grep -q "post-up /usr/local/bin/ipv6_nat_rules.sh" /etc/network/interfaces; then
-        sed -i '/^auto vmbr0$/a post-up /usr/local/bin/ipv6_nat_rules.sh' /etc/network/interfaces
-    fi
-}
-
 create_vm() {
     if [ -s "$appended_file" ]; then
         net1_bridge="vmbr1"

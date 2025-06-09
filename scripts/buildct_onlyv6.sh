@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/oneclickvirt/pve
-# 2025.05.17
+# 2025.06.09
 # ./buildct_onlyv6.sh CTID 密码 CPU核数 内存 硬盘 系统 存储盘
 # ./buildct_onlyv6.sh 102 1234567 1 512 5 debian11 local
 
@@ -214,14 +214,39 @@ create_container() {
     pct start $CTID
     sleep 5
     pct set $CTID --hostname $CTID
-    pct set $CTID --net0 name=eth0,ip6="${ipv6_address_without_last_segment}${CTID}/128",bridge=vmbr2,gw6="${host_ipv6_address}"
-    pct set $CTID --net1 name=eth1,ip=${user_ip}/24,bridge=vmbr1,gw=172.16.1.1
-    pct set $CTID --nameserver 8.8.8.8,2001:4860:4860::8888 --nameserver 8.8.4.4,2001:4860:4860::8844
+    appended_file="/usr/local/bin/pve_appended_content.txt"
+    if [ -s "$appended_file" ]; then
+        # 使用 vmbr1 网桥和 NAT 映射
+        ct_internal_ipv6="2001:db8:1::${CTID}"
+        pct set $CTID --net0 name=eth0,ip6="${ct_internal_ipv6}/64",bridge=vmbr1,gw6="2001:db8:1::1"
+        pct set $CTID --net1 name=eth1,ip=${user_ip}/24,bridge=vmbr1,gw=172.16.1.1
+        pct set $CTID --nameserver 8.8.8.8,2001:4860:4860::8888 --nameserver 8.8.4.4,2001:4860:4860::8844
+        # 获取可用的外部 IPv6 地址
+        host_external_ipv6=$(get_available_vmbr1_ipv6)
+        if [ -z "$host_external_ipv6" ]; then
+            echo -e "\e[31mNo available IPv6 address found for NAT mapping\e[0m"
+            echo -e "\e[31m没有可用的IPv6地址用于NAT映射\e[0m"
+            exit 1
+        fi
+        # 设置 NAT 映射
+        setup_nat_mapping "$ct_internal_ipv6" "$host_external_ipv6"
+        ct_external_ipv6="$host_external_ipv6"
+        echo "Container configured with NAT mapping: $ct_internal_ipv6 -> $host_external_ipv6"
+        echo "容器已配置NAT映射：$ct_internal_ipv6 -> $host_external_ipv6"
+    elif grep -q "vmbr2" /etc/network/interfaces; then
+        # 使用 vmbr2 网桥直接分配IPv6地址
+        pct set $CTID --net0 name=eth0,ip6="${ipv6_address_without_last_segment}${CTID}/128",bridge=vmbr2,gw6="${host_ipv6_address}"
+        pct set $CTID --net1 name=eth1,ip=${user_ip}/24,bridge=vmbr1,gw=172.16.1.1
+        pct set $CTID --nameserver 8.8.8.8,2001:4860:4860::8888 --nameserver 8.8.4.4,2001:4860:4860::8844
+        echo "Container configured with vmbr2: ${ipv6_address_without_last_segment}${CTID}"
+        echo "容器已配置使用vmbr2：${ipv6_address_without_last_segment}${CTID}"
+        ct_external_ipv6="${ipv6_address_without_last_segment}${CTID}"
+    fi
     sleep 3
 }
 
 save_container_info() {
-    echo "$CTID $password $core $memory $disk $system_ori $storage ${ipv6_address_without_last_segment}${CTID}" >>"ct${CTID}"
+    echo "$CTID $password $core $memory $disk $system_ori $storage ${ct_external_ipv6}" >>"ct${CTID}"
     data=$(echo " CTID root密码-password CPU核数-CPU 内存-memory 硬盘-disk 系统-system 存储盘-storage 外网IPV6-ipv6")
     values=$(cat "ct${CTID}")
     IFS=' ' read -ra data_array <<<"$data"

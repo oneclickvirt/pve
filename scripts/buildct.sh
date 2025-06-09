@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/oneclickvirt/pve
-# 2025.05.17
+# 2025.06.09
 
 # ./buildct.sh CTID 密码 CPU核数 内存 硬盘 SSH端口 80端口 443端口 外网端口起 外网端口止 系统 存储盘 独立IPV6
 # ./buildct.sh 102 1234567 1 512 5 20001 20002 20003 30000 30025 debian11 local N
@@ -97,13 +97,37 @@ create_container() {
 
 configure_networking() {
     independent_ipv6_status="N"
+    appended_file="/usr/local/bin/pve_appended_content.txt"
     if [ "$independent_ipv6" == "y" ]; then
         if [ ! -z "$host_ipv6_address" ] && [ ! -z "$ipv6_prefixlen" ] && [ ! -z "$ipv6_gateway" ] && [ ! -z "$ipv6_address_without_last_segment" ]; then
-            if grep -q "vmbr2" /etc/network/interfaces; then
+            if [ -s "$appended_file" ]; then
+                # 使用 vmbr1 网桥和 NAT 映射
+                ct_internal_ipv6="2001:db8:1::${CTID}"
+                pct set $CTID --net0 name=eth0,ip=${user_ip}/24,bridge=vmbr1,gw=172.16.1.1
+                pct set $CTID --net1 name=eth1,ip6="${ct_internal_ipv6}/64",bridge=vmbr1,gw6="2001:db8:1::1"
+                pct set $CTID --nameserver 1.1.1.1
+                pct set $CTID --searchdomain local
+                # 获取可用的外部 IPv6 地址
+                host_external_ipv6=$(get_available_vmbr1_ipv6)
+                if [ -z "$host_external_ipv6" ]; then
+                    echo -e "\e[31mNo available IPv6 address found for NAT mapping\e[0m"
+                    echo -e "\e[31m没有可用的IPv6地址用于NAT映射\e[0m"
+                    independent_ipv6_status="N"
+                else
+                    # 设置 NAT 映射
+                    setup_nat_mapping "$ct_internal_ipv6" "$host_external_ipv6"
+                    ct_external_ipv6="$host_external_ipv6"
+                    echo "Container configured with NAT mapping: $ct_internal_ipv6 -> $host_external_ipv6"
+                    echo "容器已配置NAT映射：$ct_internal_ipv6 -> $host_external_ipv6"
+                    independent_ipv6_status="Y"
+                fi
+            elif grep -q "vmbr2" /etc/network/interfaces; then
+                # 使用 vmbr2 网桥直接分配IPv6地址
                 pct set $CTID --net0 name=eth0,ip=${user_ip}/24,bridge=vmbr1,gw=172.16.1.1
                 pct set $CTID --net1 name=eth1,ip6="${ipv6_address_without_last_segment}${CTID}/128",bridge=vmbr2,gw6="${host_ipv6_address}"
                 pct set $CTID --nameserver 1.1.1.1
                 pct set $CTID --searchdomain local
+                ct_external_ipv6="${ipv6_address_without_last_segment}${CTID}"
                 independent_ipv6_status="Y"
             fi
         fi
@@ -248,7 +272,7 @@ setup_port_forwarding() {
 
 save_container_info() {
     if [ "$independent_ipv6_status" == "Y" ]; then
-        echo "$CTID $password $core $memory $disk $sshn $web1_port $web2_port $port_first $port_last $system_ori $storage ${ipv6_address_without_last_segment}${CTID}" >>"ct${CTID}"
+        echo "$CTID $password $core $memory $disk $sshn $web1_port $web2_port $port_first $port_last $system_ori $storage ${ct_external_ipv6}" >>"ct${CTID}"
         data=$(echo " CTID root密码-password CPU核数-CPU 内存-memory 硬盘-disk SSH端口 80端口 443端口 外网端口起-port-start 外网端口止-port-end 系统-system 存储盘-storage 独立IPV6地址-ipv6_address")
     else
         echo "$CTID $password $core $memory $disk $sshn $web1_port $web2_port $port_first $port_last $system_ori $storage" >>"ct${CTID}"
