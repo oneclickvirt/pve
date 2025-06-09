@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/oneclickvirt/pve
-# 2025.06.02
+# 2025.06.09
 
 ########## 预设部分输出和部分中间变量
 
@@ -459,6 +459,47 @@ fix_interfaces_ipv6_auto_type() {
     rm -rf /tmp/interfaces.modified
 }
 
+clean_control_alias_blocks() {
+    local input_file="/etc/network/interfaces.d/50-cloud-init"
+    local output_file="/usr/local/bin/pve_appended_content.txt"
+    local tmp_file
+    tmp_file=$(mktemp)
+    local control_alias_total
+    control_alias_total=$(grep -c "^# control-alias" "$input_file")
+    if (( control_alias_total <= 2 )); then
+        return 0
+    fi
+    local control_alias_count=0
+    local in_control_alias_block=false
+    local buffer=""
+    > "$tmp_file"
+    > "$output_file"
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        if [[ "$line" =~ ^#\ control-alias\ eth0 ]]; then
+            in_control_alias_block=true
+            buffer="$line"$'\n'
+            continue
+        fi
+        if $in_control_alias_block; then
+            buffer+="$line"$'\n'
+            if [[ "$line" =~ ^[[:space:]]*address ]]; then
+                ((control_alias_count++))
+                if (( control_alias_count <= 2 )); then
+                    echo -n "$buffer" >> "$tmp_file"
+                else
+                    echo -n "$buffer" >> "$output_file"
+                fi
+                in_control_alias_block=false
+                buffer=""
+            fi
+        else
+            echo "$line" >> "$tmp_file"
+        fi
+    done < "$input_file"
+    mv "$tmp_file" "$input_file"
+    chmod 644 "$output_file"
+}
+
 is_private_ipv6() {
     local address=$1
     local temp="0"
@@ -745,6 +786,7 @@ check_and_configure_environment() {
         systemctl disable NetworkManager
         systemctl stop NetworkManager
     fi
+    clean_control_alias_blocks
 }
 
 # 设置DNS检查服务
