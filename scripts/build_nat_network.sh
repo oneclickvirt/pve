@@ -411,7 +411,6 @@ prepare_network_interfaces() {
     if [ ! -f /etc/network/interfaces.bak ]; then
         cp /etc/network/interfaces /etc/network/interfaces.bak
     fi
-
     # 修正部分网络设置重复的错误
     if [[ -f "/etc/network/interfaces.d/50-cloud-init" && -f "/etc/network/interfaces" ]]; then
         if grep -q "auto lo" "/etc/network/interfaces.d/50-cloud-init" && grep -q "iface lo inet loopback" "/etc/network/interfaces.d/50-cloud-init" && grep -q "auto lo" "/etc/network/interfaces" && grep -q "iface lo inet loopback" "/etc/network/interfaces"; then
@@ -421,12 +420,10 @@ prepare_network_interfaces() {
             chattr +i /etc/network/interfaces.d/50-cloud-init
         fi
     fi
-
     if [ -f "/etc/network/interfaces.new" ]; then
         chattr -i /etc/network/interfaces.new
         rm -rf /etc/network/interfaces.new
     fi
-
     chattr -i /etc/network/interfaces
     check_loopback_config
 }
@@ -465,13 +462,17 @@ configure_vmbr0() {
             add_vmbr0_with_single_ipv6
         fi
     fi
-
     # 如果不是fe80类型网关，添加fe80地址删除命令
     if [[ "${ipv6_gateway_fe80}" == "N" ]]; then
         chattr -i /etc/network/interfaces
         echo "    up ip addr del $fe80_address dev $interface" >>/etc/network/interfaces
         remove_duplicate_lines "/etc/network/interfaces"
         chattr -i /etc/network/interfaces
+    fi
+    # 如果IPV6地址是写死附加上的，这块附加回vmbr0，方便后续使用ip6tables进行转发
+    appended_file="/usr/local/bin/pve_appended_content.txt"
+    if [ -s "$appended_file" ]; then
+        add_appended_ipv6_address
     fi
 }
 
@@ -540,6 +541,12 @@ iface vmbr0 inet6 static
     address ${ipv6_address}/128
     gateway ${ipv6_gateway}
 EOF
+}
+
+add_appended_ipv6_address() {
+    sed -E 's/(# control-alias) [^[:space:]]+/\1 vmbr0/g; s/(iface) [^[:space:]]+/\1 vmbr0/g' "$appended_file" | sudo tee -a /etc/network/interfaces > /dev/null
+    chattr -i /etc/network/interfaces
+    sed -i '/^[[:space:]]*up ip addr del fe80/s/^/#/' /etc/network/interfaces
 }
 
 # 配置vmbr1网桥
@@ -664,7 +671,9 @@ EOF
 # 为IPV6子网配置vmbr2
 configure_vmbr2_with_ipv6_subnet() {
     echo '*/1 * * * * curl -m 6 -s ipv6.ip.sb && curl -m 6 -s ipv6.ip.sb' | crontab -
-    cat <<EOF | sudo tee -a /etc/network/interfaces
+    appended_file="/usr/local/bin/pve_appended_content.txt"
+    if [ ! -s "$appended_file" ] && [ -f "/usr/local/bin/ndpresponder" ]; then
+        cat <<EOF | sudo tee -a /etc/network/interfaces
 auto vmbr2
 iface vmbr2 inet6 static
     address ${ipv6_address}/${ipv6_prefixlen}
@@ -672,12 +681,6 @@ iface vmbr2 inet6 static
     bridge_stp off
     bridge_fd 0
 EOF
-    appended_file="/usr/local/bin/pve_appended_content.txt"
-    if [ -s "$appended_file" ]; then
-        sed -E 's/(# control-alias) [^[:space:]]+/\1 vmbr2/g; s/(iface) [^[:space:]]+/\1 vmbr2/g' "$appended_file" | sudo tee -a /etc/network/interfaces > /dev/null
-        chattr -i /etc/network/interfaces
-        sed -i '/^[[:space:]]*up ip addr del fe80/s/^/#/' /etc/network/interfaces
-    elif [ -f "/usr/local/bin/ndpresponder" ]; then
         new_exec_start="ExecStart=/usr/local/bin/ndpresponder -i vmbr0 -n ${ipv6_address_without_last_segment}0/${ipv6_prefixlen}"
         file_path="/etc/systemd/system/ndpresponder.service"
         line_number=6
@@ -799,7 +802,8 @@ clean_cache_files
 systemctl start check-dns.service
 sleep 3
 check_ndpresponder_status
+sleep 1
 _green "It is recommended to restart the server once to apply the new configuration."
-_green "推荐重启一次服务器，以应用新配置"
+_green "强烈推荐重启一次服务器，以应用新配置，避免配置不生效的问题。"
 _green "you can test open a virtual machine or container to see if the actual network has been applied successfully"
 _green "你可以测试开一个虚拟机或者容器看看就知道是不是实际网络已应用成功了"

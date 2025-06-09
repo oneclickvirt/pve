@@ -165,17 +165,22 @@ EOF
 }
 
 create_vm() {
-    qm create $vm_num \
+    if [ -s "$appended_file" ]; then
+        net1_bridge="vmbr1"
+    else
+        net1_bridge="vmbr2"
+    fi
+    qm create "$vm_num" \
         --agent 1 \
         --scsihw virtio-scsi-single \
         --serial0 socket \
-        --cores $core \
+        --cores "$core" \
         --sockets 1 \
-        --cpu $cpu_type \
+        --cpu "$cpu_type" \
         --net0 virtio,bridge=vmbr1,firewall=0 \
-        --net1 virtio,bridge=vmbr2,firewall=0 \
+        --net1 virtio,bridge="$net1_bridge",firewall=0 \
         --ostype l26 \
-        ${kvm_flag}
+        $kvm_flag
     if [ "$system_arch" = "x86" ] || [ "$system_arch" = "x86_64" ]; then
         qm importdisk $vm_num /root/qcow/${system}.qcow2 ${storage}
     else
