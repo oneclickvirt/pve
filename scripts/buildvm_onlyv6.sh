@@ -169,7 +169,7 @@ configure_vm() {
     else
         qm set $vm_num --ide1 ${storage}:cloudinit
     fi
-    qm set $vm_num --nameserver 1.1.1.1,2606:4700:4700::1111 || qm set $vm_num --nameserver 1.1.1.1
+    qm set $vm_num --nameserver "1.1.1.1 2606:4700:4700::1111" || qm set $vm_num --nameserver 1.1.1.1
     qm set $vm_num --searchdomain local
     user_ip="172.16.1.${vm_num}"
     qm set $vm_num --ipconfig0 ip=${user_ip}/24,gw=172.16.1.1

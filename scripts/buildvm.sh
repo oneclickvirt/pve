@@ -165,7 +165,7 @@ configure_network() {
             if grep -q "vmbr2" /etc/network/interfaces; then
                 qm set $vm_num --ipconfig0 ip=${user_ip}/24,gw=172.16.1.1
                 qm set $vm_num --ipconfig1 ip6="${ipv6_address_without_last_segment}${vm_num}/128",gw6="${host_ipv6_address}"
-                qm set $vm_num --nameserver 1.1.1.1,2606:4700:4700::1111 || qm set $vm_num --nameserver 1.1.1.1
+                qm set $vm_num --nameserver "1.1.1.1 2606:4700:4700::1111" || qm set $vm_num --nameserver 1.1.1.1
                 qm set $vm_num --searchdomain local
                 independent_ipv6_status="Y"
             else
