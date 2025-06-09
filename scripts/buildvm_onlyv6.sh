@@ -117,7 +117,6 @@ get_available_vmbr2_ipv6() {
     if [ ! -f "$used_ips_file" ]; then
         touch "$used_ips_file"
     fi
-    
     local available_ips=()
     if [ -f "$appended_file" ]; then
         while IFS= read -r line; do
@@ -132,7 +131,6 @@ get_available_vmbr2_ipv6() {
             fi
         done < "$appended_file"
     fi
-    
     for ip in "${available_ips[@]}"; do
         if ! grep -q "^$ip$" "$used_ips_file"; then
             echo "$ip" >> "$used_ips_file"
@@ -140,7 +138,6 @@ get_available_vmbr2_ipv6() {
             return 0
         fi
     done
-    
     echo ""
     return 1
 }
@@ -231,19 +228,16 @@ configure_vm() {
     qm set $vm_num --searchdomain local
     user_ip="172.16.1.${vm_num}"
     qm set $vm_num --ipconfig0 ip=${user_ip}/24,gw=172.16.1.1
-    
     appended_file="/usr/local/bin/pve_appended_content.txt"
     if [ -s "$appended_file" ]; then
         vm_internal_ipv6="2001:db8:1::${vm_num}"
         qm set $vm_num --ipconfig1 ip6="${vm_internal_ipv6}/64",gw6="2001:db8:1::1"
-        
         host_external_ipv6=$(get_available_vmbr2_ipv6)
         if [ -z "$host_external_ipv6" ]; then
             echo -e "\e[31mNo available IPv6 address found for NAT mapping\e[0m"
             echo -e "\e[31m没有可用的IPv6地址用于NAT映射\e[0m"
             exit 1
         fi
-        
         setup_nat_mapping "$vm_internal_ipv6" "$host_external_ipv6"
         vm_external_ipv6="$host_external_ipv6"
         echo "VM configured with NAT mapping: $vm_internal_ipv6 -> $host_external_ipv6"
