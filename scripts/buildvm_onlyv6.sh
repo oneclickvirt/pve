@@ -29,8 +29,8 @@ check_environment() {
         if [ ! -f /usr/local/bin/pve_check_ipv6 ]; then
             _yellow "No ipv6 address exists to open a server with a standalone IPV6 address"
         fi
-        if ! grep -q "" /etc/network/interfaces; then
-            _yellow "No  exists to open a server with a standalone IPV6 address"
+        if ! grep -q "vmbr2" /etc/network/interfaces; then
+            _yellow "No vmbr2 exists to open a server with a standalone IPV6 address"
         fi
         service_status=$(systemctl is-active ndpresponder.service)
         if [ "$service_status" == "active" ]; then
