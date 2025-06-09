@@ -1,12 +1,11 @@
 #!/bin/bash
 # from
 # https://github.com/oneclickvirt/pve
-# 2025.05.09
+# 2025.06.09
 # ./pve_delete.sh arg1 arg2
 # arg 可填入虚拟机/容器的序号，可以有任意多个
 # 日志 /var/log/pve_delete.log
 
-# 启用错误检查
 set -e
 set -u
 
@@ -44,6 +43,33 @@ safe_remove() {
     if [ -e "$path" ]; then
         log "Removing: $path"
         rm -rf "$path"
+    fi
+}
+
+# 清理IPv6 NAT映射规则
+cleanup_ipv6_nat_rules() {
+    local vmid=$1
+    local appended_file="/usr/local/bin/pve_appended_content.txt"
+    local rules_file="/usr/local/bin/ipv6_nat_rules.sh"
+    local used_ips_file="/usr/local/bin/pve_used_vmbr2_ips.txt"
+    if [ -s "$appended_file" ]; then
+        log "Cleaning up IPv6 NAT rules for VM $vmid"
+        local vm_internal_ipv6="2001:db8:1::${vmid}"
+        local host_external_ipv6=""
+        if [ -f "$rules_file" ]; then
+            host_external_ipv6=$(grep -oP "DNAT --to-destination $vm_internal_ipv6" "$rules_file" | head -1 | grep -oP "(?<=-d )[^ ]+" || true)
+            if [ -n "$host_external_ipv6" ]; then
+                log "Removing IPv6 NAT rules: $vm_internal_ipv6 -> $host_external_ipv6"
+                ip6tables -t nat -D PREROUTING -d "$host_external_ipv6" -j DNAT --to-destination "$vm_internal_ipv6" 2>/dev/null || true
+                ip6tables -t nat -D POSTROUTING -s "$vm_internal_ipv6" -j SNAT --to-source "$host_external_ipv6" 2>/dev/null || true
+                sed -i "/DNAT --to-destination $vm_internal_ipv6/d" "$rules_file" 2>/dev/null || true
+                sed -i "/SNAT --to-source $host_external_ipv6/d" "$rules_file" 2>/dev/null || true
+                if [ -f "$used_ips_file" ]; then
+                    sed -i "/^$host_external_ipv6$/d" "$used_ips_file" 2>/dev/null || true
+                    log "Released IPv6 address: $host_external_ipv6"
+                fi
+            fi
+        fi
     fi
 }
 
@@ -104,6 +130,8 @@ handle_vm_deletion() {
     # 删除VM
     log "Destroying VM $vmid"
     qm destroy "$vmid"
+    # 清理IPv6 NAT映射规则
+    cleanup_ipv6_nat_rules "$vmid"
     # 清理相关文件
     cleanup_vm_files "$vmid"
     # 更新iptables规则
@@ -145,7 +173,6 @@ main() {
         echo "Usage: $0 <VMID/CTID> [VMID/CTID...]"
         exit 1
     fi
-    
     # 创建唯一ID数组
     declare -A unique_ids
     for arg in "$@"; do
@@ -155,11 +182,9 @@ main() {
             log "Warning: Invalid ID format: $arg"
         fi
     done
-    
     # 获取所有VM和CT的IP信息
     declare -A vmip_array
     declare -A ctip_array
-    
     # 获取VM的IP
     vmids=$(qm list | awk '{if(NR>1)print $1}')
     if [ -n "$vmids" ]; then
@@ -170,7 +195,6 @@ main() {
             fi
         done
     fi
-    
     # 获取CT的IP
     ctids=$(pct list | awk '{if(NR>1)print $1}')
     if [ -n "$ctids" ]; then
@@ -181,7 +205,6 @@ main() {
             fi
         done
     fi
-    
     # 处理删除操作
     for id in "${!unique_ids[@]}"; do
         if [ -n "${vmip_array[$id]+x}" ]; then
@@ -192,7 +215,6 @@ main() {
             log "Warning: ID $id not found in existing VMs or CTs"
         fi
     done
-    
     # 重建iptables规则
     log "Rebuilding iptables rules..."
     if [ -f "/etc/iptables/rules.v4" ]; then
@@ -200,22 +222,18 @@ main() {
     else
         log "Warning: iptables rules file not found"
     fi
-    
-    # 重启ndpresponder服务（如果存在）
+    # 重启ndpresponder服务
     if [ -f "/usr/local/bin/ndpresponder" ]; then
         log "Restarting ndpresponder service..."
         systemctl restart ndpresponder.service
     fi
-    
     log "Operation completed successfully"
     echo "Finish."
 }
-
 # 检查是否为root用户
 if [ "$(id -u)" != "0" ]; then
     echo "This script must be run as root"
     exit 1
 fi
-
 # 运行主函数
 main "$@"

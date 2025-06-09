@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/oneclickvirt/pve
-# 2025.06.06
+# 2025.06.09
 # 自动选择要绑定的IPV6地址
 # ./buildvm_onlyv6.sh VMID 用户名 密码 CPU核数 内存 硬盘 系统 存储盘
 # ./buildvm_onlyv6.sh 152 test1 1234567 1 512 5 debian11 local
@@ -24,26 +24,29 @@ init_params() {
 }
 
 check_environment() {
-    if [ ! -f /usr/local/bin/pve_check_ipv6 ]; then
-        _yellow "No ipv6 address exists to open a server with a standalone IPV6 address"
-    fi
-    if ! grep -q "vmbr2" /etc/network/interfaces; then
-        _yellow "No vmbr2 exists to open a server with a standalone IPV6 address"
-    fi
-    service_status=$(systemctl is-active ndpresponder.service)
-    if [ "$service_status" == "active" ]; then
-        _green "The ndpresponder service started successfully and is running, and the host can open a service with a separate IPV6 address."
-        _green "ndpresponder服务启动成功且正在运行，宿主机可开设带独立IPV6地址的服务。"
-    else
-        _green "The status of the ndpresponder service is abnormal and the host may not open a service with a separate IPV6 address."
-        _green "ndpresponder服务状态异常，宿主机不可开设带独立IPV6地址的服务。"
-        exit 1
+    appended_file="/usr/local/bin/pve_appended_content.txt"
+    if [ ! -s "$appended_file" ]; then
+        if [ ! -f /usr/local/bin/pve_check_ipv6 ]; then
+            _yellow "No ipv6 address exists to open a server with a standalone IPV6 address"
+        fi
+        if ! grep -q "vmbr2" /etc/network/interfaces; then
+            _yellow "No vmbr2 exists to open a server with a standalone IPV6 address"
+        fi
+        service_status=$(systemctl is-active ndpresponder.service)
+        if [ "$service_status" == "active" ]; then
+            _green "The ndpresponder service started successfully and is running, and the host can open a service with a separate IPV6 address."
+            _green "ndpresponder服务启动成功且正在运行，宿主机可开设带独立IPV6地址的服务。"
+        else
+            _green "The status of the ndpresponder service is abnormal and the host may not open a service with a separate IPV6 address."
+            _green "ndpresponder服务状态异常，宿主机不可开设带独立IPV6地址的服务。"
+            exit 1
+        fi
     fi
 }
 
 check_cdn() {
     local o_url=$1
-    local shuffled_cdn_urls=($(shuf -e "${cdn_urls[@]}")) # 打乱数组顺序
+    local shuffled_cdn_urls=($(shuf -e "${cdn_urls[@]}"))
     for cdn_url in "${shuffled_cdn_urls[@]}"; do
         if curl -sL -k "$cdn_url$o_url" --max-time 6 | grep -q "success" >/dev/null 2>&1; then
             export cdn_success_url="$cdn_url"
@@ -108,6 +111,62 @@ get_ipv6_info() {
     fi
 }
 
+get_available_vmbr2_ipv6() {
+    local appended_file="/usr/local/bin/pve_appended_content.txt"
+    local used_ips_file="/usr/local/bin/pve_used_vmbr2_ips.txt"
+    if [ ! -f "$used_ips_file" ]; then
+        touch "$used_ips_file"
+    fi
+    
+    local available_ips=()
+    if [ -f "$appended_file" ]; then
+        while IFS= read -r line; do
+            if [[ "$line" =~ ^#[[:space:]]*control-alias ]]; then
+                read -r next_line
+                if [[ "$next_line" =~ ^iface[[:space:]]+.*[[:space:]]+inet6[[:space:]]+static ]]; then
+                    read -r addr_line
+                    if [[ "$addr_line" =~ ^[[:space:]]*address[[:space:]]+([^/]+) ]]; then
+                        available_ips+=("${BASH_REMATCH[1]}")
+                    fi
+                fi
+            fi
+        done < "$appended_file"
+    fi
+    
+    for ip in "${available_ips[@]}"; do
+        if ! grep -q "^$ip$" "$used_ips_file"; then
+            echo "$ip" >> "$used_ips_file"
+            echo "$ip"
+            return 0
+        fi
+    done
+    
+    echo ""
+    return 1
+}
+
+setup_nat_mapping() {
+    local vm_internal_ipv6="$1"
+    local host_external_ipv6="$2"
+    local rules_file="/usr/local/bin/ipv6_nat_rules.sh"
+    if [ ! -f "$rules_file" ]; then
+        cat > "$rules_file" << 'EOF'
+#!/bin/bash
+EOF
+        chmod +x "$rules_file"
+    fi
+    ip6tables -t nat -A PREROUTING -d "$host_external_ipv6" -j DNAT --to-destination "$vm_internal_ipv6"
+    ip6tables -t nat -A POSTROUTING -s "$vm_internal_ipv6" -j SNAT --to-source "$host_external_ipv6"
+    echo "ip6tables -t nat -A PREROUTING -d $host_external_ipv6 -j DNAT --to-destination $vm_internal_ipv6" >> "$rules_file"
+    echo "ip6tables -t nat -A POSTROUTING -s $vm_internal_ipv6 -j SNAT --to-source $host_external_ipv6" >> "$rules_file"
+    if ! grep -q "@reboot root /usr/local/bin/ipv6_nat_rules.sh" /etc/crontab; then
+        echo "@reboot root /usr/local/bin/ipv6_nat_rules.sh" >> /etc/crontab
+    fi
+    if ! grep -q "post-up /usr/local/bin/ipv6_nat_rules.sh" /etc/network/interfaces; then
+        sed -i '/^auto vmbr0$/a post-up /usr/local/bin/ipv6_nat_rules.sh' /etc/network/interfaces
+    fi
+}
+
 create_vm() {
     qm create $vm_num \
         --agent 1 \
@@ -163,7 +222,6 @@ configure_vm() {
     qm set $vm_num --bootdisk scsi0
     qm set $vm_num --boot order=scsi0
     qm set $vm_num --memory $memory
-    # --swap 256
     if [[ "$system_arch" == "arm" ]]; then
         qm set $vm_num --scsi1 ${storage}:cloudinit
     else
@@ -173,7 +231,28 @@ configure_vm() {
     qm set $vm_num --searchdomain local
     user_ip="172.16.1.${vm_num}"
     qm set $vm_num --ipconfig0 ip=${user_ip}/24,gw=172.16.1.1
-    qm set $vm_num --ipconfig1 ip6="${ipv6_address_without_last_segment}${vm_num}/128",gw6="${host_ipv6_address}"
+    
+    appended_file="/usr/local/bin/pve_appended_content.txt"
+    if [ -s "$appended_file" ]; then
+        vm_internal_ipv6="2001:db8:1::${vm_num}"
+        qm set $vm_num --ipconfig1 ip6="${vm_internal_ipv6}/64",gw6="2001:db8:1::1"
+        
+        host_external_ipv6=$(get_available_vmbr2_ipv6)
+        if [ -z "$host_external_ipv6" ]; then
+            echo -e "\e[31mNo available IPv6 address found for NAT mapping\e[0m"
+            echo -e "\e[31m没有可用的IPv6地址用于NAT映射\e[0m"
+            exit 1
+        fi
+        
+        setup_nat_mapping "$vm_internal_ipv6" "$host_external_ipv6"
+        vm_external_ipv6="$host_external_ipv6"
+        echo "VM configured with NAT mapping: $vm_internal_ipv6 -> $host_external_ipv6"
+        echo "虚拟机已配置NAT映射：$vm_internal_ipv6 -> $host_external_ipv6"
+    else
+        qm set $vm_num --ipconfig1 ip6="${ipv6_address_without_last_segment}${vm_num}/128",gw6="${host_ipv6_address}"
+        vm_external_ipv6="${ipv6_address_without_last_segment}${vm_num}"
+    fi
+    
     qm set $vm_num --cipassword $password --ciuser $user
     sleep 5
 }
@@ -191,8 +270,7 @@ resize_disk() {
 
 start_vm_and_save_info() {
     qm start $vm_num
-    echo "$vm_num $user $password $core $memory $disk $system $storage ${ipv6_address_without_last_segment}${vm_num}" >>"vm${vm_num}"
-    # 虚拟机的相关信息将会存储到对应的虚拟机的NOTE中，可在WEB端查看
+    echo "$vm_num $user $password $core $memory $disk $system $storage $vm_external_ipv6" >>"vm${vm_num}"
     data=$(echo " VMID 用户名-username 密码-password CPU核数-CPU 内存-memory 硬盘-disk 系统-system 存储盘-storage 外网IPV6-ipv6")
     values=$(cat "vm${vm_num}")
     IFS=' ' read -ra data_array <<<"$data"

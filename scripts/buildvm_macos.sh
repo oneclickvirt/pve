@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/oneclickvirt/pve
-# 2025.05.09
+# 2025.06.09
 
 # ./build_macos_vm.sh VMID CPU核数 内存 硬盘 SSH端口 VNC端口 系统 存储盘 独立IPV6
 # ./build_macos_vm.sh 100 2 4096 45 44022 45901 high-sierra local N
@@ -185,6 +185,15 @@ create_vm() {
     qm set $vm_num --efidisk0 ${storage}:4
     if [[ "$system" == "high-sierra" || "$system" == "mojave" ]]; then
         qm set $vm_num --sata0 ${storage}:${disk},cache=none,ssd=1,discard=on
+        if [ $? -ne 0 ]; then
+            echo "Failed to mount ${storage}:${disk}. Trying alternative disk file..."
+            qm set $vm_num --sata0 ${storage}-lvm:${disk},cache=none,ssd=1,discard=on
+            if [ $? -ne 0 ]; then
+                echo "Failed to mount ${storage}-lvm:${disk}. Trying fallback file..."
+                echo "All attempts to mount SATA disk failed for VM $vm_num. Exiting..."
+                exit 1
+            fi
+        fi
         qm resize $vm_num sata0 ${disk}G
         if [ $? -ne 0 ]; then
             if [[ $disk =~ ^[0-9]+G$ ]]; then
@@ -195,6 +204,15 @@ create_vm() {
         fi
     else
         qm set $vm_num --virtio0 ${storage}:${disk},cache=none,discard=on
+        if [ $? -ne 0 ]; then
+            echo "Failed to mount ${storage}:${disk}. Trying alternative disk file..."
+            qm set $vm_num --virtio0 ${storage}-lvm:${disk},cache=none,discard=on
+            if [ $? -ne 0 ]; then
+                echo "Failed to mount ${storage}-lvm:${disk}. Trying fallback file..."
+                echo "All attempts to mount SATA disk failed for VM $vm_num. Exiting..."
+                exit 1
+            fi
+        fi
         qm resize $vm_num virtio0 ${disk}G
         if [ $? -ne 0 ]; then
             if [[ $disk =~ ^[0-9]+G$ ]]; then
