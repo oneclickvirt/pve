@@ -48,13 +48,13 @@ safe_remove() {
 
 # 清理IPv6 NAT映射规则
 cleanup_ipv6_nat_rules() {
-    local vmid=$1
+    local vmctid=$1
     local appended_file="/usr/local/bin/pve_appended_content.txt"
     local rules_file="/usr/local/bin/ipv6_nat_rules.sh"
     local used_ips_file="/usr/local/bin/pve_used_vmbr1_ips.txt"
     if [ -s "$appended_file" ]; then
-        log "Cleaning up IPv6 NAT rules for VM $vmid"
-        local vm_internal_ipv6="2001:db8:1::${vmid}"
+        log "Cleaning up IPv6 NAT rules for VM $vmctid"
+        local vm_internal_ipv6="2001:db8:1::${vmctid}"
         local host_external_ipv6=""
         if [ -f "$rules_file" ]; then
             host_external_ipv6=$(grep -oP "DNAT --to-destination $vm_internal_ipv6" "$rules_file" | head -1 | grep -oP "(?<=-d )[^ ]+" || true)
@@ -159,6 +159,8 @@ handle_ct_deletion() {
     pct destroy "$ctid"
     # 清理相关文件
     cleanup_ct_files "$ctid"
+    # 清理IPv6 NAT映射规则
+    cleanup_ipv6_nat_rules "$ctid"
     # 更新iptables规则
     if [ -n "$ip_address" ]; then
         log "Removing iptables rules for IP $ip_address"
