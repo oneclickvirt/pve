@@ -279,7 +279,7 @@ configure_vm() {
         if [[ $disk =~ ^[0-9]+G$ ]]; then
             dnum=${disk::-1}
             disk_m=$((dnum * 1024))
-            qm set $vm_num scsi0 ${disk_m}M
+            qm resize $vm_num scsi0 ${disk_m}M
         fi
     fi
     qm start $vm_num
