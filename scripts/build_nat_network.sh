@@ -675,7 +675,7 @@ EOF
     appended_file="/usr/local/bin/pve_appended_content.txt"
     if [ -s "$appended_file" ]; then
         sed -E 's/(# control-alias) [^[:space:]]+/\1 vmbr2/g; s/(iface) [^[:space:]]+/\1 vmbr2/g' "$appended_file" | sudo tee -a /etc/network/interfaces > /dev/null
-    else if [ -f "/usr/local/bin/ndpresponder" ]; then
+    elif [ -f "/usr/local/bin/ndpresponder" ]; then
         new_exec_start="ExecStart=/usr/local/bin/ndpresponder -i vmbr0 -n ${ipv6_address_without_last_segment}0/${ipv6_prefixlen}"
         file_path="/etc/systemd/system/ndpresponder.service"
         line_number=6
