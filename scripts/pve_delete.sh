@@ -51,7 +51,7 @@ cleanup_ipv6_nat_rules() {
     local vmid=$1
     local appended_file="/usr/local/bin/pve_appended_content.txt"
     local rules_file="/usr/local/bin/ipv6_nat_rules.sh"
-    local used_ips_file="/usr/local/bin/pve_used_vmbr2_ips.txt"
+    local used_ips_file="/usr/local/bin/pve_used_vmbr1_ips.txt"
     if [ -s "$appended_file" ]; then
         log "Cleaning up IPv6 NAT rules for VM $vmid"
         local vm_internal_ipv6="2001:db8:1::${vmid}"

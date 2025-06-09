@@ -472,7 +472,10 @@ configure_vmbr0() {
     # 如果IPV6地址是写死附加上的，这块附加回vmbr0，方便后续使用ip6tables进行转发
     appended_file="/usr/local/bin/pve_appended_content.txt"
     if [ -s "$appended_file" ]; then
-        add_appended_ipv6_address
+        sed -E 's/(# control-alias) [^[:space:]]+/\1 vmbr0/g; s/(iface) [^[:space:]]+/\1 vmbr0/g' "$appended_file" | sudo tee -a /etc/network/interfaces > /dev/null
+        chattr -i /etc/network/interfaces
+        # 如果需要配DNAT/SNAT的V6转发，那么fe80加白就没必要了，需要注释掉
+        sed -i '/^[[:space:]]*up ip addr del fe80/s/^/#/' /etc/network/interfaces
     fi
 }
 
@@ -541,12 +544,6 @@ iface vmbr0 inet6 static
     address ${ipv6_address}/128
     gateway ${ipv6_gateway}
 EOF
-}
-
-add_appended_ipv6_address() {
-    sed -E 's/(# control-alias) [^[:space:]]+/\1 vmbr0/g; s/(iface) [^[:space:]]+/\1 vmbr0/g' "$appended_file" | sudo tee -a /etc/network/interfaces > /dev/null
-    chattr -i /etc/network/interfaces
-    sed -i '/^[[:space:]]*up ip addr del fe80/s/^/#/' /etc/network/interfaces
 }
 
 # 配置vmbr1网桥
@@ -625,7 +622,8 @@ EOF
 
 # 配置vmbr2网桥（如果需要）
 configure_vmbr2() {
-    if [ -n "$ipv6_prefixlen" ] && [ "$((ipv6_prefixlen))" -le 112 ]; then
+    appended_file="/usr/local/bin/pve_appended_content.txt"
+    if [ -n "$ipv6_prefixlen" ] && [ "$((ipv6_prefixlen))" -le 112 ] && [ ! -s "$appended_file" ]; then
         if grep -q "vmbr2" /etc/network/interfaces; then
             _blue "vmbr2 already exists in /etc/network/interfaces"
             _blue "vmbr2 已存在在 /etc/network/interfaces"

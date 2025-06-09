@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/oneclickvirt/pve
-# 2025.06.06
+# 2025.06.09
 # ./buildvm.sh VMID 用户名 密码 CPU核数 内存 硬盘 SSH端口 80端口 443端口 外网端口起 外网端口止 系统 存储盘 独立IPV6
 # ./buildvm.sh 102 test1 1234567 1 512 5 40001 40002 40003 50000 50025 debian11 local N
 
@@ -84,7 +84,61 @@ load_default_config() {
     fi
 }
 
+get_available_vmbr1_ipv6() {
+    local appended_file="/usr/local/bin/pve_appended_content.txt"
+    local used_ips_file="/usr/local/bin/pve_used_vmbr1_ips.txt"
+    if [ ! -f "$used_ips_file" ]; then
+        touch "$used_ips_file"
+    fi
+    local available_ips=()
+    if [ -f "$appended_file" ]; then
+        while IFS= read -r line; do
+            if [[ "$line" =~ ^#[[:space:]]*control-alias ]]; then
+                read -r next_line
+                if [[ "$next_line" =~ ^iface[[:space:]]+.*[[:space:]]+inet6[[:space:]]+static ]]; then
+                    read -r addr_line
+                    if [[ "$addr_line" =~ ^[[:space:]]*address[[:space:]]+([^/]+) ]]; then
+                        available_ips+=("${BASH_REMATCH[1]}")
+                    fi
+                fi
+            fi
+        done < "$appended_file"
+    fi
+    for ip in "${available_ips[@]}"; do
+        if ! grep -q "^$ip$" "$used_ips_file"; then
+            echo "$ip" >> "$used_ips_file"
+            echo "$ip"
+            return 0
+        fi
+    done
+    echo ""
+    return 1
+}
+
+setup_nat_mapping() {
+    local vm_internal_ipv6="$1"
+    local host_external_ipv6="$2"
+    local rules_file="/usr/local/bin/ipv6_nat_rules.sh"
+    if [ ! -f "$rules_file" ]; then
+        cat > "$rules_file" << 'EOF'
+#!/bin/bash
+EOF
+        chmod +x "$rules_file"
+    fi
+    ip6tables -t nat -A PREROUTING -d "$host_external_ipv6" -j DNAT --to-destination "$vm_internal_ipv6"
+    ip6tables -t nat -A POSTROUTING -s "$vm_internal_ipv6" -j SNAT --to-source "$host_external_ipv6"
+    echo "ip6tables -t nat -A PREROUTING -d $host_external_ipv6 -j DNAT --to-destination $vm_internal_ipv6" >> "$rules_file"
+    echo "ip6tables -t nat -A POSTROUTING -s $vm_internal_ipv6 -j SNAT --to-source $host_external_ipv6" >> "$rules_file"
+    if ! grep -q "@reboot root /usr/local/bin/ipv6_nat_rules.sh" /etc/crontab; then
+        echo "@reboot root /usr/local/bin/ipv6_nat_rules.sh" >> /etc/crontab
+    fi
+    if ! grep -q "post-up /usr/local/bin/ipv6_nat_rules.sh" /etc/network/interfaces; then
+        sed -i '/^auto vmbr0$/a post-up /usr/local/bin/ipv6_nat_rules.sh' /etc/network/interfaces
+    fi
+}
+
 create_vm() {
+    appended_file="/usr/local/bin/pve_appended_content.txt"
     if [ "$independent_ipv6" == "n" ]; then
         qm create $vm_num --agent 1 --scsihw virtio-scsi-single --serial0 socket \
             --cores $core --sockets 1 --cpu $cpu_type \
@@ -92,10 +146,15 @@ create_vm() {
             --ostype l26 \
             ${kvm_flag}
     else
+        if [ -s "$appended_file" ]; then
+            net1_bridge="vmbr1"
+        else
+            net1_bridge="vmbr2"
+        fi
         qm create $vm_num --agent 1 --scsihw virtio-scsi-single --serial0 socket \
             --cores $core --sockets 1 --cpu $cpu_type \
             --net0 virtio,bridge=vmbr1,firewall=0 \
-            --net1 virtio,bridge=vmbr2,firewall=0 \
+            --net1 virtio,bridge="$net1_bridge",firewall=0 \
             --ostype l26 \
             ${kvm_flag}
     fi
@@ -159,15 +218,37 @@ create_vm() {
 }
 
 configure_network() {
+    appended_file="/usr/local/bin/pve_appended_content.txt"
     user_ip="172.16.1.${vm_num}"
     if [ "$independent_ipv6" == "y" ]; then
         if [ ! -z "$host_ipv6_address" ] && [ ! -z "$ipv6_prefixlen" ] && [ ! -z "$ipv6_gateway" ] && [ ! -z "$ipv6_address_without_last_segment" ]; then
             if grep -q "vmbr2" /etc/network/interfaces; then
                 qm set $vm_num --ipconfig0 ip=${user_ip}/24,gw=172.16.1.1
-                qm set $vm_num --ipconfig1 ip6="${ipv6_address_without_last_segment}${vm_num}/128",gw6="${host_ipv6_address}"
+                if [ -s "$appended_file" ]; then
+                    # 使用NAT方式，内部IPv6地址 + 外部映射
+                    vm_internal_ipv6="2001:db8:1::${vm_num}"
+                    qm set $vm_num --ipconfig1 ip6="${vm_internal_ipv6}/64",gw6="2001:db8:1::1"
+                    host_external_ipv6=$(get_available_vmbr1_ipv6)
+                    if [ -z "$host_external_ipv6" ]; then
+                        echo -e "\e[31mNo available IPv6 address found for NAT mapping\e[0m"
+                        echo -e "\e[31m没有可用的IPv6地址用于NAT映射\e[0m"
+                        independent_ipv6_status="N"
+                    else
+                        setup_nat_mapping "$vm_internal_ipv6" "$host_external_ipv6"
+                        vm_external_ipv6="$host_external_ipv6"
+                        echo "VM configured with NAT mapping: $vm_internal_ipv6 -> $host_external_ipv6"
+                        echo "虚拟机已配置NAT映射：$vm_internal_ipv6 -> $host_external_ipv6"
+                        independent_ipv6_status="Y"
+                    fi
+                else
+                    # 直接分配IPv6地址
+                    qm set $vm_num --ipconfig1 ip6="${ipv6_address_without_last_segment}${vm_num}/128",gw6="${host_ipv6_address}"
+                    vm_external_ipv6="${ipv6_address_without_last_segment}${vm_num}"
+                    independent_ipv6_status="Y"
+                fi
+                
                 qm set $vm_num --nameserver "1.1.1.1 2606:4700:4700::1111" || qm set $vm_num --nameserver 1.1.1.1
                 qm set $vm_num --searchdomain local
-                independent_ipv6_status="Y"
             else
                 independent_ipv6_status="N"
             fi
@@ -210,7 +291,7 @@ setup_port_forwarding() {
 
 save_vm_info() {
     if [ "$independent_ipv6_status" == "Y" ]; then
-        echo "$vm_num $user $password $core $memory $disk $sshn $web1_port $web2_port $port_first $port_last $system $storage ${ipv6_address_without_last_segment}${vm_num}" >>"vm${vm_num}"
+        echo "$vm_num $user $password $core $memory $disk $sshn $web1_port $web2_port $port_first $port_last $system $storage $vm_external_ipv6" >>"vm${vm_num}"
         data=$(echo " VMID 用户名-username 密码-password CPU核数-CPU 内存-memory 硬盘-disk SSH端口 80端口 443端口 外网端口起-port-start 外网端口止-port-end 系统-system 存储盘-storage 独立IPV6地址-ipv6_address")
     else
         echo "$vm_num $user $password $core $memory $disk $sshn $web1_port $web2_port $port_first $port_last $system $storage" >>"vm${vm_num}"

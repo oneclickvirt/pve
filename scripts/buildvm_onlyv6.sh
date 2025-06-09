@@ -29,8 +29,8 @@ check_environment() {
         if [ ! -f /usr/local/bin/pve_check_ipv6 ]; then
             _yellow "No ipv6 address exists to open a server with a standalone IPV6 address"
         fi
-        if ! grep -q "vmbr2" /etc/network/interfaces; then
-            _yellow "No vmbr2 exists to open a server with a standalone IPV6 address"
+        if ! grep -q "" /etc/network/interfaces; then
+            _yellow "No  exists to open a server with a standalone IPV6 address"
         fi
         service_status=$(systemctl is-active ndpresponder.service)
         if [ "$service_status" == "active" ]; then
@@ -111,9 +111,9 @@ get_ipv6_info() {
     fi
 }
 
-get_available_vmbr2_ipv6() {
+get_available_vmbr1_ipv6() {
     local appended_file="/usr/local/bin/pve_appended_content.txt"
-    local used_ips_file="/usr/local/bin/pve_used_vmbr2_ips.txt"
+    local used_ips_file="/usr/local/bin/pve_used_vmbr1_ips.txt"
     if [ ! -f "$used_ips_file" ]; then
         touch "$used_ips_file"
     fi
@@ -237,7 +237,7 @@ configure_vm() {
     if [ -s "$appended_file" ]; then
         vm_internal_ipv6="2001:db8:1::${vm_num}"
         qm set $vm_num --ipconfig1 ip6="${vm_internal_ipv6}/64",gw6="2001:db8:1::1"
-        host_external_ipv6=$(get_available_vmbr2_ipv6)
+        host_external_ipv6=$(get_available_vmbr1_ipv6)
         if [ -z "$host_external_ipv6" ]; then
             echo -e "\e[31mNo available IPv6 address found for NAT mapping\e[0m"
             echo -e "\e[31m没有可用的IPv6地址用于NAT映射\e[0m"
