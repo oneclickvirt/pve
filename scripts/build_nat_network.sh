@@ -365,7 +365,7 @@ download_with_retry() {
 # 配置ndpresponder守护进程
 install_ndpresponder() {
     appended_file="/usr/local/bin/pve_appended_content.txt"
-    if [ -n "$ipv6_address" ] && [ -n "$ipv6_prefixlen" ] && [ -n "$ipv6_gateway" ] && if [ ! -s "$appended_file" ]; then
+    if [ -n "$ipv6_address" ] && [ -n "$ipv6_prefixlen" ] && [ -n "$ipv6_gateway" ] && [ ! -s "$appended_file" ]; then
         if [ -f /usr/local/bin/pve_maximum_subset ] && [ "$(cat /usr/local/bin/pve_maximum_subset)" = false ]; then
             _blue "No install ndpresponder"
         elif [ "$system_arch" = "x86" ] || [ "$system_arch" = "x86_64" ]; then
