@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/oneclickvirt/pve
-# 2025.05.17
+# 2025.06.09
 # 自动选择要绑定的IPV4地址 额外的IPV4地址需要与本机的IPV4地址在同一个子网内，即前缀一致
 # 此时开设出的虚拟机的网关为宿主机的IPV4的网关，不需要强制约定MAC地址。
 # 此时附加的IPV4地址是宿主机目前的IPV4地址顺位后面的地址
@@ -153,6 +153,7 @@ get_host_network_info() {
 }
 
 create_vm() {
+    appended_file="/usr/local/bin/pve_appended_content.txt"
     if [ "$independent_ipv6" == "n" ]; then
         qm create $vm_num \
             --agent 1 \
@@ -165,6 +166,11 @@ create_vm() {
             --ostype l26 \
             ${kvm_flag}
     else
+        if [ -s "$appended_file" ]; then
+            net1_bridge="vmbr1"
+        else
+            net1_bridge="vmbr2"
+        fi
         qm create $vm_num \
             --agent 1 \
             --scsihw virtio-scsi-single \
@@ -173,7 +179,7 @@ create_vm() {
             --sockets 1 \
             --cpu $cpu_type \
             --net0 virtio,bridge=vmbr0,firewall=0 \
-            --net1 virtio,bridge=vmbr2,firewall=0 \
+            --net1 virtio,bridge="$net1_bridge",firewall=0 \
             --ostype l26 \
             ${kvm_flag}
     fi
@@ -227,15 +233,34 @@ configure_vm() {
     fi
     if [ "$independent_ipv6" == "y" ]; then
         if [ ! -z "$host_ipv6_address" ] && [ ! -z "$ipv6_prefixlen" ] && [ ! -z "$ipv6_gateway" ] && [ ! -z "$ipv6_address_without_last_segment" ]; then
-            if grep -q "vmbr2" /etc/network/interfaces; then
-                qm set $vm_num --ipconfig0 ip=${user_ip}/${user_ip_range},gw=${gateway}
+            qm set $vm_num --ipconfig0 ip=${user_ip}/${user_ip_range},gw=${gateway}
+            appended_file="/usr/local/bin/pve_appended_content.txt"
+            if [ -s "$appended_file" ]; then
+                # 使用 vmbr1 网桥和 NAT 映射
+                vm_internal_ipv6="2001:db8:1::${vm_num}"
+                qm set $vm_num --ipconfig1 ip6="${vm_internal_ipv6}/64",gw6="2001:db8:1::1"
+                host_external_ipv6=$(get_available_vmbr1_ipv6)
+                if [ -z "$host_external_ipv6" ]; then
+                    echo -e "\e[31mNo available IPv6 address found for NAT mapping\e[0m"
+                    echo -e "\e[31m没有可用的IPv6地址用于NAT映射\e[0m"
+                    independent_ipv6_status="N"
+                else
+                    setup_nat_mapping "$vm_internal_ipv6" "$host_external_ipv6"
+                    vm_external_ipv6="$host_external_ipv6"
+                    echo "VM configured with NAT mapping: $vm_internal_ipv6 -> $host_external_ipv6"
+                    echo "虚拟机已配置NAT映射：$vm_internal_ipv6 -> $host_external_ipv6"
+                    independent_ipv6_status="Y"
+                fi
+            elif grep -q "vmbr2" /etc/network/interfaces; then
+                # 使用 vmbr2 网桥直接分配IPv6地址
                 qm set $vm_num --ipconfig1 ip6="${ipv6_address_without_last_segment}${vm_num}/128",gw6="${host_ipv6_address}"
-                qm set $vm_num --nameserver 1.1.1.1
-                qm set $vm_num --searchdomain local
+                vm_external_ipv6="${ipv6_address_without_last_segment}${vm_num}"
                 independent_ipv6_status="Y"
             else
                 independent_ipv6_status="N"
             fi
+            qm set $vm_num --nameserver "1.1.1.1 2606:4700:4700::1111" || qm set $vm_num --nameserver 1.1.1.1
+            qm set $vm_num --searchdomain local
         else
             independent_ipv6_status="N"
         fi
@@ -254,7 +279,7 @@ configure_vm() {
         if [[ $disk =~ ^[0-9]+G$ ]]; then
             dnum=${disk::-1}
             disk_m=$((dnum * 1024))
-            qm resize $vm_num scsi0 ${disk_m}M
+            qm set $vm_num scsi0 ${disk_m}M
         fi
     fi
     qm start $vm_num
@@ -262,11 +287,11 @@ configure_vm() {
 
 save_vm_info() {
     if [ "$independent_ipv6_status" == "Y" ]; then
+        echo "$vm_num $user $password $core $memory $disk $system $storage $user_ip $vm_external_ipv6" >>"vm${vm_num}"
+        data=$(echo " VMID 用户名-username 密码-password CPU核数-CPU 内存-memory 硬盘-disk 系统-system 存储盘-storage 外网IPV4-ipv4 外网IPV6-ipv6")
+    else
         echo "$vm_num $user $password $core $memory $disk $system $storage $user_ip" >>"vm${vm_num}"
         data=$(echo " VMID 用户名-username 密码-password CPU核数-CPU 内存-memory 硬盘-disk 系统-system 存储盘-storage 外网IP地址-ipv4")
-    else
-        echo "$vm_num $user $password $core $memory $disk $system $storage $user_ip ${ipv6_address_without_last_segment}${vm_num}" >>"vm${vm_num}"
-        data=$(echo " VMID 用户名-username 密码-password CPU核数-CPU 内存-memory 硬盘-disk 系统-system 存储盘-storage 外网IPV4-ipv4 外网IPV6-ipv6")
     fi
     values=$(cat "vm${vm_num}")
     IFS=' ' read -ra data_array <<<"$data"

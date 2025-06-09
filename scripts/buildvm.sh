@@ -165,39 +165,37 @@ create_vm() {
 }
 
 configure_network() {
-    appended_file="/usr/local/bin/pve_appended_content.txt"
     user_ip="172.16.1.${vm_num}"
     if [ "$independent_ipv6" == "y" ]; then
         if [ ! -z "$host_ipv6_address" ] && [ ! -z "$ipv6_prefixlen" ] && [ ! -z "$ipv6_gateway" ] && [ ! -z "$ipv6_address_without_last_segment" ]; then
-            if grep -q "vmbr2" /etc/network/interfaces; then
-                qm set $vm_num --ipconfig0 ip=${user_ip}/24,gw=172.16.1.1
-                if [ -s "$appended_file" ]; then
-                    # 使用 vmbr1 网桥和 NAT 映射
-                    vm_internal_ipv6="2001:db8:1::${vm_num}"
-                    qm set $vm_num --ipconfig1 ip6="${vm_internal_ipv6}/64",gw6="2001:db8:1::1"
-                    host_external_ipv6=$(get_available_vmbr1_ipv6)
-                    if [ -z "$host_external_ipv6" ]; then
-                        echo -e "\e[31mNo available IPv6 address found for NAT mapping\e[0m"
-                        echo -e "\e[31m没有可用的IPv6地址用于NAT映射\e[0m"
-                        independent_ipv6_status="N"
-                    else
-                        setup_nat_mapping "$vm_internal_ipv6" "$host_external_ipv6"
-                        vm_external_ipv6="$host_external_ipv6"
-                        echo "VM configured with NAT mapping: $vm_internal_ipv6 -> $host_external_ipv6"
-                        echo "虚拟机已配置NAT映射：$vm_internal_ipv6 -> $host_external_ipv6"
-                        independent_ipv6_status="Y"
-                    fi
+            qm set $vm_num --ipconfig0 ip=${user_ip}/24,gw=172.16.1.1
+            appended_file="/usr/local/bin/pve_appended_content.txt"
+            if [ -s "$appended_file" ]; then
+                # 使用 vmbr1 网桥和 NAT 映射
+                vm_internal_ipv6="2001:db8:1::${vm_num}"
+                qm set $vm_num --ipconfig1 ip6="${vm_internal_ipv6}/64",gw6="2001:db8:1::1"
+                host_external_ipv6=$(get_available_vmbr1_ipv6)
+                if [ -z "$host_external_ipv6" ]; then
+                    echo -e "\e[31mNo available IPv6 address found for NAT mapping\e[0m"
+                    echo -e "\e[31m没有可用的IPv6地址用于NAT映射\e[0m"
+                    independent_ipv6_status="N"
                 else
-                    # 使用 vmbr2 网桥直接分配IPv6地址
-                    qm set $vm_num --ipconfig1 ip6="${ipv6_address_without_last_segment}${vm_num}/128",gw6="${host_ipv6_address}"
-                    vm_external_ipv6="${ipv6_address_without_last_segment}${vm_num}"
+                    setup_nat_mapping "$vm_internal_ipv6" "$host_external_ipv6"
+                    vm_external_ipv6="$host_external_ipv6"
+                    echo "VM configured with NAT mapping: $vm_internal_ipv6 -> $host_external_ipv6"
+                    echo "虚拟机已配置NAT映射：$vm_internal_ipv6 -> $host_external_ipv6"
                     independent_ipv6_status="Y"
                 fi
-                qm set $vm_num --nameserver "1.1.1.1 2606:4700:4700::1111" || qm set $vm_num --nameserver 1.1.1.1
-                qm set $vm_num --searchdomain local
+            elif grep -q "vmbr2" /etc/network/interfaces; then
+                # 使用 vmbr2 网桥直接分配IPv6地址
+                qm set $vm_num --ipconfig1 ip6="${ipv6_address_without_last_segment}${vm_num}/128",gw6="${host_ipv6_address}"
+                vm_external_ipv6="${ipv6_address_without_last_segment}${vm_num}"
+                independent_ipv6_status="Y"
             else
                 independent_ipv6_status="N"
             fi
+            qm set $vm_num --nameserver "1.1.1.1 2606:4700:4700::1111" || qm set $vm_num --nameserver 1.1.1.1
+            qm set $vm_num --searchdomain local
         else
             independent_ipv6_status="N"
         fi

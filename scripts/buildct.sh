@@ -97,9 +97,9 @@ create_container() {
 
 configure_networking() {
     independent_ipv6_status="N"
-    appended_file="/usr/local/bin/pve_appended_content.txt"
     if [ "$independent_ipv6" == "y" ]; then
         if [ ! -z "$host_ipv6_address" ] && [ ! -z "$ipv6_prefixlen" ] && [ ! -z "$ipv6_gateway" ] && [ ! -z "$ipv6_address_without_last_segment" ]; then
+            appended_file="/usr/local/bin/pve_appended_content.txt"
             if [ -s "$appended_file" ]; then
                 # 使用 vmbr1 网桥和 NAT 映射
                 ct_internal_ipv6="2001:db8:1::${CTID}"
