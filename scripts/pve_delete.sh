@@ -68,6 +68,8 @@ cleanup_ipv6_nat_rules() {
                     sed -i "/^$host_external_ipv6$/d" "$used_ips_file" 2>/dev/null || true
                     log "Released IPv6 address: $host_external_ipv6"
                 fi
+                systemctl daemon-reload
+                systemctl restart ipv6nat.service
             fi
         fi
     fi

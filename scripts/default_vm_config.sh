@@ -88,21 +88,42 @@ setup_nat_mapping() {
     local ct_internal_ipv6="$1"
     local host_external_ipv6="$2"
     local rules_file="/usr/local/bin/ipv6_nat_rules.sh"
+    local service_file="/etc/systemd/system/ipv6nat.service"
+    local rule_id="DNAT -d $host_external_ipv6 -j DNAT --to-destination $ct_internal_ipv6"
     if [ ! -f "$rules_file" ]; then
         cat > "$rules_file" << 'EOF'
 #!/bin/bash
+# Auto-generated NAT rule script
 EOF
         chmod +x "$rules_file"
     fi
-    ip6tables -t nat -A PREROUTING -d "$host_external_ipv6" -j DNAT --to-destination "$ct_internal_ipv6"
-    ip6tables -t nat -A POSTROUTING -s "$ct_internal_ipv6" -j SNAT --to-source "$host_external_ipv6"
-    echo "ip6tables -t nat -A PREROUTING -d $host_external_ipv6 -j DNAT --to-destination $ct_internal_ipv6" >> "$rules_file"
-    echo "ip6tables -t nat -A POSTROUTING -s $ct_internal_ipv6 -j SNAT --to-source $host_external_ipv6" >> "$rules_file"
-    if ! grep -q "@reboot root /usr/local/bin/ipv6_nat_rules.sh" /etc/crontab; then
-        echo "@reboot root /usr/local/bin/ipv6_nat_rules.sh" >> /etc/crontab
+    if ! grep -q "$host_external_ipv6" "$rules_file"; then
+        ip6tables -t nat -A PREROUTING -d "$host_external_ipv6" -j DNAT --to-destination "$ct_internal_ipv6"
+        ip6tables -t nat -A POSTROUTING -s "$ct_internal_ipv6" -j SNAT --to-source "$host_external_ipv6"
+        echo "ip6tables -t nat -A PREROUTING -d $host_external_ipv6 -j DNAT --to-destination $ct_internal_ipv6" >> "$rules_file"
+        echo "ip6tables -t nat -A POSTROUTING -s $ct_internal_ipv6 -j SNAT --to-source $host_external_ipv6" >> "$rules_file"
     fi
-    if ! grep -q "post-up /usr/local/bin/ipv6_nat_rules.sh" /etc/network/interfaces; then
-        sed -i '/^auto vmbr0$/a post-up /usr/local/bin/ipv6_nat_rules.sh' /etc/network/interfaces
+    if [ ! -f "$service_file" ]; then
+        cat > "$service_file" << EOF
+[Unit]
+Description=Apply IPv6 NAT rules at boot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/ipv6_nat_rules.sh
+RemainAfterExit=true
+
+[Install]
+WantedBy=multi-user.target
+EOF
+        systemctl daemon-reexec
+        systemctl daemon-reload
+        systemctl enable ipv6nat.service
+    else
+        systemctl daemon-reload
+        systemctl restart ipv6nat.service
     fi
 }
 
