@@ -686,7 +686,7 @@ EOF
         echo '*/2 * * * * curl -m 6 -s ipv6.ip.sb && curl -m 6 -s ipv6.ip.sb' | crontab -
     elif [ -s "$appended_file" ]; then
         tmp_script="/usr/local/bin/check_ipv6.sh"
-        echo "#!/bin/bash" > "$tmp_script"
+        echo '#!/bin/bash' > "$tmp_script"
         echo "" >> "$tmp_script"
         counter=0
         grep -Po '(?<=address )[\da-fA-F:]+(?=/64)' "$appended_file" | while read -r ip; do
