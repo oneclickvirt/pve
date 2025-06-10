@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/oneclickvirt/pve
-# 2025.05.10
+# 2025.06.10
 
 _red() { echo -e "\033[31m\033[01m$@\033[0m"; }
 _green() { echo -e "\033[32m\033[01m$@\033[0m"; }
@@ -85,14 +85,20 @@ validate_ctid() {
 
 check_ipv6_setup() {
     if [ "$independent_ipv6" == "y" ]; then
-        service_status=$(systemctl is-active ndpresponder.service)
-        if [ "$service_status" == "active" ]; then
-            _green "The ndpresponder service started successfully and is running, and the host can open a service with a separate IPV6 address."
-            _green "ndpresponder服务启动成功且正在运行，宿主机可开设带独立IPV6地址的服务。"
-        else
-            _green "The status of the ndpresponder service is abnormal and the host may not open a service with a separate IPV6 address."
-            _green "ndpresponder服务状态异常，宿主机不可开设带独立IPV6地址的服务。"
-            return 1
+        appended_file="/usr/local/bin/pve_appended_content.txt"
+        if [ ! -s "$appended_file" ]; then
+            service_status=$(systemctl is-active ndpresponder.service)
+            if [ "$service_status" == "active" ]; then
+                _green "The ndpresponder service started successfully and is running, and the host can open a service with a separate IPV6 address."
+                _green "ndpresponder服务启动成功且正在运行，宿主机可开设带独立IPV6地址的服务。"
+            else
+                _green "The status of the ndpresponder service is abnormal and the host may not open a service with a separate IPV6 address."
+                _green "ndpresponder服务状态异常，宿主机不可开设带独立IPV6地址的服务。"
+                return 1
+            fi
+        elif [ -s "$appended_file" ]; then
+            _green "Additional IPv6 addresses exist for mapping by NAT, and the host can open services with separate IPV6 addresses."
+            _green "存在额外的IPv6地址可供NAT进行映射，宿主机可开设带独立IPV6地址的服务。"
         fi
         if [ -f /usr/local/bin/pve_check_ipv6 ]; then
             host_ipv6_address=$(cat /usr/local/bin/pve_check_ipv6)
