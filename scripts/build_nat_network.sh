@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/oneclickvirt/pve
-# 2025.06.09
+# 2025.06.10
 
 ########## 预设部分输出和部分中间变量
 
@@ -472,10 +472,11 @@ configure_vmbr0() {
     # 如果IPV6地址是写死附加上的，这块附加回vmbr0，方便后续使用ip6tables进行转发
     appended_file="/usr/local/bin/pve_appended_content.txt"
     if [ -s "$appended_file" ]; then
-        sed -E 's/(# control-alias) [^[:space:]]+/\1 vmbr0/g; s/(iface) [^[:space:]]+/\1 vmbr0/g' "$appended_file" | sudo tee -a /etc/network/interfaces > /dev/null
         chattr -i /etc/network/interfaces
+        sed -E 's/(# control-alias) [^[:space:]]+/\1 vmbr0/g; s/(iface) [^[:space:]]+/\1 vmbr0/g' "$appended_file" | sudo tee -a /etc/network/interfaces > /dev/null
         # 如果需要配DNAT/SNAT的V6转发，那么fe80加白就没必要了，需要注释掉
         sed -i '/^[[:space:]]*up ip addr del fe80/s/^/#/' /etc/network/interfaces
+        grep -Fxq 'post-up echo 1 > /proc/sys/net/ipv6/conf/vmbr0/proxy_ndp' /etc/network/interfaces || echo 'post-up echo 1 > /proc/sys/net/ipv6/conf/vmbr0/proxy_ndp' >> /etc/network/interfaces
     fi
 }
 
@@ -668,7 +669,6 @@ EOF
 
 # 为IPV6子网配置vmbr2
 configure_vmbr2_with_ipv6_subnet() {
-    echo '*/1 * * * * curl -m 6 -s ipv6.ip.sb && curl -m 6 -s ipv6.ip.sb' | crontab -
     appended_file="/usr/local/bin/pve_appended_content.txt"
     if [ ! -s "$appended_file" ] && [ -f "/usr/local/bin/ndpresponder" ]; then
         cat <<EOF | sudo tee -a /etc/network/interfaces
@@ -683,6 +683,20 @@ EOF
         file_path="/etc/systemd/system/ndpresponder.service"
         line_number=6
         sudo sed -i "${line_number}s|.*|${new_exec_start}|" "$file_path"
+        echo '*/2 * * * * curl -m 6 -s ipv6.ip.sb && curl -m 6 -s ipv6.ip.sb' | crontab -
+    elif [ -s "$appended_file" ]; then
+        tmp_script="/usr/local/bin/check_ipv6.sh"
+        echo "#!/bin/bash" > "$tmp_script"
+        echo "" >> "$tmp_script"
+        counter=0
+        grep -Po '(?<=address )[\da-fA-F:]+(?=/64)' "$appended_file" | while read -r ip; do
+            delay=$((counter * 6))
+            echo "sleep $delay; curl --interface $ip -6 -s https://ifconfig.co &" >> "$tmp_script"
+            counter=$((counter + 1))
+        done
+        echo "wait" >> "$tmp_script"
+        chmod +x "$tmp_script"
+        (crontab -l 2>/dev/null; echo "*/15 * * * * bash $tmp_script") | sort -u | crontab -
     fi
     configure_ipv6_forwarding
 }
