@@ -637,6 +637,19 @@ configure_vmbr2() {
         else
             rm -rf /etc/systemd/system/ndpresponder.service
         fi
+    elif [ -s "$appended_file" ]; then
+        tmp_script="/usr/local/bin/check_ipv6.sh"
+        echo '#!/bin/bash' > "$tmp_script"
+        echo "" >> "$tmp_script"
+        counter=0
+        grep -Po '(?<=address )[\da-fA-F:]+(?=/64)' "$appended_file" | while read -r ip; do
+            delay=$((counter * 6))
+            echo "sleep $delay; curl --interface $ip -6 -s https://ifconfig.co &" >> "$tmp_script"
+            counter=$((counter + 1))
+        done
+        echo "wait" >> "$tmp_script"
+        chmod +x "$tmp_script"
+        (crontab -l 2>/dev/null; echo "*/15 * * * * bash $tmp_script") | sort -u | crontab -
     else
         rm -rf /etc/systemd/system/ndpresponder.service
     fi
@@ -684,19 +697,6 @@ EOF
         line_number=6
         sudo sed -i "${line_number}s|.*|${new_exec_start}|" "$file_path"
         echo '*/2 * * * * curl -m 6 -s ipv6.ip.sb && curl -m 6 -s ipv6.ip.sb' | crontab -
-    elif [ -s "$appended_file" ]; then
-        tmp_script="/usr/local/bin/check_ipv6.sh"
-        echo '#!/bin/bash' > "$tmp_script"
-        echo "" >> "$tmp_script"
-        counter=0
-        grep -Po '(?<=address )[\da-fA-F:]+(?=/64)' "$appended_file" | while read -r ip; do
-            delay=$((counter * 6))
-            echo "sleep $delay; curl --interface $ip -6 -s https://ifconfig.co &" >> "$tmp_script"
-            counter=$((counter + 1))
-        done
-        echo "wait" >> "$tmp_script"
-        chmod +x "$tmp_script"
-        (crontab -l 2>/dev/null; echo "*/15 * * * * bash $tmp_script") | sort -u | crontab -
     fi
     configure_ipv6_forwarding
 }
