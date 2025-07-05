@@ -70,14 +70,8 @@ fi
 if ! lsmod | grep -q apparmor; then
     modprobe apparmor
 fi
-xfconf-query -c xfce4-power-manager -p /xfce4-power-manager/blank-on-ac -s 0
-xfconf-query -c xfce4-power-manager -p /xfce4-power-manager/blank-on-battery -s 0
-xfconf-query -c xfce4-power-manager -p /xfce4-power-manager/hibernate-on-ac -s false
-xfconf-query -c xfce4-power-manager -p /xfce4-power-manager/hibernate-on-battery -s false
-xfconf-query -c xfce4-power-manager -p /xfce4-power-manager/sleep-on-ac -s false
-xfconf-query -c xfce4-power-manager -p /xfce4-power-manager/sleep-on-battery -s false
-mkdir -p /etc/skel/.config/xfce4/xfconf/xfce-perchannel-xml
-cat > /etc/skel/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-power-manager.xml <<'EOF'
+mkdir -p /root/.config/xfce4/xfconf/xfce-perchannel-xml
+cat > /root/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-power-manager.xml <<'EOF'
 <?xml version="1.0" encoding="UTF-8"?>
 <channel name="xfce4-power-manager" version="1.0">
   <property name="blank-on-ac" type="int" value="0"/>
@@ -88,5 +82,13 @@ cat > /etc/skel/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-power-manager.xml
   <property name="sleep-on-battery" type="bool" value="false"/>
 </channel>
 EOF
+mkdir -p /root/.config/autostart
+cat > /root/.config/autostart/fcitx5.desktop << 'EOF'
+[Desktop Entry]
+Type=Application
+Exec=fcitx5
+NoDisplay=true
+EOF
+chown -R root:root /root/.config
 apt autoremove -y
 apt autoclean
