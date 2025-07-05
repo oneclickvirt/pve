@@ -74,9 +74,7 @@ if ! grep -q "^auto $WIFI_INTERFACE$" /etc/network/interfaces; then
     fi
     cat >> /etc/network/interfaces << EOF
 auto $WIFI_INTERFACE
-iface $WIFI_INTERFACE inet manual
-    address 192.168.124.144/24
-    gateway 192.168.124.1
+iface wlp2s0 inet dhcp
 EOF
     echo "Added network interface configuration for $WIFI_INTERFACE"
 else
