@@ -12,18 +12,7 @@ version=$(lsb_release -cs)
 cat > /etc/apt/sources.list.d/pve-no-subscription.list <<EOF
 deb https://mirrors.tuna.tsinghua.edu.cn/proxmox/debian/pve ${version} pve-no-subscription
 EOF
-if command -v ceph >/dev/null 2>&1; then
-  ceph_version_full=$(ceph -v 2>/dev/null)
-  ceph_version=$(echo "$ceph_version_full" | grep -oP '\(\K[^)]+' | head -1)
-else
-  ceph_version=""
-fi
-if [ -n "$ceph_version" ] && [ -f /etc/apt/sources.list.d/ceph.list ]; then
-  cp /etc/apt/sources.list.d/ceph.list /etc/apt/sources.list.d/ceph.list.bak
-  cat > /etc/apt/sources.list.d/ceph.list <<EOF
-deb https://mirrors.tuna.tsinghua.edu.cn/ceph/debian-${ceph_version} ${version} main
-EOF
-fi
+rm -rf /etc/apt/sources.list.d/ceph.list
 cp -rf /usr/share/javascript/proxmox-widget-toolkit/proxmoxlib.js /usr/share/javascript/proxmox-widget-toolkit/proxmoxlib.js.bak
 sed -Ezi.bak "s/(Ext.Msg.show\(\{\s+title: gettext\('No valid sub)/void\(\{ \/\/\1/g" /usr/share/javascript/proxmox-widget-toolkit/proxmoxlib.js
 sed -i.bak "s/data.status !== 'Active'/false/g" /usr/share/javascript/proxmox-widget-toolkit/proxmoxlib.js
@@ -90,5 +79,12 @@ Exec=fcitx5
 NoDisplay=true
 EOF
 chown -R root:root /root/.config
+POOL_ID="mypool"
+if pvesh get /pools/$POOL_ID >/dev/null 2>&1; then
+    echo "Resource pool $POOL_ID already exists!"
+else
+    pvesh create /pools --poolid $POOL_ID
+fi
 apt autoremove -y
 apt autoclean
+echo "Please execute reboot to reboot the system to load the configuration."
