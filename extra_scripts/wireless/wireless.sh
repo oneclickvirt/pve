@@ -156,7 +156,6 @@ if ! grep -q "^nameserver 144.144.144.144$" ${RESOLV_CONF}; then
     echo "nameserver 144.144.144.144" >>${RESOLV_CONF}
 fi
 sleep 3
-sleep $CURRENT_WAIT
 echo "Restarting wpa_supplicant and networking services..."
 systemctl restart wpa_supplicant
 sleep 5
