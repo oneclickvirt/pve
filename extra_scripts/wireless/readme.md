@@ -22,6 +22,10 @@ bash /mnt/wireless.sh
 
 ## 其他初始设置
 
+使用前务必确保```curl ip.sb```无问题
+
 ```shell
 bash default.sh
 ```
+
+执行会非常耗时
