@@ -136,6 +136,10 @@ fi
 if ! grep -q "^nameserver 144.144.144.144$" ${RESOLV_CONF}; then
     echo "nameserver 144.144.144.144" >>${RESOLV_CONF}
 fi
+sleep 5
+systemctl restart networking
+sleep 5
+systemctl restart wpa_supplicant
 EOF
     chmod +x /usr/local/bin/dns-setup.sh
 fi
