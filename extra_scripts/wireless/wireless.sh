@@ -87,10 +87,22 @@ if ! grep -q "^auto $WIFI_INTERFACE$" /etc/network/interfaces; then
     fi
     cat >> /etc/network/interfaces << EOF
 auto $WIFI_INTERFACE
-iface wlp2s0 inet manual
+iface $WIFI_INTERFACE inet static
     address 192.168.124.144/24
     gateway 192.168.124.1
+    dns-nameservers 144.144.144.144
     metric 10
+
+auto vmbr1
+iface vmbr1 inet static
+    address 172.16.100.1
+    netmask 255.255.255.0
+    bridge_ports none
+    bridge_stp off
+    bridge_fd 0
+    post-up echo 1 > /proc/sys/net/ipv4/ip_forward
+    post-up iptables -t nat -A POSTROUTING -s '172.16.100.0/24' -o $WIFI_INTERFACE -j MASQUERADE
+    post-down iptables -t nat -D POSTROUTING -s '172.16.100.0/24' -o $WIFI_INTERFACE -j MASQUERADE
 EOF
     echo "Added network interface configuration for $WIFI_INTERFACE"
 else
