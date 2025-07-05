@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/oneclickvirt/pve
-# 2025.07.04
+# 2025.07.05
 cd /mnt/wireless || exit 1
 for i in {1..6}; do
     INSTALLED_PACKAGES=""
@@ -38,7 +38,16 @@ while true; do
     echo "Password: $PASSWORD"
     read -p "Is this correct? (y/n): " CONFIRM
     if [[ "$CONFIRM" =~ ^[Yy]$ ]]; then
-        break
+        SCAN_RESULT=$(iwlist $WIFI_INTERFACE scan 2>/dev/null | grep -i "ESSID:\"$SSID\"")
+        if [ -n "$SCAN_RESULT" ]; then
+            break
+        else
+            echo "Error: WiFi network '$SSID' not found in available networks."
+            echo "Please check the SSID and try again."
+            echo "Available networks:"
+            iwlist $WIFI_INTERFACE scan 2>/dev/null | grep "ESSID:" | grep -v "ESSID:\"\"" | sort | uniq
+            echo "Please re-enter the WiFi credentials..."
+        fi
     else
         echo "Please re-enter the WiFi credentials..."
     fi
@@ -74,7 +83,7 @@ if ! grep -q "^auto $WIFI_INTERFACE$" /etc/network/interfaces; then
     fi
     cat >> /etc/network/interfaces << EOF
 auto $WIFI_INTERFACE
-iface wlp2s0 inet dhcp
+iface wlp2s0 inet manual
 EOF
     echo "Added network interface configuration for $WIFI_INTERFACE"
 else
