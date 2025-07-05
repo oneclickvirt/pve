@@ -81,9 +81,16 @@ if ! grep -q "^auto $WIFI_INTERFACE$" /etc/network/interfaces; then
         cp /etc/network/interfaces /etc/network/interfaces.backup
         sed -i "/^iface $WIFI_INTERFACE inet \(auto\|static\|manual\)/,/^$/s/^/#/" /etc/network/interfaces
     fi
+    if grep -q '^iface vmbr0 inet static' /etc/network/interfaces && \
+       ! grep -A 5 '^iface vmbr0 inet static' /etc/network/interfaces | grep -q '^\s*metric\s\+100'; then
+        sed -i '/^iface vmbr0 inet static$/a\    metric 100' /etc/network/interfaces
+    fi
     cat >> /etc/network/interfaces << EOF
 auto $WIFI_INTERFACE
 iface wlp2s0 inet manual
+    address 192.168.124.144/24
+    gateway 192.168.124.1
+    metric 10
 EOF
     echo "Added network interface configuration for $WIFI_INTERFACE"
 else
