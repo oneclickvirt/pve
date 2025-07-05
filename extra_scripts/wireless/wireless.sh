@@ -104,6 +104,8 @@ iface vmbr1 inet static
     post-up iptables -t nat -A POSTROUTING -s '172.16.100.0/24' -o $WIFI_INTERFACE -j MASQUERADE
     post-down iptables -t nat -D POSTROUTING -s '172.16.100.0/24' -o $WIFI_INTERFACE -j MASQUERADE
 EOF
+    echo "net.ipv4.ip_forward = 1" >> /etc/sysctl.conf
+    sysctl -p
     echo "Added network interface configuration for $WIFI_INTERFACE"
 else
     echo "Network interface $WIFI_INTERFACE already configured"
