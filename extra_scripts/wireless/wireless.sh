@@ -91,10 +91,11 @@ sleep 5
 if [ ! -f /usr/local/bin/dns-setup.sh ]; then
     cat > /usr/local/bin/dns-setup.sh << 'EOF'
 #!/bin/bash
-sleep 60
+sleep 50
 DNS_SERVER="144.144.144.144"
 RESOLV_CONF="/etc/resolv.conf"
 rfkill unblock wifi
+sleep 10
 WPA_STATUS=$(systemctl is-active wpa_supplicant 2>/dev/null)
 if [ "$WPA_STATUS" != "active" ] && [ "$WPA_STATUS" != "activating" ]; then
     systemctl start wpa_supplicant || systemctl restart wpa_supplicant
@@ -139,37 +140,10 @@ if ! grep -q "^nameserver 144.144.144.144$" ${RESOLV_CONF}; then
     echo "nameserver 144.144.144.144" >>${RESOLV_CONF}
 fi
 sleep 3
-echo "Testing network connectivity..."
-RETRY_COUNT=0
-MAX_WAIT=180
-WAIT_TIMES=(40 80 120 180)
-while [ $RETRY_COUNT -lt ${#WAIT_TIMES[@]} ]; do
-    if curl -s --connect-timeout 10 ip.sb > /dev/null; then
-        echo "Network connectivity test successful"
-        echo "Your public IP is: $(curl -s ip.sb)"
-        echo "WiFi setup completed successfully"
-        echo "DNS setup service enabled - will run once after network is online"
-        echo "Check service status with: systemctl status dns-setup.service"
-        exit 0
-    else
-        CURRENT_WAIT=${WAIT_TIMES[$RETRY_COUNT]}
-        echo "Network connectivity test failed (attempt $((RETRY_COUNT + 1)))"
-        echo "Waiting ${CURRENT_WAIT} seconds before restarting services..."
-        sleep $CURRENT_WAIT
-        echo "Restarting wpa_supplicant and networking services..."
-        systemctl restart wpa_supplicant
-        sleep 5
-        systemctl restart networking
-        sleep 5
-        echo "Services restarted, testing connectivity again..."
-        RETRY_COUNT=$((RETRY_COUNT + 1))
-    fi
-done
-echo "Network connectivity test failed after all retry attempts"
-echo "Tried waiting: ${WAIT_TIMES[*]} seconds respectively"
-echo "Please restart the system and try again"
-echo "You can also manually check the following:"
-echo "1. systemctl status wpa_supplicant"
-echo "2. systemctl status networking"
-echo "3. ip a (check if $WIFI_INTERFACE has an IP address)"
-echo "4. ping baidu.com (test basic connectivity)"
+sleep $CURRENT_WAIT
+echo "Restarting wpa_supplicant and networking services..."
+systemctl restart wpa_supplicant
+sleep 5
+systemctl restart networking
+echo "Configuration completed. Rebooting in 15 seconds ..."
+sleep 15 && reboot
