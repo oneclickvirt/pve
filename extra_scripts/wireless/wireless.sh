@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/oneclickvirt/pve
-# 2025.07.05
+# 2025.07.06
 cd /mnt/wireless || exit 1
 for i in {1..6}; do
     INSTALLED_PACKAGES=""
@@ -92,18 +92,18 @@ iface $WIFI_INTERFACE inet static
     gateway 192.168.124.1
     dns-nameservers 144.144.144.144
     metric 10
-
-auto vmbr1
-iface vmbr1 inet static
-    address 172.16.100.1
-    netmask 255.255.255.0
-    bridge_ports none
-    bridge_stp off
-    bridge_fd 0
-    post-up echo 1 > /proc/sys/net/ipv4/ip_forward
-    post-up iptables -t nat -A POSTROUTING -s '172.16.100.0/24' -o $WIFI_INTERFACE -j MASQUERADE
-    post-down iptables -t nat -D POSTROUTING -s '172.16.100.0/24' -o $WIFI_INTERFACE -j MASQUERADE
 EOF
+# auto vmbr1
+# iface vmbr1 inet static
+#     address 172.16.100.1
+#     netmask 255.255.255.0
+#     bridge_ports none
+#     bridge_stp off
+#     bridge_fd 0
+#     post-up echo 1 > /proc/sys/net/ipv4/ip_forward
+#     post-up iptables -t nat -A POSTROUTING -s '172.16.100.0/24' -o $WIFI_INTERFACE -j MASQUERADE
+#     post-down iptables -t nat -D POSTROUTING -s '172.16.100.0/24' -o $WIFI_INTERFACE -j MASQUERADE
+# EOF
     echo "net.ipv4.ip_forward = 1" >> /etc/sysctl.conf
     sysctl -p
     echo "Added network interface configuration for $WIFI_INTERFACE"
