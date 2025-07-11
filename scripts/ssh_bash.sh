@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/oneclickvirt/pve
-# 2024.06.05
+# 2025.07.11
 
 if [ -f "/etc/resolv.conf" ]; then
     cp /etc/resolv.conf /etc/resolv.conf.bak
@@ -139,6 +139,7 @@ if [ -f "/etc/motd" ]; then
     echo 'Related repo https://github.com/oneclickvirt/pve' >>/etc/motd
     echo '--by https://t.me/spiritlhl' >>/etc/motd
 fi
+ssh-keygen -A
 service iptables stop 2>/dev/null
 chkconfig iptables off 2>/dev/null
 if [ -f "/etc/sysconfig/selinux" ]; then
