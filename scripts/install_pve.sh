@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/oneclickvirt/pve
-# 2025.06.09
+# 2025.07.20
 
 ########## 预设部分输出和部分中间变量
 
@@ -1406,6 +1406,14 @@ setup_x86_pve_repo() {
             repo_url="deb https://mirrors.tuna.tsinghua.edu.cn/proxmox/debian/pve ${version} pve-no-subscription"
         fi
         ;;
+    # https://forum.proxmox.com/threads/proxmox-ve-9-0-beta-released.168619/
+    trixie)
+        if [[ -z "${CN}" || "${CN}" != true ]]; then
+            repo_url="deb http://download.proxmox.com/debian/pve ${version} pve-test"
+        else
+            repo_url="deb https://mirrors.tuna.tsinghua.edu.cn/proxmox/debian/pve ${version} pve-test"
+        fi
+        ;;
     *)
         _red "Error: Unsupported Debian version"
         if ! confirm_continue "是否要继续安装(识别到不是Debian9~Debian12的范围)？"; then
@@ -1464,12 +1472,18 @@ add_pve_gpg_key() {
             chmod +r /etc/apt/trusted.gpg.d/proxmox-release-bullseye.gpg
         fi
         ;;
-    bookworm)
+    bookworm|trixie)
         if [ ! -f "/etc/apt/trusted.gpg.d/proxmox-release-bookworm.gpg" ]; then
             wget http://download.proxmox.com/debian/proxmox-release-bookworm.gpg -O /etc/apt/trusted.gpg.d/proxmox-release-bookworm.gpg
             chmod +r /etc/apt/trusted.gpg.d/proxmox-release-bookworm.gpg
         fi
         ;;
+    # trixie)
+    #     if [ ! -f "/etc/apt/trusted.gpg.d/proxmox-release-trixie.gpg" ]; then
+    #         wget http://download.proxmox.com/debian/proxmox-release-trixie.gpg -O /etc/apt/trusted.gpg.d/proxmox-release-trixie.gpg
+    #         chmod +r /etc/apt/trusted.gpg.d/proxmox-release-trixie.gpg
+    #     fi
+    #     ;;
     *)
         _red "Error: Unsupported Debian version"
         if ! confirm_continue "是否要继续安装(识别到不是Debian9~Debian12的范围)？"; then
@@ -1772,10 +1786,11 @@ configure_pve_sources() {
             sed -i 's|http://mirrors.ustc.edu.cn/proxmox|https://mirrors.tuna.tsinghua.edu.cn/proxmox|g' /usr/share/perl5/PVE/APLInfo.pm
         fi
     fi
-    # 替换apt源中的无效订阅
-    cp /etc/apt/sources.list.d/pve-enterprise.list /etc/apt/sources.list.d/pve-enterprise.list.bak
-    # echo "deb http://download.proxmox.com/debian/pve $(lsb_release -sc) pve-no-subscription" > /etc/apt/sources.list.d/pve-enterprise.list
-    rm -rf /etc/apt/sources.list.d/pve-enterprise.list
+    # 删除apt源中的无效订阅
+    [ -f "/etc/apt/sources.list.d/pve-enterprise.list" ] && rm -f "/etc/apt/sources.list.d/pve-enterprise.list"
+    [ -f "/etc/apt/sources.list.d/ceph.list" ] && rm -f "/etc/apt/sources.list.d/ceph.list"
+    [ -f "/etc/apt/sources.list.d/pve-enterprise.sources" ] && rm -f "/etc/apt/sources.list.d/pve-enterprise.sources"
+    [ -f "/etc/apt/sources.list.d/ceph.sources" ] && rm -f "/etc/apt/sources.list.d/ceph.sources"
 }
 
 # 确保DNS配置有效
