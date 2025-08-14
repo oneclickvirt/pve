@@ -1400,10 +1400,14 @@ add_pve_gpg_key() {
     stretch)
         keyfile="/etc/apt/trusted.gpg.d/proxmox-ve-release-4.x.gpg"
         [ ! -f "$keyfile" ] && wget -q http://download.proxmox.com/debian/proxmox-ve-release-4.x.gpg -O "$keyfile" && chmod +r "$keyfile"
+        keyfile="/etc/apt/trusted.gpg.d/proxmox-ve-release-5.x.gpg"
+        [ ! -f "$keyfile" ] && wget -q http://download.proxmox.com/debian/proxmox-ve-release-5.x.gpg -O "$keyfile" && chmod +r "$keyfile"
         ;;
     buster)
         keyfile="/etc/apt/trusted.gpg.d/proxmox-ve-release-5.x.gpg"
         [ ! -f "$keyfile" ] && wget -q http://download.proxmox.com/debian/proxmox-ve-release-5.x.gpg -O "$keyfile" && chmod +r "$keyfile"
+        keyfile="/etc/apt/trusted.gpg.d/proxmox-ve-release-6.x.gpg"
+        [ ! -f "$keyfile" ] && wget -q http://download.proxmox.com/debian/proxmox-ve-release-6.x.gpg -O "$keyfile" && chmod +r "$keyfile"
         ;;
     bullseye)
         keyfile="/etc/apt/trusted.gpg.d/proxmox-release-bullseye.gpg"
