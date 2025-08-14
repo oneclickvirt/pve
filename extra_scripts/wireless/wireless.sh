@@ -2,6 +2,7 @@
 # from
 # https://github.com/oneclickvirt/pve
 # 2025.07.06
+# 不支持debian13及更新版本的debian，未对sysctl做适配
 cd /mnt/wireless || exit 1
 for i in {1..6}; do
     INSTALLED_PACKAGES=""
