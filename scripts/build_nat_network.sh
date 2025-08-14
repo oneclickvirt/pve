@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/oneclickvirt/pve
-# 2025.06.10
+# 2025.08.14
 
 ########## 预设部分输出和部分中间变量
 
@@ -108,14 +108,43 @@ check_interface() {
 }
 
 update_sysctl() {
-    sysctl_config="$1"
-    if grep -q "^$sysctl_config" /etc/sysctl.conf; then
-        if grep -q "^#$sysctl_config" /etc/sysctl.conf; then
-            sed -i "s/^#$sysctl_config/$sysctl_config/" /etc/sysctl.conf
+    sysctl_config="$1"  # 格式: key=value
+    key="${sysctl_config%%=*}"
+    value="${sysctl_config#*=}"
+    # 目标配置文件（systemd 方式）
+    custom_conf="/etc/sysctl.d/99-custom.conf"
+    mkdir -p /etc/sysctl.d
+    # 检查 /etc/sysctl.conf 是否存在并且在系统加载路径中
+    use_etc_sysctl_conf=false
+    if [ -f /etc/sysctl.conf ]; then
+        if grep -q "/etc/sysctl.conf" /etc/sysctl.d/README* 2>/dev/null || \
+           grep -q "/etc/sysctl.conf" /lib/systemd/system/sysctl.service 2>/dev/null; then
+            use_etc_sysctl_conf=true
         fi
-    else
-        echo "$sysctl_config" >>/etc/sysctl.conf
     fi
+    # 更新 /etc/sysctl.d/99-custom.conf
+    if grep -q "^$sysctl_config" "$custom_conf" 2>/dev/null; then
+        : # 已经有正确配置，跳过
+    elif grep -q "^#$sysctl_config" "$custom_conf" 2>/dev/null; then
+        sed -i "s/^#$sysctl_config/$sysctl_config/" "$custom_conf"
+    elif grep -q "^$key" "$custom_conf" 2>/dev/null; then
+        sed -i "s|^$key.*|$sysctl_config|" "$custom_conf"
+    else
+        echo "$sysctl_config" >> "$custom_conf"
+    fi
+    # 如果系统还在用 /etc/sysctl.conf，也同步更新
+    if [ "$use_etc_sysctl_conf" = true ]; then
+        if grep -q "^$sysctl_config" /etc/sysctl.conf; then
+            : # 已经有正确配置
+        elif grep -q "^#$sysctl_config" /etc/sysctl.conf; then
+            sed -i "s/^#$sysctl_config/$sysctl_config/" /etc/sysctl.conf
+        elif grep -q "^$key" /etc/sysctl.conf; then
+            sed -i "s|^$key.*|$sysctl_config|" /etc/sysctl.conf
+        else
+            echo "$sysctl_config" >> /etc/sysctl.conf
+        fi
+    fi
+    sysctl -w "$key=$value" >/dev/null 2>&1
 }
 
 remove_duplicate_lines() {
