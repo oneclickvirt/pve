@@ -938,8 +938,8 @@ check_system_requirements() {
 
 # 检测系统信息
 detect_system_info() {
-    _yellow "Detecting system information, will probably stay on the page for up to 1~2 minutes"
-    _yellow "正在检测系统信息，大概会停留在该页面最多1~2分钟"
+    _yellow "Detecting system information, will probably stay on the page for up to 1~2 minutes at most"
+    _yellow "正在检测系统信息，最多会停留在该页面 1~2 分钟"
     # 重启网络服务
     restart_network_service
     # 收集IP地址信息
@@ -1472,18 +1472,18 @@ add_pve_gpg_key() {
             chmod +r /etc/apt/trusted.gpg.d/proxmox-release-bullseye.gpg
         fi
         ;;
-    bookworm|trixie)
+    bookworm)
         if [ ! -f "/etc/apt/trusted.gpg.d/proxmox-release-bookworm.gpg" ]; then
             wget http://download.proxmox.com/debian/proxmox-release-bookworm.gpg -O /etc/apt/trusted.gpg.d/proxmox-release-bookworm.gpg
             chmod +r /etc/apt/trusted.gpg.d/proxmox-release-bookworm.gpg
         fi
         ;;
-    # trixie)
-    #     if [ ! -f "/etc/apt/trusted.gpg.d/proxmox-release-trixie.gpg" ]; then
-    #         wget http://download.proxmox.com/debian/proxmox-release-trixie.gpg -O /etc/apt/trusted.gpg.d/proxmox-release-trixie.gpg
-    #         chmod +r /etc/apt/trusted.gpg.d/proxmox-release-trixie.gpg
-    #     fi
-    #     ;;
+    trixie)
+        if [ ! -f "/etc/apt/trusted.gpg.d/proxmox-release-trixie.gpg" ]; then
+            wget https://enterprise.proxmox.com/debian/proxmox-archive-keyring-trixie.gpg -O /etc/apt/trusted.gpg.d/proxmox-release-trixie.gpg
+            chmod +r /etc/apt/trusted.gpg.d/proxmox-release-trixie.gpg
+        fi
+        ;;
     *)
         _red "Error: Unsupported Debian version"
         if ! confirm_continue "是否要继续安装(识别到不是Debian9~Debian12的范围)？"; then
