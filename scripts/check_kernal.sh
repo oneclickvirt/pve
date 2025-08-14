@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/oneclickvirt/pve
-# 2025.04.20
+# 2025.08.14
 
 # 用颜色输出信息
 _red() { echo -e "\033[31m\033[01m$@\033[0m"; }
@@ -238,11 +238,11 @@ if [ "$system_arch" = "arch" ]; then
         _blue "Will use Pixmox for low version PVE installations"
         _green "将使用 Pixmox 进行低版本的PVE安装"
         ;;
-    bullseye | bookworm)
+    bullseye | bookworm | trixie)
         _blue "The recognized system is $version"
         _green "识别到的系统为 $version"
-        _blue "Will use Proxmox-Port for PVE installation"
-        _green "将使用 Proxmox-Port 进行低版本的PVE安装"
+        _blue "Will use Pxvirt for PVE installation"
+        _green "将使用 Pxvirt 进行低版本的PVE安装"
         ;;
     *)
         _yellow "Error: Recognized as an unsupported version of Debian, but you can force an installation attempt or use the custom partitioning method to install the PVE"
@@ -253,7 +253,7 @@ elif [ "$system_arch" = "x86" ] || [ "$system_arch" = "x86_64" ]; then
     _blue "system_arch: x86"
     _green "架构：x86"
     case $version in
-    stretch | buster | bullseye | bookworm)
+    stretch | buster | bullseye | bookworm | trixie)
         _blue "The recognized system is $version"
         _green "识别到的系统为 $version"
         ;;
