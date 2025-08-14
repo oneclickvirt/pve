@@ -846,7 +846,6 @@ switch_mirrors() {
     fi
     rm -rf ChangeMirrors.sh
     apt-get update -y
-
     # 如果仍然报错，切换到阿里云镜像源
     if [ $? -ne 0 ]; then
         curl -lk https://gitee.com/SuperManito/LinuxMirrors/raw/main/ChangeMirrors.sh -o ChangeMirrors.sh
@@ -1393,104 +1392,81 @@ update_hostname() {
     chattr +i /etc/hostname
 }
 
+# 添加PVE GPG密钥
+add_pve_gpg_key() {
+    local version="$1"
+    local keyfile
+    case $version in
+    stretch)
+        keyfile="/etc/apt/trusted.gpg.d/proxmox-ve-release-4.x.gpg"
+        [ ! -f "$keyfile" ] && wget -q http://download.proxmox.com/debian/proxmox-ve-release-4.x.gpg -O "$keyfile" && chmod +r "$keyfile"
+        ;;
+    buster)
+        keyfile="/etc/apt/trusted.gpg.d/proxmox-ve-release-5.x.gpg"
+        [ ! -f "$keyfile" ] && wget -q http://download.proxmox.com/debian/proxmox-ve-release-5.x.gpg -O "$keyfile" && chmod +r "$keyfile"
+        ;;
+    bullseye)
+        keyfile="/etc/apt/trusted.gpg.d/proxmox-release-bullseye.gpg"
+        [ ! -f "$keyfile" ] && wget -q http://download.proxmox.com/debian/proxmox-release-bullseye.gpg -O "$keyfile" && chmod +r "$keyfile"
+        ;;
+    bookworm)
+        keyfile="/etc/apt/trusted.gpg.d/proxmox-release-bookworm.gpg"
+        [ ! -f "$keyfile" ] && wget -q http://download.proxmox.com/debian/proxmox-release-bookworm.gpg -O "$keyfile" && chmod +r "$keyfile"
+        ;;
+    trixie)
+        keyfile="/etc/apt/trusted.gpg.d/proxmox-release-trixie.gpg"
+        [ ! -f "$keyfile" ] && wget -q https://enterprise.proxmox.com/debian/proxmox-archive-keyring-trixie.gpg -O "$keyfile" && chmod +r "$keyfile"
+        ;;
+    *)
+        echo "Unsupported Debian version: $version"
+        return 1
+        ;;
+    esac
+    echo "$keyfile"
+}
+
 # 添加PVE源(x86架构)
 setup_x86_pve_repo() {
     local version="$1"
     local repo_url=""
-    # 根据Debian版本选择合适的仓库URL
+    local keyfile
+    keyfile=$(add_pve_gpg_key "$version") || return 1
+    # 根据Debian版本选择仓库URL
     case $version in
-    stretch | buster | bullseye | bookworm)
-        if [[ -z "${CN}" || "${CN}" != true ]]; then
-            repo_url="deb http://download.proxmox.com/debian/pve ${version} pve-no-subscription"
-        else
-            repo_url="deb https://mirrors.tuna.tsinghua.edu.cn/proxmox/debian/pve ${version} pve-no-subscription"
-        fi
-        ;;
-    # https://forum.proxmox.com/threads/proxmox-ve-9-0-beta-released.168619/
-    trixie)
-        if [[ -z "${CN}" || "${CN}" != true ]]; then
-            repo_url="deb http://download.proxmox.com/debian/pve ${version} pve-test"
-        else
-            repo_url="deb https://mirrors.tuna.tsinghua.edu.cn/proxmox/debian/pve ${version} pve-test"
-        fi
+    stretch|buster|bullseye|bookworm|trixie)
+        repo_url="http://download.proxmox.com/debian/pve"
         ;;
     *)
-        _red "Error: Unsupported Debian version"
-        if ! confirm_continue "是否要继续安装(识别到不是Debian9~Debian12的范围)？"; then
-            exit 1
-        fi
-        if [[ -z "${CN}" || "${CN}" != true ]]; then
-            repo_url="deb http://download.proxmox.com/debian/pve bullseye pve-no-subscription"
-        else
-            repo_url="deb https://mirrors.tuna.tsinghua.edu.cn/proxmox/debian/pve bullseye pve-no-subscription"
-        fi
+        echo "Unsupported Debian version: $version, fallback to bullseye"
+        version="bullseye"
+        repo_url="http://download.proxmox.com/debian/pve"
         ;;
     esac
-    # 添加GPG密钥
-    add_pve_gpg_key "$version"
-    # 添加软件源到sources.list
-    if ! grep -q "^deb.*pve-no-subscription" /etc/apt/sources.list; then
-        echo "$repo_url" >>/etc/apt/sources.list
-    fi
-    # 在CN模式下测试和切换镜像源
+    # 判断是否需要使用CN镜像
     if [[ "${CN}" == true ]]; then
-        test_and_switch_mirrors "$version"
+        repo_url="https://mirrors.tuna.tsinghua.edu.cn/proxmox/debian/pve"
     fi
-}
-
-# 添加PVE GPG密钥
-add_pve_gpg_key() {
-    local version="$1"
-    case $version in
-    stretch)
-        if [ ! -f "/etc/apt/trusted.gpg.d/proxmox-ve-release-4.x.gpg" ]; then
-            wget http://download.proxmox.com/debian/proxmox-ve-release-4.x.gpg -O /etc/apt/trusted.gpg.d/proxmox-ve-release-4.x.gpg
-            chmod +r /etc/apt/trusted.gpg.d/proxmox-ve-release-4.x.gpg
+    # Debian13及以上版本的系统使用 .sources 文件
+    if [[ "$version" == "trixie" ]]; then
+        yes Y | apt modernize-sources
+        local sources_file="/etc/apt/sources.list.d/proxmox-trixie.sources"
+        if [ ! -f "$sources_file" ]; then
+            cat >"$sources_file" <<EOF
+Types: deb
+URIs: $repo_url
+Suites: $version
+Components: pve-test
+Signed-By: $keyfile
+EOF
+            echo "Proxmox $version source written to $sources_file"
         fi
-        if [ ! -f "/etc/apt/trusted.gpg.d/proxmox-ve-release-5.x.gpg" ]; then
-            wget http://download.proxmox.com/debian/proxmox-ve-release-5.x.gpg -O /etc/apt/trusted.gpg.d/proxmox-ve-release-5.x.gpg
-            chmod +r /etc/apt/trusted.gpg.d/proxmox-ve-release-5.x.gpg
+    else
+        # 老系统直接写入 sources.list 无需转换
+        if ! grep -q "^deb.*pve-no-subscription" /etc/apt/sources.list; then
+            echo "deb $repo_url $version pve-no-subscription" >>/etc/apt/sources.list
+            echo "Proxmox $version source appended to /etc/apt/sources.list"
         fi
-        ;;
-    buster)
-        if [ ! -f "/etc/apt/trusted.gpg.d/proxmox-ve-release-5.x.gpg" ]; then
-            wget http://download.proxmox.com/debian/proxmox-ve-release-5.x.gpg -O /etc/apt/trusted.gpg.d/proxmox-ve-release-5.x.gpg
-            chmod +r /etc/apt/trusted.gpg.d/proxmox-ve-release-5.x.gpg
-        fi
-        if [ ! -f "/etc/apt/trusted.gpg.d/proxmox-ve-release-6.x.gpg" ]; then
-            wget http://download.proxmox.com/debian/proxmox-ve-release-6.x.gpg -O /etc/apt/trusted.gpg.d/proxmox-ve-release-6.x.gpg
-            chmod +r /etc/apt/trusted.gpg.d/proxmox-ve-release-6.x.gpg
-        fi
-        ;;
-    bullseye)
-        if [ ! -f "/etc/apt/trusted.gpg.d/proxmox-ve-release-6.x.gpg" ]; then
-            wget http://download.proxmox.com/debian/proxmox-ve-release-6.x.gpg -O /etc/apt/trusted.gpg.d/proxmox-ve-release-6.x.gpg
-            chmod +r /etc/apt/trusted.gpg.d/proxmox-ve-release-6.x.gpg
-        fi
-        if [ ! -f "/etc/apt/trusted.gpg.d/proxmox-release-bullseye.gpg" ]; then
-            wget http://download.proxmox.com/debian/proxmox-release-bullseye.gpg -O /etc/apt/trusted.gpg.d/proxmox-release-bullseye.gpg
-            chmod +r /etc/apt/trusted.gpg.d/proxmox-release-bullseye.gpg
-        fi
-        ;;
-    bookworm)
-        if [ ! -f "/etc/apt/trusted.gpg.d/proxmox-release-bookworm.gpg" ]; then
-            wget http://download.proxmox.com/debian/proxmox-release-bookworm.gpg -O /etc/apt/trusted.gpg.d/proxmox-release-bookworm.gpg
-            chmod +r /etc/apt/trusted.gpg.d/proxmox-release-bookworm.gpg
-        fi
-        ;;
-    trixie)
-        if [ ! -f "/etc/apt/trusted.gpg.d/proxmox-release-trixie.gpg" ]; then
-            wget https://enterprise.proxmox.com/debian/proxmox-archive-keyring-trixie.gpg -O /etc/apt/trusted.gpg.d/proxmox-release-trixie.gpg
-            chmod +r /etc/apt/trusted.gpg.d/proxmox-release-trixie.gpg
-        fi
-        ;;
-    *)
-        _red "Error: Unsupported Debian version"
-        if ! confirm_continue "是否要继续安装(识别到不是Debian9~Debian12的范围)？"; then
-            exit 1
-        fi
-        ;;
-    esac
+    fi
 }
 
 # 测试和切换镜像源
@@ -1857,6 +1833,7 @@ install_additional_packages() {
     esac
     install_package novnc
     install_package cloud-init
+    apt-get remove os-prober -y
     rebuild_cloud_init
     # install_package isc-dhcp-server
     chattr +i /etc/network/interfaces
