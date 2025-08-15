@@ -116,6 +116,55 @@ check_interface(){
     exit 1
 }
 
+# 查找最佳ARM镜像源
+find_best_arm_mirror() {
+    arch_pve_urls=(
+        "https://global.mirrors.apqa.cn"
+        "https://mirrors.apqa.cn"
+        "https://hk.mirrors.apqa.cn"
+        "https://mirrors.lierfang.com"
+        "https://de.mirrors.apqa.cn"
+    )
+    min_ping=9999
+    min_ping_url=""
+    for url in "${arch_pve_urls[@]}"; do
+        url_without_protocol="${url#https://}"
+        ping_result=$(ping -c 3 -q "$url_without_protocol" | grep -oP '(?<=min/avg/max/mdev = )[0-9.]+')
+        avg_ping=$(echo "$ping_result" | cut -d '/' -f 2)
+        if [ ! -z "$avg_ping" ]; then
+            echo "Ping [$url_without_protocol]: $avg_ping ms"
+            if (($(echo "$avg_ping < $min_ping" | bc -l))); then
+                min_ping="$avg_ping"
+                min_ping_url="$url"
+            fi
+        else
+            _yellow "Unable to get ping [$url_without_protocol]"
+        fi
+    done
+    # 验证最佳镜像源连接是否正常
+    if [ -n "$min_ping_url" ]; then
+        echo "Trying to fetch the page using curl from: $min_ping_url"
+        if curl -s -o /dev/null "$min_ping_url"; then
+            echo "curl succeeded, using the URL: $min_ping_url"
+        else
+            echo "curl failed with URL: $min_ping_url"
+            # 尝试其他镜像源
+            for url in "${arch_pve_urls[@]}"; do
+                if [ "$url" != "$min_ping_url" ]; then
+                    echo "Trying the next URL: $url"
+                    if curl -s -o /dev/null "$url"; then
+                        echo "curl succeeded, using the URL: $url"
+                        min_ping_url="$url"
+                        break
+                    else
+                        echo "curl failed with URL: $url"
+                    fi
+                fi
+            done
+        fi
+    fi
+}
+
 # 提取物理网卡名字
 interface_1=$(lshw -C network | awk '/logical name:/{print $3}' | sed -n '1p')
 interface_2=$(lshw -C network | awk '/logical name:/{print $3}' | sed -n '2p')
