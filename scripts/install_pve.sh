@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/oneclickvirt/pve
-# 2025.08.15
+# 2025.08.28
 
 ########## 预设部分输出和部分中间变量
 
@@ -1352,34 +1352,54 @@ update_hosts_file() {
     chattr -i /etc/hosts
     hosts=$(grep -E "^[^#]*\s+${hostname}\s+${hostname}\$" /etc/hosts | grep -v "${main_ipv4}")
     if [ -n "${hosts}" ]; then
-        # 注释掉查询到的行
         sudo sed -i "s/^$(echo ${hosts} | sed 's/\//\\\//g')/# &/" /etc/hosts
     else
         echo "A record for ${main_ipv4} ${new_hostname} ${new_hostname} already exists, no need to add it"
-        echo "已存在 ${main_ipv4} ${new_hostname} ${new_hostname} 的记录,无需添加"
+        echo "已存在 ${main_ipv4} ${new_hostname} ${new_hostname} 的记录，无需添加"
     fi
-    # 添加IPv6 localhost记录（如果不存在）
     if ! grep -q "::1 localhost" /etc/hosts; then
         echo "::1 localhost" >>/etc/hosts
         echo "Added ::1 localhost to /etc/hosts"
+        echo "已添加 ::1 localhost 到 /etc/hosts"
     fi
-    # 注释掉127.0.1.1开头的行
     if grep -q "^127\.0\.1\.1" /etc/hosts; then
         sed -i '/^127\.0\.1\.1/s/^/#/' /etc/hosts
         echo "Commented out lines starting with 127.0.1.1 in /etc/hosts"
+        echo "已注释掉 /etc/hosts 中以 127.0.1.1 开头的行"
     fi
-    # 处理主机名记录
     hostname_bak=$(cat /etc/hostname.bak)
     if grep -q "^127\.0\.0\.1 ${hostname_bak}\.localdomain ${hostname_bak}$" /etc/hosts; then
         sed -i "s/^127\.0\.0\.1 ${hostname_bak}\.localdomain ${hostname_bak}/&\n${main_ipv4} ${new_hostname}.localdomain ${new_hostname}/" /etc/hosts
         echo "Replaced the line for ${hostname_bak} in /etc/hosts"
+        echo "已替换 /etc/hosts 中 ${hostname_bak} 的记录"
     elif ! grep -q "^127\.0\.0\.1 localhost\.localdomain localhost$" /etc/hosts; then
         echo "${main_ipv4} ${new_hostname}.localdomain ${new_hostname}" >>/etc/hosts
         echo "Added ${main_ipv4} ${new_hostname}.localdomain ${new_hostname} to /etc/hosts"
+        echo "已添加 ${main_ipv4} ${new_hostname}.localdomain ${new_hostname} 到 /etc/hosts"
     fi
-    # 确保新主机名记录存在
     if ! grep -q "$new_hostname$" /etc/hosts; then
         echo "${main_ipv4} ${new_hostname}.localdomain ${new_hostname}" >>/etc/hosts
+        echo "Added ${main_ipv4} ${new_hostname}.localdomain ${new_hostname} to /etc/hosts (fallback)"
+        echo "已回退添加 ${main_ipv4} ${new_hostname}.localdomain ${new_hostname} 到 /etc/hosts"
+    fi
+    sleep 1
+    if ! ping -c 1 -W 3 $(hostname) >/dev/null 2>&1; then
+        _yellow "Hostname resolution failed, attempting to fix..."
+        _yellow "主机名解析失败，正在修复..."
+        current_hostname=$(hostname)
+        if ! grep -q "^${main_ipv4}.*${current_hostname}$" /etc/hosts; then
+            echo "${main_ipv4} ${current_hostname}" >> /etc/hosts
+            _green "Added hostname resolution record: ${main_ipv4} ${current_hostname}"
+            _green "已添加主机名解析记录: ${main_ipv4} ${current_hostname}"
+        fi
+        sleep 1
+        if ping -c 1 -W 3 $(hostname) >/dev/null 2>&1; then
+            _green "Hostname resolution successfully fixed"
+            _green "主机名解析修复成功"
+        else
+            _red "Warning: Hostname resolution still failing, this may cause PVE SSL certificate creation to fail"
+            _red "警告：主机名解析仍然失败，这可能导致 PVE SSL 证书创建失败"
+        fi
     fi
     chattr +i /etc/hosts
 }

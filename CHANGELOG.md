@@ -1,5 +1,13 @@
 # 更新日志
 
+2025.08.15
+
+- 修复ARM相关安装，同步上游CDN更新
+- 修复环境检测，支持PVE9的Debian13进行安装
+- 修复sysctl设置失效的问题，适配debian13系统的新设置方式
+- 修复debian13安装PVE9时证书适配错误的问题，修改证书源位置
+- 参考[官方教程](https://pve.proxmox.com/wiki/Install_Proxmox_VE_on_Debian_13_Trixie)，添加update的前置格式转换以及新源写入方式
+
 2025.07.20
 
 - 添加对proxmox-ve的9.0版本的尝试性支持，宿主机为debian13时会默认安装PVE9
