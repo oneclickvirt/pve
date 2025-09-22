@@ -268,7 +268,7 @@ find_and_download_system_image_arm() {
     system_names=()
     usable_system=false
     # 获取可用列表，带指数退避，结果赋值到 system_names
-    if _fetch_list_with_retry "${cdn_success_url}https://raw.githubusercontent.com/oneclickvirt/lxc_arm_images/main/fixed_images.txt"; then
+    if _fetch_list_with_retry "${cdn_success_url}https://raw.githubusercontent.com/oneclickvirt/lxc_arm_images/main/all_images.txt"; then
         mapfile -t system_names <<<"$fetch_list_response"
     fi
     ubuntu_versions=("18.04" "20.04" "22.04" "23.04" "23.10" "24.04")
@@ -345,7 +345,7 @@ find_and_download_system_image_x86() {
     system_name=""
     system_names=()
     # 优先从 lxc_amd64_images 列表获取，带指数退避
-    if _fetch_list_with_retry "${cdn_success_url}https://raw.githubusercontent.com/oneclickvirt/lxc_amd64_images/main/fixed_images.txt"; then
+    if _fetch_list_with_retry "${cdn_success_url}https://raw.githubusercontent.com/oneclickvirt/lxc_amd64_images/main/all_images.txt"; then
         mapfile -t system_names <<<"$fetch_list_response"
     fi
     for image_name in "${system_names[@]}"; do
