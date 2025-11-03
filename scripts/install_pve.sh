@@ -1096,7 +1096,17 @@ get_ipv6_prefixlen() {
         fi
         echo "$ipv6_prefixlen" >/usr/local/bin/pve_ipv6_prefixlen
     fi
-    ipv6_prefixlen=$(cat /usr/local/bin/pve_ipv6_prefixlen)
+    # 优先使用 rdisc6 检测到的真实前缀长度
+    if [ -f /usr/local/bin/pve_ipv6_real_prefixlen ] && [ -s /usr/local/bin/pve_ipv6_real_prefixlen ]; then
+        real_prefixlen=$(cat /usr/local/bin/pve_ipv6_real_prefixlen)
+        ipv6_prefixlen="$real_prefixlen"
+        _blue "Using real IPv6 prefix length from rdisc6: /$ipv6_prefixlen"
+        _green "使用 rdisc6 检测到的真实 IPv6 前缀长度: /$ipv6_prefixlen"
+        # 更新 pve_ipv6_prefixlen 文件
+        echo "$ipv6_prefixlen" >/usr/local/bin/pve_ipv6_prefixlen
+    else
+        ipv6_prefixlen=$(cat /usr/local/bin/pve_ipv6_prefixlen)
+    fi
 }
 
 # 检查IPV6是否使用SLAAC分配

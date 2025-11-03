@@ -40,6 +40,11 @@ fi
 if ! command -v sipcalc >/dev/null 2>&1; then
     apt-get install sipcalc -y
 fi
+if ! command -v rdisc6 >/dev/null 2>&1; then
+    _blue "Installing ndisc6 package for IPv6 router discovery..."
+    _green "正在安装 ndisc6 软件包用于 IPv6 路由器发现..."
+    apt-get install ndisc6 -y
+fi
 
 get_system_arch() {
     local sysarch="$(uname -m)"
@@ -309,6 +314,7 @@ if command -v lshw >/dev/null 2>&1; then
     fi
     if [ ! -f /usr/local/bin/pve_ipv6_prefixlen ]; then
         ipv6_prefixlen=""
+        # 首先尝试从接口配置获取
         output=$(ifconfig ${interface} | grep -oP 'inet6 (?!fe80:).*prefixlen \K\d+')
         num_lines=$(echo "$output" | wc -l)
         if [ $num_lines -ge 2 ]; then
@@ -325,6 +331,43 @@ if command -v lshw >/dev/null 2>&1; then
         if [ -z "$ipv6_prefixlen" ]; then
             ipv6_prefixlen=$(ifconfig vmbr1 | grep -oP 'prefixlen \K\d+' | head -n 1)
         fi
+        # 尝试使用 rdisc6 工具获取路由器通告的真实前缀大小
+        if command -v rdisc6 >/dev/null 2>&1; then
+            _blue "Attempting to get real IPv6 prefix from router advertisement using rdisc6..."
+            _green "尝试使用 rdisc6 从路由器通告中获取真实的 IPv6 前缀..."
+            # 使用 rdisc6 查询路由器通告，设置超时时间为3秒
+            rdisc6_output=$(timeout 3 rdisc6 ${interface} 2>/dev/null | grep -A 4 "Prefix")
+            if [ -n "$rdisc6_output" ]; then
+                # 提取前缀长度，例如从 "Prefix : 2406:da18:xxxx:xxxx::/64" 中提取 64
+                real_prefixlen=$(echo "$rdisc6_output" | grep "Prefix" | head -n 1 | grep -oP '::?/\K\d+')
+                if [ -n "$real_prefixlen" ] && [ "$real_prefixlen" -gt 0 ] && [ "$real_prefixlen" -le 128 ]; then
+                    _green "Found real IPv6 prefix length from router advertisement: /$real_prefixlen"
+                    _green "从路由器通告中发现真实的 IPv6 前缀长度: /$real_prefixlen"
+                    # 如果接口配置的前缀长度小于路由器通告的(即配置错误/不完整)
+                    if [ -n "$ipv6_prefixlen" ] && [ "$ipv6_prefixlen" -gt "$real_prefixlen" ]; then
+                        _yellow "Warning: Current interface prefix /$ipv6_prefixlen is smaller than router advertised /$real_prefixlen"
+                        _yellow "警告: 当前接口前缀 /$ipv6_prefixlen 小于路由器通告的 /$real_prefixlen"
+                        _blue "Using the larger prefix /$real_prefixlen from router advertisement"
+                        _green "将使用路由器通告的更大前缀 /$real_prefixlen"
+                        ipv6_prefixlen="$real_prefixlen"
+                    elif [ -z "$ipv6_prefixlen" ]; then
+                        # 如果之前没有获取到前缀，直接使用路由器通告的
+                        ipv6_prefixlen="$real_prefixlen"
+                    fi
+                    # 保存路由器通告的前缀供后续使用
+                    echo "$real_prefixlen" >/usr/local/bin/pve_ipv6_real_prefixlen
+                fi
+            else
+                _yellow "Could not get router advertisement response via rdisc6 (timeout or no response)"
+                _yellow "无法通过 rdisc6 获取路由器通告响应(超时或无响应)"
+            fi
+        else
+            _yellow "rdisc6 tool not found. Install ndisc6 package to detect real IPv6 prefix from router."
+            _yellow "未找到 rdisc6 工具。安装 ndisc6 软件包可以从路由器检测真实的 IPv6 前缀。"
+            _blue "You can install it with: apt-get install ndisc6 -y"
+            _green "可以使用以下命令安装: apt-get install ndisc6 -y"
+        fi
+        
         echo "$ipv6_prefixlen" >/usr/local/bin/pve_ipv6_prefixlen
     fi
     ipv6_prefixlen=$(cat /usr/local/bin/pve_ipv6_prefixlen)

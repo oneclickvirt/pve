@@ -322,7 +322,13 @@ detect_he_tunnel() {
 
 # 检测已有的IPV6配置
 detect_existing_ipv6_config() {
-    if [ -f /usr/local/bin/pve_ipv6_prefixlen ]; then
+    # 优先使用 rdisc6 检测到的真实前缀长度
+    if [ -f /usr/local/bin/pve_ipv6_real_prefixlen ] && [ -s /usr/local/bin/pve_ipv6_real_prefixlen ]; then
+        real_prefixlen=$(cat /usr/local/bin/pve_ipv6_real_prefixlen)
+        ipv6_prefixlen="$real_prefixlen"
+        _blue "Using real IPv6 prefix length from rdisc6: /$ipv6_prefixlen"
+        _green "使用 rdisc6 检测到的真实 IPv6 前缀长度: /$ipv6_prefixlen"
+    elif [ -f /usr/local/bin/pve_ipv6_prefixlen ]; then
         ipv6_prefixlen=$(cat /usr/local/bin/pve_ipv6_prefixlen)
     fi
     if [ -f /usr/local/bin/pve_ipv6_gateway ]; then
