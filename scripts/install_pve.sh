@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/oneclickvirt/pve
-# 2025.08.28
+# 2025.11.03
 
 ########## 预设部分输出和部分中间变量
 
@@ -421,8 +421,8 @@ rebuild_interfaces() {
                 chattr +i /etc/network/interfaces
             fi
         fi
-        # 检测物理接口是否已auto链接
-        if ! grep -q "auto ${interface}" /etc/network/interfaces; then
+        # 检测物理接口是否已auto或allow-hotplug链接
+        if ! grep -q "auto ${interface}" /etc/network/interfaces && ! grep -q "allow-hotplug ${interface}" /etc/network/interfaces; then
             chattr -i /etc/network/interfaces
             echo "auto ${interface}" >>/etc/network/interfaces
             chattr +i /etc/network/interfaces
