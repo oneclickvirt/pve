@@ -257,8 +257,8 @@ rebuild_interfaces() {
     fi
     # 检查是否存在网络接口配置
     interface_configured=false
-    # 检查主接口是否已配置
-    if grep -q "auto ${interface}" /etc/network/interfaces && \
+    # 检查主接口是否已配置（包括 auto 和 allow-hotplug）
+    if (grep -q "auto ${interface}" /etc/network/interfaces || grep -q "allow-hotplug ${interface}" /etc/network/interfaces) && \
        (grep -q "iface ${interface} inet static" /etc/network/interfaces || \
         grep -q "iface ${interface} inet dhcp" /etc/network/interfaces || \
         grep -q "iface ${interface} inet auto" /etc/network/interfaces); then
@@ -267,7 +267,7 @@ rebuild_interfaces() {
     # 检查interfaces.d目录中是否有配置
     if [ -d "/etc/network/interfaces.d/" ]; then
         for file in /etc/network/interfaces.d/*; do
-            if [ -f "$file" ] && (grep -q "auto ${interface}" "$file" || grep -q "iface ${interface}" "$file"); then
+            if [ -f "$file" ] && (grep -q "auto ${interface}" "$file" || grep -q "allow-hotplug ${interface}" "$file" || grep -q "iface ${interface}" "$file"); then
                 interface_configured=true
                 break
             fi
@@ -1204,24 +1204,34 @@ create_network_interfaces() {
 
 # 清理DNS配置行
 clean_dns_config() {
-    dns_lines=$(grep -c "dns-nameservers" /etc/network/interfaces)
+    # 检查是否有多个 dns-nameservers 行（只统计独立的配置行，不包括注释）
+    dns_lines=$(grep -c "^\s*dns-nameservers" /etc/network/interfaces)
     if [ $dns_lines -gt 1 ]; then
-        rm -rf /tmp/interfaces.tmp
-        original_lines=$(wc -l </etc/network/interfaces)
-        current_dns_lines=0
-        while read -r line; do
-            if echo "$line" | grep -q "dns-nameservers"; then
-                current_dns_lines=$((current_dns_lines + 1))
-                if [ $current_dns_lines -lt $dns_lines ]; then
-                    continue
-                fi
-            fi
-            echo "$line" >>/tmp/interfaces.tmp
-        done </etc/network/interfaces
+        _blue "Found $dns_lines dns-nameservers lines, keeping only the last one"
         chattr -i /etc/network/interfaces
-        mv /tmp/interfaces.tmp /etc/network/interfaces
+        # 创建临时文件
+        temp_file=$(mktemp)
+        # 标记是否已经保留了一个 dns-nameservers
+        found=0
+        # 从后往前读取文件
+        tac /etc/network/interfaces | while IFS= read -r line; do
+            # 检查是否是 dns-nameservers 行（不包括注释）
+            if echo "$line" | grep -q "^\s*dns-nameservers"; then
+                if [ $found -eq 0 ]; then
+                    # 保留第一个遇到的（即原文件的最后一个）
+                    echo "$line"
+                    found=1
+                fi
+                # 跳过其他的 dns-nameservers 行
+            else
+                # 保留其他所有行
+                echo "$line"
+            fi
+        done > "$temp_file"
+        # 再次反转回正常顺序
+        tac "$temp_file" > /etc/network/interfaces
         chattr +i /etc/network/interfaces
-        rm -rf /tmp/interfaces.tmp
+        rm -f "$temp_file"
     fi
 }
 
