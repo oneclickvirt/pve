@@ -326,19 +326,17 @@ if command -v lshw >/dev/null 2>&1; then
         if [ -z "$ipv6_prefixlen" ]; then
             ipv6_prefixlen=$(ifconfig vmbr1 | grep -oP 'prefixlen \K\d+' | head -n 1)
         fi
-        # 尝试使用 rdisc6 工具获取路由器通告的真实前缀大小
         if command -v rdisc6 >/dev/null 2>&1; then
-            _blue "Attempting to get real IPv6 prefix from router advertisement using rdisc6..."
-            _green "尝试使用 rdisc6 从路由器通告中获取真实的 IPv6 前缀..."
-            # 使用 rdisc6 查询路由器通告，设置超时时间为3秒
-            rdisc6_output=$(timeout 3 rdisc6 ${interface} 2>/dev/null | grep -A 4 "Prefix")
+            _blue "Attempting to get real IPv6 prefix from router advertisement ..."
+            _green "尝试从路由器通告中获取真实的 IPv6 前缀..."
+            _blue "Using network interface: ${interface}"
+            _green "正在使用网络接口: ${interface}"
+            rdisc6_output=$(timeout 10 rdisc6 ${interface} 2>/dev/null)
             if [ -n "$rdisc6_output" ]; then
-                # 提取前缀长度，例如从 "Prefix : 2406:da18:xxxx:xxxx::/64" 中提取 64
-                real_prefixlen=$(echo "$rdisc6_output" | grep "Prefix" | head -n 1 | grep -oP '::?/\K\d+')
+                real_prefixlen=$(echo "$rdisc6_output" | grep -i "Prefix" | grep -oP '[:：]\s*[0-9a-fA-F:]+/\K\d+' | head -n 1)
                 if [ -n "$real_prefixlen" ] && [ "$real_prefixlen" -gt 0 ] && [ "$real_prefixlen" -le 128 ]; then
                     _green "Found real IPv6 prefix length from router advertisement: /$real_prefixlen"
                     _green "从路由器通告中发现真实的 IPv6 前缀长度: /$real_prefixlen"
-                    # 如果接口配置的前缀长度小于路由器通告的(即配置错误/不完整)
                     if [ -n "$ipv6_prefixlen" ] && [ "$ipv6_prefixlen" -gt "$real_prefixlen" ]; then
                         _yellow "Warning: Current interface prefix /$ipv6_prefixlen is smaller than router advertised /$real_prefixlen"
                         _yellow "警告: 当前接口前缀 /$ipv6_prefixlen 小于路由器通告的 /$real_prefixlen"
@@ -346,41 +344,24 @@ if command -v lshw >/dev/null 2>&1; then
                         _green "将使用路由器通告的更大前缀 /$real_prefixlen"
                         ipv6_prefixlen="$real_prefixlen"
                     elif [ -z "$ipv6_prefixlen" ]; then
-                        # 如果之前没有获取到前缀，直接使用路由器通告的
                         ipv6_prefixlen="$real_prefixlen"
                     fi
-                    # 保存路由器通告的前缀供后续使用
                     echo "$real_prefixlen" >/usr/local/bin/pve_ipv6_real_prefixlen
+                else
+                    _yellow "Could not parse IPv6 prefix length on interface ${interface}"
+                    _yellow "无法从接口 ${interface} 中解析 IPv6 前缀长度"
                 fi
             else
-                _yellow "Could not get router advertisement response via rdisc6 (timeout or no response)"
-                _yellow "无法通过 rdisc6 获取路由器通告响应(超时或无响应)"
+                _yellow "Could not get router advertisement response on interface ${interface} (timeout or no response)"
+                _yellow "无法在接口 ${interface} 获取路由器通告响应(超时或无响应)"
             fi
-        else
-            _yellow "rdisc6 tool not found. Install ndisc6 package to detect real IPv6 prefix from router."
-            _yellow "未找到 rdisc6 工具。安装 ndisc6 软件包可以从路由器检测真实的 IPv6 前缀。"
-            _blue "You can install it with: apt-get install ndisc6 -y"
-            _green "可以使用以下命令安装: apt-get install ndisc6 -y"
         fi
-        
         echo "$ipv6_prefixlen" >/usr/local/bin/pve_ipv6_prefixlen
     fi
     ipv6_prefixlen=$(cat /usr/local/bin/pve_ipv6_prefixlen)
     if [ -z "$ipv6_address" ] || [ -z "$ipv6_prefixlen" ] || [ -z "$ipv6_gateway" ]; then
         :
     else
-        # if ping -c 1 -6 -W 3 $ipv6_address >/dev/null 2>&1; then
-        #     echo "IPv6 address is reachable."
-        # else
-        #     echo "IPv6 address is not reachable. Setting to empty."
-        #     echo "" >/usr/local/bin/pve_check_ipv6
-        # fi
-        # if ping -c 1 -6 -W 3 $ipv6_gateway >/dev/null 2>&1; then
-        #     echo "IPv6 gateway is reachable."
-        # else
-        #     echo "IPv6 gateway is not reachable. Setting to empty."
-        #     echo "" >/usr/local/bin/pve_ipv6_gateway
-        # fi
         ipv6_address=$(cat /usr/local/bin/pve_check_ipv6)
         ipv6_gateway=$(cat /usr/local/bin/pve_ipv6_gateway)
         _blue "The following IPV6 information is detected for this machine:"

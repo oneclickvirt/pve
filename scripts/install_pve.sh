@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/oneclickvirt/pve
-# 2025.11.03
+# 2025.11.05
 
 ########## 预设部分输出和部分中间变量
 
@@ -1094,15 +1094,44 @@ get_ipv6_prefixlen() {
         else
             ipv6_prefixlen=$(echo "$output" | head -n 1)
         fi
+        if command -v rdisc6 >/dev/null 2>&1 && [ ! -f /usr/local/bin/pve_ipv6_real_prefixlen ]; then
+            _blue "Attempting to get real IPv6 prefix from router advertisement..."
+            _green "尝试从路由器通告中获取真实的 IPv6 前缀..."
+            _blue "Using network interface: ${interface}"
+            _green "正在使用网络接口: ${interface}"
+            rdisc6_output=$(timeout 10 rdisc6 ${interface} 2>/dev/null)
+            if [ -n "$rdisc6_output" ]; then
+                real_prefixlen=$(echo "$rdisc6_output" | grep -i "Prefix" | grep -oP '[:：]\s*[0-9a-fA-F:]+/\K\d+' | head -n 1)
+                if [ -n "$real_prefixlen" ] && [ "$real_prefixlen" -gt 0 ] && [ "$real_prefixlen" -le 128 ]; then
+                    _green "Found real IPv6 prefix length from router advertisement: /$real_prefixlen"
+                    _green "从路由器通告中发现真实的 IPv6 前缀长度: /$real_prefixlen"
+                    if [ -n "$ipv6_prefixlen" ] && [ "$ipv6_prefixlen" -gt "$real_prefixlen" ]; then
+                        _yellow "Warning: Current interface prefix /$ipv6_prefixlen is smaller than router advertised /$real_prefixlen"
+                        _yellow "警告: 当前接口前缀 /$ipv6_prefixlen 小于路由器通告的 /$real_prefixlen"
+                        _blue "Using the larger prefix /$real_prefixlen from router advertisement"
+                        _green "将使用路由器通告的更大前缀 /$real_prefixlen"
+                        ipv6_prefixlen="$real_prefixlen"
+                    elif [ -z "$ipv6_prefixlen" ]; then
+                        ipv6_prefixlen="$real_prefixlen"
+                    fi
+                    echo "$real_prefixlen" >/usr/local/bin/pve_ipv6_real_prefixlen
+                else
+                    _yellow "Could not parse IPv6 prefix length on interface ${interface}"
+                    _yellow "无法从接口 ${interface} 中解析 IPv6 前缀长度"
+                fi
+            else
+                _yellow "Could not get router advertisement response on interface ${interface} (timeout or no response)"
+                _yellow "无法在接口 ${interface} 获取路由器通告响应(超时或无响应)"
+            fi
+        fi
+        
         echo "$ipv6_prefixlen" >/usr/local/bin/pve_ipv6_prefixlen
     fi
-    # 优先使用 rdisc6 检测到的真实前缀长度
     if [ -f /usr/local/bin/pve_ipv6_real_prefixlen ] && [ -s /usr/local/bin/pve_ipv6_real_prefixlen ]; then
         real_prefixlen=$(cat /usr/local/bin/pve_ipv6_real_prefixlen)
         ipv6_prefixlen="$real_prefixlen"
-        _blue "Using real IPv6 prefix length from rdisc6: /$ipv6_prefixlen"
-        _green "使用 rdisc6 检测到的真实 IPv6 前缀长度: /$ipv6_prefixlen"
-        # 更新 pve_ipv6_prefixlen 文件
+        _blue "Using real IPv6 prefix length: /$ipv6_prefixlen"
+        _green "检测到的真实 IPv6 前缀长度: /$ipv6_prefixlen"
         echo "$ipv6_prefixlen" >/usr/local/bin/pve_ipv6_prefixlen
     else
         ipv6_prefixlen=$(cat /usr/local/bin/pve_ipv6_prefixlen)
