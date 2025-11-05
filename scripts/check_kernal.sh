@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/oneclickvirt/pve
-# 2025.08.14
+# 2025.11.05
 
 # 用颜色输出信息
 _red() { echo -e "\033[31m\033[01m$@\033[0m"; }
@@ -190,44 +190,39 @@ check_interface() {
     if [ -z "$interface_2" ]; then
         interface=${interface_1}
         return
-    elif [ -n "$interface_1" ] && [ -n "$interface_2" ]; then
-        if ! grep -q "$interface_1" "/etc/network/interfaces" && ! grep -q "$interface_2" "/etc/network/interfaces" && [ -f "/etc/network/interfaces.d/50-cloud-init" ]; then
-            if grep -q "$interface_1" "/etc/network/interfaces.d/50-cloud-init" || grep -q "$interface_2" "/etc/network/interfaces.d/50-cloud-init"; then
-                if ! grep -q "$interface_1" "/etc/network/interfaces.d/50-cloud-init" && grep -q "$interface_2" "/etc/network/interfaces.d/50-cloud-init"; then
-                    interface=${interface_2}
-                    return
-                elif ! grep -q "$interface_2" "/etc/network/interfaces.d/50-cloud-init" && grep -q "$interface_1" "/etc/network/interfaces.d/50-cloud-init"; then
-                    interface=${interface_1}
-                    return
-                fi
-            fi
-        fi
-        if grep -q "$interface_1" "/etc/network/interfaces"; then
-            interface=${interface_1}
-            return
-        elif grep -q "$interface_2" "/etc/network/interfaces"; then
-            interface=${interface_2}
-            return
-        else
-            interfaces_list=$(ip addr show | awk '/^[0-9]+: [^lo]/ {print $2}' | cut -d ':' -f 1)
-            interface=""
-            for iface in $interfaces_list; do
-                if [[ "$iface" = "$interface_1" || "$iface" = "$interface_2" ]]; then
-                    interface="$iface"
-                fi
-            done
-            if [ -z "$interface" ]; then
-                interface="eth0"
-            fi
-            return
-        fi
-    else
+    fi
+    if [ -z "$interface_1" ] && [ -z "$interface_2" ]; then
         interface="eth0"
         return
     fi
-    _red "Physical interface not found, exit execution"
-    _red "找不到物理接口，退出执行"
-    exit 1
+    local config_files=(
+        "/etc/network/interfaces"
+        "/etc/network/interfaces.d/50-cloud-init"
+    )
+    for config_file in "${config_files[@]}"; do
+        if [ -f "$config_file" ]; then
+            if grep -q "$interface_1" "$config_file"; then
+                interface=${interface_1}
+                return
+            elif grep -q "$interface_2" "$config_file"; then
+                interface=${interface_2}
+                return
+            fi
+        fi
+    done
+    local interfaces_list=$(ip addr show | awk '/^[0-9]+: [^lo]/ {print $2}' | cut -d ':' -f 1)
+    if echo "$interfaces_list" | grep -q "^${interface_1}$"; then
+        interface=${interface_1}
+        return
+    fi
+    if echo "$interfaces_list" | grep -q "^${interface_2}$"; then
+        interface=${interface_2}
+        return
+    fi
+    interface="eth0"
+    if ! echo "$interfaces_list" | grep -q "^eth0$" && [ -n "$interfaces_list" ]; then
+        interface=$(echo "$interfaces_list" | head -n 1)
+    fi
 }
 
 # 检测系统是否支持
