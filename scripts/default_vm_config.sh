@@ -213,18 +213,12 @@ prepare_system_image() {
 }
 
 get_new_images() {
-    local source=$1
     local attempts=0
     local max_attempts=5
     local delay=1
     while ((attempts < max_attempts)); do
-        if [[ "$source" == "idc" ]]; then
-            images_output=$(curl -slk -m 6 https://down.idc.wiki/Image/realServer-Template/current/qcow2/ 2>/dev/null | grep -o '<a href="[^"]*">' |
-                awk -F'"' '{print $2}' | sed -n '/qcow2$/s#/Image/realServer-Template/current/qcow2/##p' | sed 's/\.qcow2$//')
-        else
-            images_output=$(curl -s https://api.github.com/repos/oneclickvirt/pve_kvm_images/releases/tags/images 2>/dev/null |
-                jq -r '.assets[].name' 2>/dev/null | sed -n '/qcow2$/s/.qcow2$//p')
-        fi
+        images_output=$(curl -s https://api.github.com/repos/oneclickvirt/pve_kvm_images/releases/tags/images 2>/dev/null |
+            jq -r '.assets[].name' 2>/dev/null | sed -n '/qcow2$/s/.qcow2$//p')
         if [[ -n "$images_output" ]] && [[ "$images_output" != *"error"* ]] && [[ "$images_output" != *"failed"* ]]; then
             return 0
         fi
@@ -240,9 +234,7 @@ prepare_x86_image() {
     file_path=""
     old_images=("debian10" "debian11" "debian12" "ubuntu18" "ubuntu20" "ubuntu22" "centos7" "archlinux" "almalinux8" "fedora33" "fedora34" "opensuse-leap-15" "alpinelinux_edge" "alpinelinux_stable" "rockylinux8" "centos8-stream")
     new_images=()
-    if get_new_images "idc"; then
-        mapfile -t new_images <<< "$images_output"
-    elif get_new_images "github"; then
+    if get_new_images; then
         mapfile -t new_images <<< "$images_output"
     fi
     if [[ ${#new_images[@]} -gt 0 ]]; then
