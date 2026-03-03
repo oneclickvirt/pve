@@ -396,24 +396,42 @@ check_fe80_gateway() {
     fe80_address=$(cat /usr/local/bin/pve_fe80_address)
 }
 
-# 配置文件重试下载，避免网络原因导致配置失败
+# 配置文件重试下载，优先使用CDN，CDN全部失败后降级使用原始链接
 download_with_retry() {
-    local url="$1"
+    local original_url="$1"
     local output="$2"
     local max_attempts=5
     local attempt=1
     local delay=1
+    # 优先尝试CDN
+    if [ -n "$cdn_success_url" ]; then
+        local cdn_url="${cdn_success_url}${original_url}"
+        while [ $attempt -le $max_attempts ]; do
+            wget -q "$cdn_url" -O "$output" && return 0
+            echo "Download failed: $cdn_url, try $attempt, wait $delay seconds and retry..."
+            echo "下载失败：$cdn_url，尝试第 $attempt 次，等待 $delay 秒后重试..."
+            sleep $delay
+            attempt=$((attempt + 1))
+            delay=$((delay * 2))
+            [ $delay -gt 30 ] && delay=30
+        done
+        _yellow "CDN download failed, trying original URL..."
+        _yellow "CDN下载均失败，改用原始链接重试..."
+        attempt=1
+        delay=1
+    fi
+    # 降级到原始链接
     while [ $attempt -le $max_attempts ]; do
-        wget -q "$url" -O "$output" && return 0
-        echo "Download failed: $url, try $attempt, wait $delay seconds and retry..."
-        echo "下载失败：$url，尝试第 $attempt 次，等待 $delay 秒后重试..."
+        wget -q "$original_url" -O "$output" && return 0
+        echo "Download failed: $original_url, try $attempt, wait $delay seconds and retry..."
+        echo "下载失败：$original_url，尝试第 $attempt 次，等待 $delay 秒后重试..."
         sleep $delay
         attempt=$((attempt + 1))
         delay=$((delay * 2))
         [ $delay -gt 30 ] && delay=30
     done
-    _red "Download failed: $url, maximum number of attempts exceeded ($max_attempts)"
-    _red "下载失败：$url，超过最大尝试次数 ($max_attempts)"
+    _red "Download failed: $original_url, maximum number of attempts exceeded ($max_attempts)"
+    _red "下载失败：$original_url，超过最大尝试次数 ($max_attempts)"
     return 1
 }
 
@@ -424,13 +442,41 @@ install_ndpresponder() {
         if [ -f /usr/local/bin/pve_maximum_subset ] && [ "$(cat /usr/local/bin/pve_maximum_subset)" = false ]; then
             _blue "No install ndpresponder"
         elif [ "$system_arch" = "x86" ] || [ "$system_arch" = "x86_64" ]; then
-            download_with_retry "${cdn_success_url}https://github.com/oneclickvirt/pve/releases/download/ndpresponder_x86/ndpresponder" "/usr/local/bin/ndpresponder" || return 1
-            download_with_retry "${cdn_success_url}https://raw.githubusercontent.com/oneclickvirt/pve/main/extra_scripts/ndpresponder.service" "/etc/systemd/system/ndpresponder.service" || return 1
+            # 若服务已在运行，先停止以避免 "Text file busy" 错误
+            if systemctl is-active --quiet ndpresponder.service 2>/dev/null; then
+                systemctl stop ndpresponder.service 2>/dev/null || true
+            fi
+            if ! download_with_retry "https://github.com/oneclickvirt/pve/releases/download/ndpresponder_x86/ndpresponder" "/usr/local/bin/ndpresponder"; then
+                _yellow "ndpresponder download failed, continuing without IPv6 direct-assignment support"
+                _yellow "ndpresponder 下载失败，将以无独立IPv6地址的模式继续部署"
+                rm -f /usr/local/bin/ndpresponder
+                return 0
+            fi
+            if ! download_with_retry "https://raw.githubusercontent.com/oneclickvirt/pve/main/extra_scripts/ndpresponder.service" "/etc/systemd/system/ndpresponder.service"; then
+                _yellow "ndpresponder service file download failed, continuing without IPv6 direct-assignment support"
+                _yellow "ndpresponder service文件下载失败，将以无独立IPv6地址的模式继续部署"
+                rm -f /usr/local/bin/ndpresponder
+                return 0
+            fi
             chmod 755 /usr/local/bin/ndpresponder
             chmod 644 /etc/systemd/system/ndpresponder.service
         elif [ "$system_arch" = "arm" ]; then
-            download_with_retry "${cdn_success_url}https://github.com/oneclickvirt/pve/releases/download/ndpresponder_aarch64/ndpresponder" "/usr/local/bin/ndpresponder" || return 1
-            download_with_retry "${cdn_success_url}https://raw.githubusercontent.com/oneclickvirt/pve/main/extra_scripts/ndpresponder.service" "/etc/systemd/system/ndpresponder.service" || return 1
+            # 若服务已在运行，先停止以避免 "Text file busy" 错误
+            if systemctl is-active --quiet ndpresponder.service 2>/dev/null; then
+                systemctl stop ndpresponder.service 2>/dev/null || true
+            fi
+            if ! download_with_retry "https://github.com/oneclickvirt/pve/releases/download/ndpresponder_aarch64/ndpresponder" "/usr/local/bin/ndpresponder"; then
+                _yellow "ndpresponder download failed, continuing without IPv6 direct-assignment support"
+                _yellow "ndpresponder 下载失败，将以无独立IPv6地址的模式继续部署"
+                rm -f /usr/local/bin/ndpresponder
+                return 0
+            fi
+            if ! download_with_retry "https://raw.githubusercontent.com/oneclickvirt/pve/main/extra_scripts/ndpresponder.service" "/etc/systemd/system/ndpresponder.service"; then
+                _yellow "ndpresponder service file download failed, continuing without IPv6 direct-assignment support"
+                _yellow "ndpresponder service文件下载失败，将以无独立IPv6地址的模式继续部署"
+                rm -f /usr/local/bin/ndpresponder
+                return 0
+            fi
             chmod 755 /usr/local/bin/ndpresponder
             chmod 644 /etc/systemd/system/ndpresponder.service
         fi
