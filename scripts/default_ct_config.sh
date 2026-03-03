@@ -317,6 +317,9 @@ find_and_download_system_image_arm() {
                 break
             fi
         done
+    elif [ ${#system_names[@]} -eq 0 ] && [ -n "$system_name" ]; then
+        # 列表拉取失败但已从硬编码数据构建了镜像名，直接尝试下载
+        usable_system=true
     fi
     if [ "$usable_system" = false ]; then
         _red "Invalid system version."
@@ -405,15 +408,41 @@ find_and_download_system_image_x86() {
             system_name=$(pveam available --section system | grep "^${system}" | awk '{print $2}' | head -n1)
         fi
         if [ -z "$system_name" ]; then
-            _red "No such system"
-            return 1
+            # pveam 也没有时，尝试根据已知版本名映射直接构造 URL 下载
+            local -A debian_name_map=([10]="buster" [11]="bullseye" [12]="bookworm" [13]="trixie" [14]="forky")
+            local -A ubuntu_name_map=([18]="bionic" [20]="focal" [22]="jammy" [23]="lunar" [24]="noble" [25]="plucky")
+            local ver_name=""
+            if [[ "$en_system" == "debian" ]] && [[ -n "${debian_name_map[$num_system]+_}" ]]; then
+                ver_name="${debian_name_map[$num_system]}"
+                system_name="${en_system}_${num_system}_${ver_name}_amd64_cloud.tar.zst"
+            elif [[ "$en_system" == "ubuntu" ]] && [[ -n "${ubuntu_name_map[${num_system%%.*}]+_}" ]]; then
+                ver_name="${ubuntu_name_map[${num_system%%.*}]}"
+                system_name="${en_system}_${num_system}_${ver_name}_amd64_cloud.tar.zst"
+            fi
+            if [ -n "$system_name" ]; then
+                target="/var/lib/vz/template/cache/${system_name}"
+                url="${cdn_success_url}https://github.com/oneclickvirt/lxc_amd64_images/releases/download/${en_system}/${system_name}"
+                echo "$url"
+                if _download_with_retry "$url" "$target"; then
+                    _blue "Use version-mapped fallback image: ${system_name}"
+                    fixed_system=true
+                else
+                    rm -f "$target"
+                    _red "No such system"
+                    return 1
+                fi
+            else
+                _red "No such system"
+                return 1
+            fi
+        else
+            _green "Use ${system_name}"
+            target="/var/lib/vz/template/cache/${system_name}"
+            if [ ! -f "$target" ]; then
+                pveam download local "$system_name"
+            fi
+            fixed_system=true
         fi
-        _green "Use ${system_name}"
-        target="/var/lib/vz/template/cache/${system_name}"
-        if [ ! -f "$target" ]; then
-            pveam download local "$system_name"
-        fi
-        fixed_system=true
     fi
     return 0
 }

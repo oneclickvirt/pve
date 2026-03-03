@@ -277,9 +277,14 @@ prepare_x86_image() {
         fi
     done
     if [[ -z "$file_path" ]]; then
-        _red "Unable to install corresponding system, please check https://github.com/oneclickvirt/kvm_images/ for supported system images "
-        _red "无法安装对应系统，请查看 https://github.com/oneclickvirt/kvm_images/ 支持的系统镜像 "
-        return 1
+        # API 查询失败时，仍基于系统族名推断，允许 download_x86_image 尝试下载
+        if [[ -n "$sys_family" ]]; then
+            file_path="/root/qcow/${system}.qcow2"
+        else
+            _red "Unable to install corresponding system, please check https://github.com/oneclickvirt/kvm_images/ for supported system images "
+            _red "无法安装对应系统，请查看 https://github.com/oneclickvirt/kvm_images/ 支持的系统镜像 "
+            return 1
+        fi
     fi
     if [ ! -f "$file_path" ]; then
         download_x86_image
@@ -379,6 +384,18 @@ download_x86_image() {
                     return 0
                 fi
             fi
+        fi
+    fi
+    # API 查询列表失败时，仍直接按系统族 tag 构造 URL 尝试下载
+    if [[ -z "$ver" ]] && [[ -n "$sys_family" ]] && [[ ${#sys_tag_images[@]} -eq 0 ]]; then
+        url="${cdn_success_url}https://github.com/oneclickvirt/pve_kvm_images/releases/download/${sys_family}/${system}.qcow2"
+        echo "$url"
+        if _download_with_retry "$url" "$file_path"; then
+            ver="system_tag_fallback"
+            _blue "Use system-tag fallback image: ${system}"
+            return 0
+        else
+            rm -rf "$file_path"
         fi
     fi
     # 如果新镜像不可用，使用旧镜像
