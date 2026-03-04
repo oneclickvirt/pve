@@ -55,8 +55,8 @@ echo ""
 
 ########## 停止并删除所有虚拟机和容器
 
-_yellow "[1/10] Stopping and removing all VMs and containers..."
-_yellow "[1/10] 停止并删除所有虚拟机和容器..."
+_yellow "[1/9] Stopping and removing all VMs and containers..."
+_yellow "[1/9] 停止并删除所有虚拟机和容器..."
 
 if command -v qm &>/dev/null; then
     vm_ids=$(qm list 2>/dev/null | awk 'NR>1 {print $1}')
@@ -82,8 +82,8 @@ fi
 
 ########## 停止 PVE 相关服务
 
-_yellow "[2/10] Stopping PVE services..."
-_yellow "[2/10] 停止 PVE 相关服务..."
+_yellow "[2/9] Stopping PVE services..."
+_yellow "[2/9] 停止 PVE 相关服务..."
 
 pve_services=(
     pvedaemon pveproxy pvestatd pve-cluster
@@ -111,45 +111,55 @@ for svc in "${extra_services[@]}"; do
     fi
 done
 
-########## 卸载 vmbr0 桥接网卡
+########## 恢复网络接口配置文件（仅修改文件，不操作运行中的网络接口，避免 SSH 断连）
 
-_yellow "[3/10] Removing vmbr0 bridge interface..."
-_yellow "[3/10] 移除 vmbr0 桥接网卡..."
-
-if ip link show vmbr0 &>/dev/null; then
-    ip link set vmbr0 down 2>/dev/null || true
-    ip link delete vmbr0 type bridge 2>/dev/null || true
-    _green "vmbr0 bridge removed."
-fi
-
-########## 恢复网络接口配置文件
-
-_yellow "[4/10] Restoring network interface configuration..."
-_yellow "[4/10] 恢复网络接口配置..."
+_yellow "[3/9] Restoring network interface configuration (file-only, no live network changes)..."
+_yellow "[3/9] 恢复网络接口配置（仅修改文件，不操作运行中网络，避免 SSH 断连）..."
 
 # 解除 chattr 不可变属性
 for f in /etc/network/interfaces /etc/network/interfaces.new; do
     [ -f "$f" ] && chattr -i "$f" 2>/dev/null || true
 done
 
-# 优先从备份恢复原始网卡配置
+# 优先从安装时备份恢复原始网卡配置
 if [ -f /etc/network/interfaces.bak ]; then
     cp -f /etc/network/interfaces.bak /etc/network/interfaces
     _green "Restored /etc/network/interfaces from backup."
 elif [ -f /etc/network/interfaces_nat.bak ]; then
     cp -f /etc/network/interfaces_nat.bak /etc/network/interfaces
     _green "Restored /etc/network/interfaces from nat backup."
+else
+    # 无备份时：从当前 interfaces 文件中删除 vmbr0 相关块
+    # 目的是让重启后物理网卡直接接管，而不是通过 vmbr0
+    if grep -q "vmbr0" /etc/network/interfaces 2>/dev/null; then
+        _yellow "No backup found, stripping vmbr0 blocks from /etc/network/interfaces..."
+        tmp_if=$(mktemp)
+        awk '
+            /^(auto|iface|allow-hotplug)[[:space:]]+vmbr/ { skip=1 }
+            skip && /^[[:space:]]/ { next }
+            skip && /^[^[:space:]]/ { skip=0 }
+            !skip { print }
+        ' /etc/network/interfaces > "$tmp_if"
+        mv -f "$tmp_if" /etc/network/interfaces
+        _green "Removed vmbr0 blocks from /etc/network/interfaces."
+    fi
 fi
 
 if [ -f /etc/network/interfaces.new.bak ]; then
     cp -f /etc/network/interfaces.new.bak /etc/network/interfaces.new
     _green "Restored /etc/network/interfaces.new from backup."
+elif [ -f /etc/network/interfaces ]; then
+    # 保持 interfaces.new 与 interfaces 同步
+    cp -f /etc/network/interfaces /etc/network/interfaces.new 2>/dev/null || true
 fi
+
+_yellow "NOTE: vmbr0 will be fully removed after reboot. Do NOT reboot until this script finishes."
+_yellow "注意：vmbr0 将在重启后自动消失，请勿在脚本执行完成前重启。"
 
 ########## 恢复其他系统配置备份
 
-_yellow "[5/10] Restoring system configuration backups..."
-_yellow "[5/10] 恢复系统配置备份..."
+_yellow "[4/9] Restoring system configuration backups..."
+_yellow "[4/9] 恢复系统配置备份..."
 
 # 恢复 resolv.conf
 if [ -f /etc/resolv.conf.bak ]; then
@@ -190,8 +200,8 @@ fi
 
 ########## 卸载 PVE 相关软件包
 
-_yellow "[6/10] Purging PVE and related packages..."
-_yellow "[6/10] 清除 PVE 及相关软件包..."
+_yellow "[5/9] Purging PVE and related packages..."
+_yellow "[5/9] 清除 PVE 及相关软件包..."
 
 pve_packages=(
     proxmox-ve
@@ -250,8 +260,8 @@ apt-get autoclean -y 2>/dev/null || true
 
 ########## 删除 PVE APT 源和 GPG 密钥
 
-_yellow "[7/10] Removing PVE APT sources and GPG keys..."
-_yellow "[7/10] 删除 PVE APT 源和 GPG 密钥..."
+_yellow "[6/9] Removing PVE APT sources and GPG keys..."
+_yellow "[6/9] 删除 PVE APT 源和 GPG 密钥..."
 
 # 从 /etc/apt/sources.list 删除 PVE 相关行
 if [ -f /etc/apt/sources.list ]; then
@@ -294,8 +304,8 @@ done
 
 ########## 删除 PVE 数据目录和相关文件
 
-_yellow "[8/10] Removing PVE data directories and files..."
-_yellow "[8/10] 删除 PVE 数据目录及相关文件..."
+_yellow "[7/9] Removing PVE data directories and files..."
+_yellow "[7/9] 删除 PVE 数据目录及相关文件..."
 
 # PVE 数据目录
 pve_dirs=(
@@ -378,8 +388,8 @@ done
 
 ########## 恢复 gai.conf（IPv4优先级调整）
 
-_yellow "[9/10] Restoring /etc/gai.conf..."
-_yellow "[9/10] 恢复 /etc/gai.conf..."
+_yellow "[8/9] Restoring /etc/gai.conf..."
+_yellow "[8/9] 恢复 /etc/gai.conf..."
 
 if [ -f /etc/gai.conf ]; then
     sed -i 's/^precedence ::ffff:0:0\/96.*$/# precedence ::ffff:0:0\/96  100/' /etc/gai.conf
@@ -391,8 +401,8 @@ fi
 
 ########## 重新加载 systemd 并更新 APT
 
-_yellow "[10/10] Reloading systemd and updating APT..."
-_yellow "[10/10] 重新加载 systemd 并更新 APT 缓存..."
+_yellow "[9/9] Reloading systemd and updating APT..."
+_yellow "[9/9] 重新加载 systemd 并更新 APT 缓存..."
 
 systemctl daemon-reload
 apt-get update -y 2>/dev/null || true
