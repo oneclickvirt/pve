@@ -205,6 +205,7 @@ _yellow "[5/9] 清除 PVE 及相关软件包..."
 
 touch '/please-remove-proxmox-ve'
 apt purge proxmox-ve -y
+apt autoremove -y
 
 pve_packages=(
     proxmox-ve
