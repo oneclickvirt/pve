@@ -393,6 +393,10 @@ for f in "${misc_files[@]}"; do
     [ -f "$f" ] && rm -f "$f" && _green "Removed backup $f."
 done
 
+sudo dpkg -l | awk '/^rc/ {print $2}' | xargs sudo dpkg --purge
+sudo dpkg --configure -a
+sudo update-initramfs -u -k all
+
 ########## 恢复 gai.conf（IPv4优先级调整）
 
 _yellow "[8/9] Restoring /etc/gai.conf..."
