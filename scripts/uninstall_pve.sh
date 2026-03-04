@@ -203,6 +203,9 @@ fi
 _yellow "[5/9] Purging PVE and related packages..."
 _yellow "[5/9] 清除 PVE 及相关软件包..."
 
+# pve-apt-hook 会拦截对 proxmox-ve 元包的卸载，需提前创建标记文件告知其允许移除
+touch /please-remove-proxmox-ve
+
 pve_packages=(
     proxmox-ve
     pve-manager
@@ -253,6 +256,9 @@ pve_kernel_pkgs=$(dpkg -l 'pve-kernel-*' 2>/dev/null | awk '/^ii/ {print $2}')
 if [ -n "$pve_kernel_pkgs" ]; then
     apt-get purge -y $pve_kernel_pkgs 2>/dev/null || true
 fi
+
+# 清理 pve-apt-hook 标记文件
+rm -f /please-remove-proxmox-ve
 
 # 自动清理依赖
 apt-get autoremove -y 2>/dev/null || true
