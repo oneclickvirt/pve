@@ -203,8 +203,8 @@ fi
 _yellow "[5/9] Purging PVE and related packages..."
 _yellow "[5/9] 清除 PVE 及相关软件包..."
 
-# pve-apt-hook 会拦截对 proxmox-ve 元包的卸载，需提前创建标记文件告知其允许移除
-touch /please-remove-proxmox-ve
+touch '/please-remove-proxmox-ve'
+apt purge proxmox-ve -y
 
 pve_packages=(
     proxmox-ve
