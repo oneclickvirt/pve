@@ -650,6 +650,7 @@ EOF
 
 # 配置vmbr1网桥
 configure_vmbr1() {
+    chattr -i /etc/network/interfaces
     if grep -q "vmbr1" /etc/network/interfaces; then
         _blue "vmbr1 already exists in /etc/network/interfaces"
         _blue "vmbr1 已存在在 /etc/network/interfaces"
@@ -724,6 +725,7 @@ EOF
 
 # 配置vmbr2网桥（如果需要）
 configure_vmbr2() {
+    chattr -i /etc/network/interfaces
     appended_file="/usr/local/bin/pve_appended_content.txt"
     if [ -n "$ipv6_prefixlen" ] && [ "$((ipv6_prefixlen))" -le 112 ] && [ ! -s "$appended_file" ]; then
         if grep -q "vmbr2" /etc/network/interfaces; then
@@ -783,6 +785,7 @@ EOF
 
 # 为IPV6子网配置vmbr2
 configure_vmbr2_with_ipv6_subnet() {
+    chattr -i /etc/network/interfaces
     appended_file="/usr/local/bin/pve_appended_content.txt"
     if [ ! -s "$appended_file" ] && [ -f "/usr/local/bin/ndpresponder" ]; then
         cat <<EOF | sudo tee -a /etc/network/interfaces
