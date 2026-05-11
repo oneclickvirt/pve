@@ -311,7 +311,9 @@ detect_he_tunnel() {
         ipv6_gateway=$(echo "$temp_config" | awk '/gateway/ {print $2}')
         ipv6_prefixlen=$(ifconfig he-ipv6 | grep -oP 'prefixlen \K\d+' | head -n 1)
         target_mask=${ipv6_prefixlen}
-        ((target_mask += 8 - ($target_mask % 8)))
+        remainder=$((target_mask % 8))
+        [ "$remainder" -ne 0 ] && ((target_mask += 8 - remainder))
+        [ "$target_mask" -gt 128 ] && target_mask=128
         echo "$target_mask" >/usr/local/bin/pve_ipv6_prefixlen
         ipv6_subnet_2=$(sipcalc --v6split=${target_mask} ${ipv6_gateway}/${ipv6_prefixlen} | awk '/Network/{n++} n==2' | awk '{print $3}' | grep -v '^$')
         ipv6_subnet_2_without_last_segment="${ipv6_subnet_2%:*}:"
@@ -355,6 +357,7 @@ detect_existing_ipv6_config() {
         _green "检测到的真实 IPv6 前缀长度: /$ipv6_prefixlen"
     elif [ -f /usr/local/bin/pve_ipv6_prefixlen ]; then
         ipv6_prefixlen=$(cat /usr/local/bin/pve_ipv6_prefixlen)
+        [ "$ipv6_prefixlen" -gt 128 ] 2>/dev/null && ipv6_prefixlen=128
     fi
     if [ -f /usr/local/bin/pve_ipv6_gateway ]; then
         ipv6_gateway=$(cat /usr/local/bin/pve_ipv6_gateway)
@@ -838,8 +841,7 @@ EOF
     if [ -f "/usr/local/bin/ndpresponder" ]; then
         new_exec_start="ExecStart=/usr/local/bin/ndpresponder -i he-ipv6 -n ${new_subnet}"
         file_path="/etc/systemd/system/ndpresponder.service"
-        line_number=6
-        sed -i "${line_number}s|.*|${new_exec_start}|" "$file_path"
+        sed -i "s|^ExecStart=.*|${new_exec_start}|" "$file_path"
     fi
     configure_ipv6_forwarding
 }
@@ -857,10 +859,11 @@ iface vmbr2 inet6 static
     bridge_stp off
     bridge_fd 0
 EOF
-        new_exec_start="ExecStart=/usr/local/bin/ndpresponder -i vmbr0 -n ${ipv6_address_without_last_segment}0/${ipv6_prefixlen}"
+        ndp_prefixlen=${ipv6_prefixlen}
+        [ "$ndp_prefixlen" -gt 128 ] 2>/dev/null && ndp_prefixlen=128
+        new_exec_start="ExecStart=/usr/local/bin/ndpresponder -i vmbr0 -n ${ipv6_address_without_last_segment}0/${ndp_prefixlen}"
         file_path="/etc/systemd/system/ndpresponder.service"
-        line_number=6
-        sudo sed -i "${line_number}s|.*|${new_exec_start}|" "$file_path"
+        sed -i "s|^ExecStart=.*|${new_exec_start}|" "$file_path"
         echo '*/2 * * * * curl -m 6 -s ipv6.ip.sb && curl -m 6 -s ipv6.ip.sb' | crontab -
     fi
     configure_ipv6_forwarding

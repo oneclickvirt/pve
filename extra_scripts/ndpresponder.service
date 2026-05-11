@@ -1,11 +1,20 @@
 [Unit]
-Description=NDPPD Daemon
-After=network.target
- 
+Description=ndpresponder
+After=network-online.target
+
 [Service]
+ExecStartPre=/usr/bin/ip route get 2000::
 ExecStart=/usr/local/bin/ndpresponder -i vmbr0 -n [IPv6前缀]/[IPV6子网掩码]
 Restart=on-failure
-RestartSec=6
- 
+RestartSec=10s
+CPUAccounting=yes
+CPUQuota=1%
+ProtectSystem=full
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectHome=yes
+AmbientCapabilities=CAP_NET_ADMIN CAP_NET_RAW
+DynamicUser=yes
+
 [Install]
 WantedBy=multi-user.target
