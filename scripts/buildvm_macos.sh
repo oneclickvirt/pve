@@ -39,13 +39,16 @@ check_cdn_file() {
     if [ "${WITHOUTCDN^^}" = "TRUE" ]; then
         export cdn_success_url=""
         echo "WITHOUTCDN=TRUE, skip CDN acceleration"
+        echo "WITHOUTCDN=TRUE，跳过 CDN 加速"
         return
     fi
     check_cdn "https://raw.githubusercontent.com/spiritLHLS/ecs/main/back/test"
     if [ -n "$cdn_success_url" ]; then
         echo "CDN available, using CDN"
+        echo "检测到可用 CDN，使用 CDN 加速"
     else
         echo "No CDN available, no use CDN"
+        echo "未检测到可用 CDN，不使用 CDN 加速"
     fi
 }
 
@@ -192,10 +195,13 @@ create_vm() {
         qm set $vm_num --sata0 ${storage}:${disk},cache=none,ssd=1,discard=on
         if [ $? -ne 0 ]; then
             echo "Failed to mount ${storage}:${disk}. Trying alternative disk file..."
+            echo "挂载 ${storage}:${disk} 失败，正在尝试其他磁盘文件..."
             qm set $vm_num --sata0 ${storage}-lvm:${disk},cache=none,ssd=1,discard=on
             if [ $? -ne 0 ]; then
                 echo "Failed to mount ${storage}-lvm:${disk}. Trying fallback file..."
+                echo "挂载 ${storage}-lvm:${disk} 失败，正在尝试回退文件..."
                 echo "All attempts to mount SATA disk failed for VM $vm_num. Exiting..."
+                echo "为 VM $vm_num 挂载 SATA 磁盘的所有尝试均失败，脚本退出..."
                 exit 1
             fi
         fi
@@ -211,10 +217,13 @@ create_vm() {
         qm set $vm_num --virtio0 ${storage}:${disk},cache=none,discard=on
         if [ $? -ne 0 ]; then
             echo "Failed to mount ${storage}:${disk}. Trying alternative disk file..."
+            echo "挂载 ${storage}:${disk} 失败，正在尝试其他磁盘文件..."
             qm set $vm_num --virtio0 ${storage}-lvm:${disk},cache=none,discard=on
             if [ $? -ne 0 ]; then
                 echo "Failed to mount ${storage}-lvm:${disk}. Trying fallback file..."
+                echo "挂载 ${storage}-lvm:${disk} 失败，正在尝试回退文件..."
                 echo "All attempts to mount SATA disk failed for VM $vm_num. Exiting..."
+                echo "为 VM $vm_num 挂载磁盘的所有尝试均失败，脚本退出..."
                 exit 1
             fi
         fi

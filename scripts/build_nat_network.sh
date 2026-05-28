@@ -14,11 +14,13 @@ export DEBIAN_FRONTEND=noninteractive
 utf8_locale=$(locale -a 2>/dev/null | grep -i -m 1 -E "UTF-8|utf8")
 if [[ -z "$utf8_locale" ]]; then
     echo "No UTF-8 locale found"
+    echo "未找到 UTF-8 区域设置"
 else
     export LC_ALL="$utf8_locale"
     export LANG="$utf8_locale"
     export LANGUAGE="$utf8_locale"
     echo "Locale set to $utf8_locale"
+    echo "区域设置已切换为 $utf8_locale"
 fi
 rm -rf /usr/local/bin/build_backend_pve.txt
 
@@ -39,13 +41,16 @@ check_cdn_file() {
     if [ "${WITHOUTCDN^^}" = "TRUE" ]; then
         export cdn_success_url=""
         _yellow "WITHOUTCDN=TRUE, skip CDN acceleration"
+        _yellow "WITHOUTCDN=TRUE，跳过 CDN 加速"
         return
     fi
     check_cdn "https://raw.githubusercontent.com/spiritLHLS/ecs/main/back/test"
     if [ -n "$cdn_success_url" ]; then
         _yellow "CDN available, using CDN"
+        _yellow "检测到可用 CDN，使用 CDN 加速"
     else
         _yellow "No CDN available, no use CDN"
+        _yellow "未检测到可用 CDN，不使用 CDN 加速"
     fi
 }
 
@@ -61,6 +66,9 @@ get_system_arch() {
         ;;
     "armv7l" | "armv8" | "armv8l" | "aarch64")
         system_arch="arm"
+        ;;
+    "riscv64")
+        system_arch="riscv64"
         ;;
     *)
         system_arch=""
@@ -487,6 +495,10 @@ install_ndpresponder() {
             fi
             chmod 755 /usr/local/bin/ndpresponder
             chmod 644 /etc/systemd/system/ndpresponder.service
+        elif [ "$system_arch" = "riscv64" ]; then
+            _yellow "ndpresponder binary is not packaged for riscv64 in this project yet, continuing without IPv6 direct-assignment support"
+            _yellow "本项目暂未提供 riscv64 的 ndpresponder 二进制，将在无独立 IPv6 地址模式下继续部署"
+            return 0
         fi
     fi
 }
@@ -935,6 +947,7 @@ restart_network_services() {
 setup_ndpresponder() {
     if [ -f "/usr/local/bin/ndpresponder" ] && [ -f "/etc/systemd/system/ndpresponder.service" ]; then
         echo "Found ndpresponder binary and service file, setting up..."
+        echo "已找到 ndpresponder 二进制文件和服务文件，正在配置..."
         systemctl daemon-reload
         systemctl enable ndpresponder.service
         systemctl start ndpresponder.service
@@ -942,6 +955,7 @@ setup_ndpresponder() {
         return 0
     else
         echo "ndpresponder binary or service file not found."
+        echo "未找到 ndpresponder 二进制文件或服务文件。"
         return 1
     fi
 }

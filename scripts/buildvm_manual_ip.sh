@@ -34,14 +34,17 @@ init_params() {
     user_ip_range=""
     gateway=""
     if [[ -z "$extra_ip" ]]; then
+        _yellow "No IPV4 address is manually assigned"
         _yellow "IPV4地址未手动指定"
         exit 1
     else
         user_ip=$(echo "$extra_ip" | cut -d'/' -f1)
         user_ip_range=$(echo "$extra_ip" | cut -d'/' -f2)
         if is_ipv4 "$user_ip"; then
+            _green "This IPV4 address will be used: ${user_ip}"
             _green "将使用此IPV4地址: ${user_ip}"
         else
+            _yellow "IPV4 addresses do not conform to the rules"
             _yellow "IPV4地址不符合规则"
             exit 1
         fi
@@ -69,13 +72,16 @@ check_cdn_file() {
     if [ "${WITHOUTCDN^^}" = "TRUE" ]; then
         export cdn_success_url=""
         echo "WITHOUTCDN=TRUE, skip CDN acceleration"
+        echo "WITHOUTCDN=TRUE，跳过 CDN 加速"
         return
     fi
     check_cdn "https://raw.githubusercontent.com/spiritLHLS/ecs/main/back/test"
     if [ -n "$cdn_success_url" ]; then
         echo "CDN available, using CDN"
+        echo "检测到可用 CDN，使用 CDN 加速"
     else
         echo "No CDN available, no use CDN"
+        echo "未检测到可用 CDN，不使用 CDN 加速"
     fi
 }
 
@@ -138,13 +144,16 @@ get_network_info() {
         fi
     fi
     if [ -z "$user_ip" ]; then
+        _red "No matching usable IPV4 address was found"
         _red "可使用的IP匹配失败"
         exit 1
     fi
     if [ -z "$user_ip_range" ]; then
+        _red "Failed to match a usable subnet size"
         _red "可使用的子网大小匹配失败"
         exit 1
     fi
+    _green "The current IP to which the VM will be bound is: ${user_ip}"
     _green "当前虚拟机将绑定的IP为：${user_ip}"
 }
 
@@ -153,22 +162,28 @@ check_subnet() {
     user_main_ip_prefix=$(echo "$user_main_ip" | awk -F '.' '{print $1"."$2"."$3}')
     same_subnet_status=false
     if [ "$user_ip_prefix" = "$user_main_ip_prefix" ]; then
+        _yellow "The IPV4 prefix of the host matches the IPV4 prefix of the VM to be created"
         _yellow "宿主机的IPV4前缀与将要开设的虚拟机的IPV4前缀相同"
+        _yellow "If the extra IPV4 address you want to bind is the next address after the host IP, you may want to use the auto-select IPV4 script"
         _yellow "如果你要绑定的额外IP地址是宿主机IP顺位后面的地址，你可能需要使用 自动选择要绑定的IPV4地址 的脚本"
         sleep 3
         same_subnet_status=true
     else
+        _blue "The host IPV4 prefix differs from the target VM IPV4 prefix, the route for the subnet will be added automatically"
         _blue "宿主机的IPV4前缀与将要开设的虚拟机的IPV4前缀不同，将自动附加对应子网的路由"
         same_subnet_status=false
         if grep -q "iface vmbr0 inet static" /etc/network/interfaces && grep -q "post-up route add -net ${user_ip_prefix}.0/${user_ip_range} gw ${user_main_ip}" /etc/network/interfaces; then
+            _blue "The route for the new subnet already exists, no additional action is required"
             _blue "新的子网的路由已存在，无需额外添加"
         else
+            _blue "The route for the new subnet does not exist and will be added now..."
             _blue "新的子网的路由不存在，正在添加..."
             line_number=$(grep -n "iface vmbr0 inet static" /etc/network/interfaces | cut -d: -f1)
             line_number=$((line_number + 5))
             chattr -i /etc/network/interfaces
             sed -i "${line_number}i\post-up route add -net ${user_ip_prefix}.0/${user_ip_range} gw ${user_main_ip}" /etc/network/interfaces
             chattr +i /etc/network/interfaces
+            _blue "Route added successfully, restarting the network..."
             _blue "路由添加成功，正在重启网络..."
             sleep 1
             systemctl restart networking
@@ -217,29 +232,37 @@ import_disk_and_setup() {
     volid=$(pvesm list ${storage} | awk -v vmid="${vm_num}" '$5 == vmid && $1 ~ /\.raw$/ {print $1}' | tail -n 1)
     if [ -z "$volid" ]; then
         echo "No .raw file found for VM ID '${vm_num}' in storage '${storage}'. Searching for other formats..."
+        echo "在存储 '${storage}' 中未找到 VM ID '${vm_num}' 的 .raw 文件，正在尝试其他格式..."
         volid=$(pvesm list ${storage} | awk -v vmid="${vm_num}" '$5 == vmid {print $1}' | tail -n 1)
     fi
     if [ -z "$volid" ]; then
         echo "Error: No file found for VM ID '${vm_num}' in storage '${storage}'"
+        echo "错误：在存储 '${storage}' 中未找到 VM ID '${vm_num}' 对应的磁盘文件"
         exit 1
     fi
     file_path=$(pvesm path ${volid})
     if [ $? -ne 0 ] || [ -z "$file_path" ]; then
         echo "Error: Failed to resolve path for volume '${volid}'"
+        echo "错误：无法解析卷 '${volid}' 对应的路径"
         exit 1
     fi
     file_name=$(basename "$file_path")
     echo "Found file: $file_name"
+    echo "已找到磁盘文件：$file_name"
     echo "Attempting to set SCSI hardware with virtio-scsi-pci for VM $vm_num..."
+    echo "正在尝试为 VM $vm_num 设置 virtio-scsi-pci SCSI 硬件..."
     qm set $vm_num --scsihw virtio-scsi-pci --scsi0 ${storage}:${vm_num}/vm-${vm_num}-disk-0.raw
     if [ $? -ne 0 ]; then
         echo "Failed to set SCSI hardware with vm-${vm_num}-disk-0.raw. Trying alternative disk file..."
+        echo "使用 vm-${vm_num}-disk-0.raw 设置 SCSI 硬件失败，正在尝试其他磁盘文件..."
         qm set $vm_num --scsihw virtio-scsi-pci --scsi0 ${storage}:${vm_num}/$file_name
         if [ $? -ne 0 ]; then
             echo "Failed to set SCSI hardware with $file_name for VM $vm_num. Trying fallback file..."
+            echo "使用 $file_name 为 VM $vm_num 设置 SCSI 硬件失败，正在尝试回退文件..."
             qm set $vm_num --scsihw virtio-scsi-pci --scsi0 ${storage}:$file_name
             if [ $? -ne 0 ]; then
                 echo "All attempts failed. Exiting..."
+                echo "所有尝试均失败，脚本退出..."
                 exit 1
             fi
         fi

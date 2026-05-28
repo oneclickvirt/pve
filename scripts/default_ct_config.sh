@@ -33,12 +33,15 @@ get_system_arch() {
     "armv7l" | "armv8" | "armv8l" | "aarch64")
         system_arch="arm"
         ;;
+    "riscv64")
+        system_arch="riscv64"
+        ;;
     *)
         system_arch=""
         ;;
     esac
     if [ -z "${system_arch}" ] || [ ! -v system_arch ]; then
-        _red "This script can only run on machines under x86_64 or arm architecture."
+        _red "This script can only run on machines under x86_64, arm64, or riscv64 architecture."
         return 1
     fi
     return 0
@@ -358,6 +361,8 @@ prepare_system_image() {
         find_and_download_system_image_x86 || return 1
     elif [ "$system_arch" = "arm" ]; then
         find_and_download_system_image_arm || return 1
+    elif [ "$system_arch" = "riscv64" ]; then
+        find_and_download_system_image_riscv || return 1
     else
         echo "Unknown architecture: $system_arch"
         return 1
@@ -482,6 +487,33 @@ find_and_download_system_image_arm() {
         fi
         fixed_system=true
     fi
+    return 0
+}
+
+find_and_download_system_image_riscv() {
+    fixed_system=false
+    system="${en_system}-${num_system}"
+    system_name=""
+    if [ -z "$num_system" ]; then
+        system_name=$(pveam available --section system | awk '{print $2}' | grep "^${en_system}" | head -n1)
+    else
+        system_name=$(pveam available --section system | awk '{print $2}' | grep "^${system}" | head -n1)
+    fi
+    if [ -z "$system_name" ]; then
+        _red "No matching riscv64 CT template was found through pveam for ${system}"
+        _red "未通过 pveam 找到适用于 ${system} 的 riscv64 容器模板"
+        _yellow "Please run pveam update and ensure the PXVIRT repository for riscv64 is available"
+        _yellow "请先执行 pveam update，并确认 riscv64 的 PXVIRT 仓库已可用"
+        return 1
+    fi
+    target="/var/lib/vz/template/cache/${system_name}"
+    if [ ! -f "$target" ]; then
+        pveam download local "$system_name" || return 1
+    else
+        _blue "File already exists: ${target}"
+    fi
+    fixed_system=true
+    _blue "Use riscv64 template from pveam: ${system_name}"
     return 0
 }
 

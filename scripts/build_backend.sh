@@ -12,11 +12,13 @@ reading() { read -rp "$(_green "$1")" "$2"; }
 utf8_locale=$(locale -a 2>/dev/null | grep -i -m 1 -E "UTF-8|utf8")
 if [[ -z "$utf8_locale" ]]; then
     echo "No UTF-8 locale found"
+    echo "未找到 UTF-8 区域设置"
 else
     export LC_ALL="$utf8_locale"
     export LANG="$utf8_locale"
     export LANGUAGE="$utf8_locale"
     echo "Locale set to $utf8_locale"
+    echo "区域设置已切换为 $utf8_locale"
 fi
 
 if [ -f "/usr/local/bin/build_backend_pve.txt" ]; then
@@ -80,16 +82,25 @@ if [[ "$arch" == "arm"* || "$arch" == "aarch64" ]]; then
     minor=$(echo "$pve_version" | cut -d '.' -f 2 | cut -d '-' -f 1)
     version=$(echo "$major.$minor" | bc)
     _green "Detected architecture: $arch"
+    _green "检测到的架构：$arch"
     _green "Detected Proxmox VE version: $version"
+    _green "检测到的 Proxmox VE 版本：$version"
     if (($(echo "$version < 8.1" | bc -l))); then
         _green "Installing pve-edk2-firmware for Proxmox VE < 8.1..."
+        _green "正在为 Proxmox VE < 8.1 安装 pve-edk2-firmware..."
         apt download pve-edk2-firmware=3.20220526-1
         dpkg -i pve-edk2-firmware_3.20220526-1_all.deb
     else
         _green "Installing pve-edk2-firmware-aarch64 for Proxmox VE >= 8.1..."
+        _green "正在为 Proxmox VE >= 8.1 安装 pve-edk2-firmware-aarch64..."
         apt download pve-edk2-firmware-aarch64=3.20220526-rockchip
         dpkg -i pve-edk2-firmware-aarch64_3.20220526-rockchip_all.deb
     fi
+elif [[ "$arch" == "riscv64" ]]; then
+    _green "Detected architecture: $arch"
+    _green "检测到的架构：$arch"
+    _yellow "Skipping ARM firmware setup on riscv64; PXVIRT riscv64 host support currently focuses on user-space and CT workflows"
+    _yellow "在 riscv64 上跳过 ARM 固件安装；当前 PXVIRT riscv64 宿主支持主要聚焦用户态和容器工作流"
 fi
 
 # 检测AppArmor模块
@@ -118,12 +129,20 @@ installed_kernels=($(dpkg -l 'pve-kernel-*' | awk '/^ii/ {print $2}' | cut -d'-'
 if [ ${#installed_kernels[@]} -gt 0 ]; then
     latest_kernel=${installed_kernels[-1]}
     _green "PVE latest kernel: $latest_kernel"
+    _green "PVE 最新内核：$latest_kernel"
     _yellow "Please execute reboot to reboot the system to load the PVE kernel."
     _yellow "请执行 reboot 重新启动系统加载PVE内核"
 else
-    _yellow "The current kernel is already a PVE kernel, no need to reboot the system to update the kernel"
-    _yellow "当前内核已是PVE内核，无需重启系统更新内核"
-    _yellow "However, a reboot will ensure that some of the hidden settings are loaded successfully, so be sure to reboot the server once if you are in a position to do so."
-    _yellow "但重启可以保证部分隐藏设置加载成功，有条件务必重启一次服务器"
+    if [[ "$arch" == "riscv64" ]]; then
+        _yellow "No pve-kernel package was detected; riscv64 PXVIRT can keep using the current distribution kernel"
+        _yellow "未检测到 pve-kernel 软件包；riscv64 的 PXVIRT 可以继续使用当前发行版内核"
+        _yellow "Reboot only if you changed kernel parameters, network layout, or other low-level host settings"
+        _yellow "只有在你修改了内核参数、网络布局或其它底层宿主设置时，才建议重启"
+    else
+        _yellow "The current kernel is already a PVE kernel, no need to reboot the system to update the kernel"
+        _yellow "当前内核已是PVE内核，无需重启系统更新内核"
+        _yellow "However, a reboot will ensure that some of the hidden settings are loaded successfully, so be sure to reboot the server once if you are in a position to do so."
+        _yellow "但重启可以保证部分隐藏设置加载成功，有条件务必重启一次服务器"
+    fi
 fi
 echo "1" >"/usr/local/bin/build_backend_pve.txt"

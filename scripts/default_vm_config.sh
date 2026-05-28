@@ -286,12 +286,15 @@ get_system_arch() {
     "x86_64" | "amd64")
         system_arch="x86_64"
         ;;
+    "riscv64")
+        system_arch="riscv64"
+        ;;
     *)
-        system_arch="x86_64"
+        system_arch=""
         ;;
     esac
     if [ -z "${system_arch}" ] || [ ! -v system_arch ]; then
-        _red "This script can only run on machines under x86_64 or arm architecture."
+        _red "This script can only run on machines under x86_64, arm64, or riscv64 architecture."
         return 1
     fi
     return 0
@@ -348,6 +351,15 @@ prepare_system_image() {
         prepare_x86_image || return 1
     elif [ "$system_arch" = "arm" ]; then
         prepare_arm_image || return 1
+    elif [ "$system_arch" = "riscv64" ]; then
+        if [[ "${PVE_RISCV_VM_EXPERIMENTAL^^}" != "TRUE" ]]; then
+            _red "Automatic VM image preparation is experimental on riscv64 and disabled by default"
+            _red "riscv64 的自动虚拟机镜像准备为实验功能，默认关闭"
+            _yellow "Set PVE_RISCV_VM_EXPERIMENTAL=true to enable this path"
+            _yellow "如需启用该流程，请设置 PVE_RISCV_VM_EXPERIMENTAL=true"
+            return 1
+        fi
+        prepare_riscv_image || return 1
     else
         echo "Unknown architecture: $system_arch"
         return 1
@@ -622,6 +634,41 @@ prepare_arm_image() {
     local file_path="/root/qcow/${system}.${ext}"
     if [[ ! -f "$file_path" ]]; then
         echo -e "开始下载镜像: ${url}\nDownloading image: ${url}"
+        curl -L -o "$file_path" "$url"
+        if [[ $? -ne 0 ]]; then
+            echo -e "下载失败: ${url}\nDownload failed: ${url}" >&2
+            return 1
+        fi
+    else
+        echo -e "镜像已存在: ${file_path}\nImage already exists: ${file_path}"
+    fi
+    return 0
+}
+
+prepare_riscv_image() {
+    ext="qcow2"
+    local url=""
+    declare -A debian_map=(
+        [12]=bookworm [13]=trixie
+    )
+    if [[ "$system" == "debian" ]]; then
+        system="debian13"
+    fi
+    if [[ "$system" =~ debian([0-9]+) ]]; then
+        local ver=${BASH_REMATCH[1]}
+        if [[ -z "${debian_map[$ver]}" ]]; then
+            echo -e "错误: riscv64 实验虚拟机模式仅支持 debian12/debian13\nError: riscv64 experimental VM mode only supports debian12/debian13" >&2
+            return 1
+        fi
+        local codename=${debian_map[$ver]}
+        url="https://cloud.debian.org/images/cloud/${codename}/latest/debian-${ver}-generic-riscv64.qcow2"
+    else
+        echo -e "错误: riscv64 实验虚拟机模式仅支持 Debian 云镜像\nError: riscv64 experimental VM mode only supports Debian cloud images" >&2
+        return 1
+    fi
+    local file_path="/root/qcow/${system}.${ext}"
+    if [[ ! -f "$file_path" ]]; then
+        echo -e "开始下载 riscv64 镜像: ${url}\nDownloading riscv64 image: ${url}"
         curl -L -o "$file_path" "$url"
         if [[ $? -ne 0 ]]; then
             echo -e "下载失败: ${url}\nDownload failed: ${url}" >&2

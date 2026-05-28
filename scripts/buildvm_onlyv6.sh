@@ -28,9 +28,11 @@ check_environment() {
     if [ ! -s "$appended_file" ]; then
         if [ ! -f /usr/local/bin/pve_check_ipv6 ]; then
             _yellow "No ipv6 address exists to open a server with a standalone IPV6 address"
+            _yellow "不存在可用于开设独立 IPV6 服务的 IPv6 地址"
         fi
         if ! grep -q "vmbr2" /etc/network/interfaces; then
             _yellow "No vmbr2 exists to open a server with a standalone IPV6 address"
+            _yellow "不存在可用于开设独立 IPV6 服务的 vmbr2 网桥"
         fi
         service_status=$(systemctl is-active ndpresponder.service)
         if [ "$service_status" == "active" ]; then
@@ -64,13 +66,16 @@ check_cdn_file() {
     if [ "${WITHOUTCDN^^}" = "TRUE" ]; then
         export cdn_success_url=""
         echo "WITHOUTCDN=TRUE, skip CDN acceleration"
+        echo "WITHOUTCDN=TRUE，跳过 CDN 加速"
         return
     fi
     check_cdn "https://raw.githubusercontent.com/spiritLHLS/ecs/main/back/test"
     if [ -n "$cdn_success_url" ]; then
         echo "CDN available, using CDN"
+        echo "检测到可用 CDN，使用 CDN 加速"
     else
         echo "No CDN available, no use CDN"
+        echo "未检测到可用 CDN，不使用 CDN 加速"
     fi
 }
 
@@ -149,29 +154,37 @@ configure_vm() {
     volid=$(pvesm list ${storage} | awk -v vmid="${vm_num}" '$5 == vmid && $1 ~ /\.raw$/ {print $1}' | tail -n 1)
     if [ -z "$volid" ]; then
         echo "No .raw file found for VM ID '${vm_num}' in storage '${storage}'. Searching for other formats..."
+        echo "在存储 '${storage}' 中未找到 VM ID '${vm_num}' 的 .raw 文件，正在尝试其他格式..."
         volid=$(pvesm list ${storage} | awk -v vmid="${vm_num}" '$5 == vmid {print $1}' | tail -n 1)
     fi
     if [ -z "$volid" ]; then
         echo "Error: No file found for VM ID '${vm_num}' in storage '${storage}'"
+        echo "错误：在存储 '${storage}' 中未找到 VM ID '${vm_num}' 对应的磁盘文件"
         exit 1
     fi
     file_path=$(pvesm path ${volid})
     if [ $? -ne 0 ] || [ -z "$file_path" ]; then
         echo "Error: Failed to resolve path for volume '${volid}'"
+        echo "错误：无法解析卷 '${volid}' 对应的路径"
         exit 1
     fi
     file_name=$(basename "$file_path")
     echo "Found file: $file_name"
+    echo "已找到磁盘文件：$file_name"
     echo "Attempting to set SCSI hardware with virtio-scsi-pci for VM $vm_num..."
+    echo "正在尝试为 VM $vm_num 设置 virtio-scsi-pci SCSI 硬件..."
     qm set $vm_num --scsihw virtio-scsi-pci --scsi0 ${storage}:${vm_num}/vm-${vm_num}-disk-0.raw
     if [ $? -ne 0 ]; then
         echo "Failed to set SCSI hardware with vm-${vm_num}-disk-0.raw. Trying alternative disk file..."
+        echo "使用 vm-${vm_num}-disk-0.raw 设置 SCSI 硬件失败，正在尝试其他磁盘文件..."
         qm set $vm_num --scsihw virtio-scsi-pci --scsi0 ${storage}:${vm_num}/$file_name
         if [ $? -ne 0 ]; then
             echo "Failed to set SCSI hardware with $file_name for VM $vm_num. Trying fallback file..."
+            echo "使用 $file_name 为 VM $vm_num 设置 SCSI 硬件失败，正在尝试回退文件..."
             qm set $vm_num --scsihw virtio-scsi-pci --scsi0 ${storage}:$file_name
             if [ $? -ne 0 ]; then
                 echo "All attempts failed. Exiting..."
+                echo "所有尝试均失败，脚本退出..."
                 exit 1
             fi
         fi

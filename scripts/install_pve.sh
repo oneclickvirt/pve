@@ -30,11 +30,13 @@ export DEBIAN_FRONTEND=noninteractive
 utf8_locale=$(locale -a 2>/dev/null | grep -i -m 1 -E "UTF-8|utf8")
 if [[ -z "$utf8_locale" ]]; then
     echo "No UTF-8 locale found"
+    echo "未找到 UTF-8 区域设置"
 else
     export LC_ALL="$utf8_locale"
     export LANG="$utf8_locale"
     export LANGUAGE="$utf8_locale"
     echo "Locale set to $utf8_locale"
+    echo "区域设置已切换为 $utf8_locale"
 fi
 temp_file_apt_fix="/tmp/apt_fix.txt"
 command -v pct &>/dev/null
@@ -162,8 +164,138 @@ install_package() {
     fi
 }
 
+package_installed() {
+    local package_name="$1"
+    dpkg-query -W -f='${Status}' "$package_name" 2>/dev/null | grep -q "install ok installed"
+}
+
+install_dpkg_packages() {
+    local packages=("$@")
+    DEBIAN_FRONTEND=noninteractive apt-get install -o Dpkg::Options::="--force-confnew" -y "${packages[@]}"
+}
+
+rollback_failed_pve_install() {
+    local pve_packages=(proxmox-ve pve-manager qemu-server pve-cluster pveproxy pvedaemon pvestatd)
+    _yellow "PVE installation verification failed, cleaning up partial packages for a safe retry"
+    _yellow "PVE 安装校验失败，正在清理半安装状态，便于后续重试"
+    DEBIAN_FRONTEND=noninteractive apt-get purge -y "${pve_packages[@]}" >/dev/null 2>&1 || true
+    DEBIAN_FRONTEND=noninteractive apt-get autoremove -y >/dev/null 2>&1 || true
+    DEBIAN_FRONTEND=noninteractive apt-get --fix-broken install -y >/dev/null 2>&1 || true
+    dpkg --configure -a >/dev/null 2>&1 || true
+}
+
+verify_pve_installation() {
+    local required_packages=(proxmox-ve pve-manager qemu-server pve-cluster)
+    local required_commands=(pveversion pvesh qm pct)
+    local require_pve_kernel=true
+    local package_name
+    local command_name
+    for package_name in "${required_packages[@]}"; do
+        if ! package_installed "$package_name"; then
+            _red "Required package missing after installation: $package_name"
+            _red "安装完成后缺少必须的软件包：$package_name"
+            return 1
+        fi
+    done
+    for command_name in "${required_commands[@]}"; do
+        if ! command -v "$command_name" >/dev/null 2>&1; then
+            _red "Required command was not found after installation: $command_name"
+            _red "安装完成后未找到必须的命令：$command_name"
+            return 1
+        fi
+    done
+    if [ "$system_arch" = "riscv64" ]; then
+        require_pve_kernel=false
+    fi
+    if [ "$require_pve_kernel" = true ] && ! dpkg-query -W 'pve-kernel-*' 2>/dev/null | grep -q '^pve-kernel-'; then
+        _red "No pve-kernel package was detected after installation"
+        _red "安装完成后未检测到 pve-kernel 软件包"
+        return 1
+    fi
+    if [ "$require_pve_kernel" = false ] && ! dpkg-query -W 'pve-kernel-*' 2>/dev/null | grep -q '^pve-kernel-'; then
+        _yellow "No pve-kernel package was detected; riscv64 PXVIRT can run in user-space on the distribution kernel"
+        _yellow "未检测到 pve-kernel 软件包；riscv64 的 PXVIRT 可在发行版内核上运行用户态组件"
+    fi
+    return 0
+}
+
+install_optional_pve_packages() {
+    local optional_packages=(postfix open-iscsi)
+    local package_name
+    if [[ "${PVE_INSTALL_RECOMMENDED_PACKAGES^^}" != "TRUE" ]]; then
+        _yellow "Skipping recommended but non-essential packages for a minimal installation: ${optional_packages[*]}"
+        _yellow "为保持最小化安装，跳过推荐但非必需的软件包：${optional_packages[*]}"
+        _yellow "Set PVE_INSTALL_RECOMMENDED_PACKAGES=true if you need mail notifications or iSCSI initiator support"
+        _yellow "如需邮件通知或 iSCSI initiator 支持，请设置 PVE_INSTALL_RECOMMENDED_PACKAGES=true"
+        return 0
+    fi
+    for package_name in "${optional_packages[@]}"; do
+        install_package "$package_name"
+    done
+}
+
+validate_arm_pxvirt_environment() {
+    local version="$1"
+    local os_name=""
+    os_name=$(grep '^NAME=' /etc/os-release 2>/dev/null | cut -d'=' -f2 | tr -d '"')
+    if [[ "$os_name" == *"Ubuntu"* ]]; then
+        _red "PXVIRT official documentation does not support Ubuntu installation on ARM"
+        _red "PXVIRT 官方文档明确说明 ARM 场景下不支持 Ubuntu 安装"
+        if ! confirm_continue "检测到 ARM + Ubuntu，官方不支持该组合，是否仍然强制尝试？"; then
+            exit 1
+        fi
+    fi
+    case "$version" in
+    bookworm)
+        _green "ARM PXVIRT installation matches the primary upstream Debian release: $version"
+        _green "ARM PXVIRT 安装环境符合上游主线 Debian 版本：$version"
+        ;;
+    trixie)
+        _green "ARM PXVIRT repository support is available for Debian release: $version"
+        _green "ARM PXVIRT 已提供该 Debian 版本的仓库支持：$version"
+        _yellow "PXVIRT upstream package patches are currently centered on bookworm, so trixie should be treated as a newer track"
+        _yellow "PXVIRT 上游补丁主线目前仍明显围绕 bookworm，因此 trixie 更适合作为较新的跟进分支"
+        ;;
+    stretch|buster|bullseye)
+        _red "ARM PXVIRT upstream no longer shows active Debian support for: $version"
+        _red "ARM PXVIRT 上游已看不到对该 Debian 版本的现行支持：$version"
+        _yellow "Please upgrade the system to bookworm first, or use trixie only if you know the newer repository track is required"
+        _yellow "建议先升级到 bookworm；若你明确需要较新的仓库线路，再考虑 trixie"
+        exit 1
+        ;;
+    *)
+        _red "ARM PXVIRT official support is limited to Debian/Armbian bookworm or trixie, current release is: $version"
+        _red "ARM PXVIRT 官方支持范围限定在 Debian/Armbian 的 bookworm 或 trixie，当前识别版本为：$version"
+        exit 1
+        ;;
+    esac
+}
+
+validate_riscv_pxvirt_environment() {
+    local version="$1"
+    local os_name=""
+    os_name=$(grep '^NAME=' /etc/os-release 2>/dev/null | cut -d'=' -f2 | tr -d '"')
+    if [[ "$os_name" == *"Ubuntu"* ]]; then
+        _red "PXVIRT official documentation does not support Ubuntu installation on riscv64"
+        _red "PXVIRT 官方文档明确说明 riscv64 场景下不支持 Ubuntu 安装"
+        exit 1
+    fi
+    case "$version" in
+    trixie)
+        _green "riscv64 PXVIRT installation matches the documented Debian 13 trixie track"
+        _green "riscv64 PXVIRT 安装环境符合文档中的 Debian 13 trixie 线路"
+        ;;
+    *)
+        _red "riscv64 PXVIRT currently targets Debian 13 trixie, current release is: $version"
+        _red "riscv64 PXVIRT 当前目标版本为 Debian 13 trixie，当前识别版本为：$version"
+        exit 1
+        ;;
+    esac
+}
+
 check_haveged() {
     _yellow "checking haveged"
+    _yellow "正在检查 haveged"
     if ! command -v haveged >/dev/null 2>&1; then
         apt-get install -o Dpkg::Options::="--force-confnew" -y haveged
     fi
@@ -178,6 +310,7 @@ check_haveged() {
 
 check_time_zone() {
     _yellow "adjusting the time"
+    _yellow "正在校准系统时间"
     systemctl stop ntpd
     service ntpd stop
     if ! command -v chronyd >/dev/null 2>&1; then
@@ -203,12 +336,14 @@ rebuild_cloud_init() {
         else
             sed -E -i 's/preserve_hostname:[[:space:]]*false/preserve_hostname: true/g' "/etc/cloud/cloud.cfg"
             echo "change preserve_hostname to true"
+            echo "已将 preserve_hostname 修改为 true"
         fi
         if grep -q "disable_root: false" "/etc/cloud/cloud.cfg"; then
             :
         else
             sed -E -i 's/disable_root:[[:space:]]*true/disable_root: false/g' "/etc/cloud/cloud.cfg"
             echo "change disable_root to false"
+            echo "已将 disable_root 修改为 false"
         fi
         chattr -i /etc/cloud/cloud.cfg
         content=$(cat /etc/cloud/cloud.cfg)
@@ -263,12 +398,14 @@ rebuild_interfaces() {
         sed -i '1s/^/auto lo\n/' "/etc/network/interfaces"
         chattr +i /etc/network/interfaces
         _blue "Can not find 'auto lo' in /etc/network/interfaces, add it"
+        _blue "未在 /etc/network/interfaces 中找到 'auto lo'，已自动添加"
     fi
     if ! grep -q "iface lo inet loopback" "/etc/network/interfaces"; then
         chattr -i /etc/network/interfaces
         sed -i '2s/^/iface lo inet loopback\n/' "/etc/network/interfaces"
         chattr +i /etc/network/interfaces
         _blue "Can not find 'iface lo inet loopback' in /etc/network/interfaces, add it"
+        _blue "未在 /etc/network/interfaces 中找到 'iface lo inet loopback'，已自动添加"
     fi
     # 检查是否存在网络接口配置
     interface_configured=false
@@ -292,6 +429,8 @@ rebuild_interfaces() {
     if [ "$interface_configured" = false ]; then
         _blue "No network interface configuration found, possibly switched from NetworkManager"
         _blue "Adding static configuration for interface ${interface}"
+        _blue "未找到网络接口配置，可能是从 NetworkManager 切换而来"
+        _blue "正在为接口 ${interface} 添加静态配置"
         chattr -i /etc/network/interfaces
         echo "" >>/etc/network/interfaces
         echo "# Network interface ${interface}" >>/etc/network/interfaces
@@ -451,6 +590,8 @@ rebuild_interfaces() {
     else
         _red "Warning: No network interface configuration found and unable to create one"
         _red "Please check if the network interface variables are properly set"
+        _red "警告：未找到网络接口配置且无法自动创建"
+        _red "请检查网络接口相关变量是否设置正确"
     fi
 }
 
@@ -613,13 +754,16 @@ check_cdn_file() {
     if [ "${WITHOUTCDN^^}" = "TRUE" ]; then
         export cdn_success_url=""
         _yellow "WITHOUTCDN=TRUE, skip CDN acceleration"
+        _yellow "WITHOUTCDN=TRUE，跳过 CDN 加速"
         return
     fi
     check_cdn "https://raw.githubusercontent.com/spiritLHLS/ecs/main/back/test"
     if [ -n "$cdn_success_url" ]; then
         _yellow "CDN available, using CDN"
+        _yellow "检测到可用 CDN，使用 CDN 加速"
     else
         _yellow "No CDN available, no use CDN"
+        _yellow "未检测到可用 CDN，不使用 CDN 加速"
     fi
 }
 
@@ -666,19 +810,49 @@ is_private_ipv4() {
 check_ipv4() {
     IPV4=$(ip -4 addr show | grep global | awk '{print $2}' | cut -d '/' -f1 | head -n 1)
     if is_private_ipv4 "$IPV4"; then # 由于是内网IPV4地址，需要通过API获取外网地址
-        IPV4=""
-        local API_NET=("ipv4.ip.sb" "ipget.net" "ip.ping0.cc" "https://ip4.seeip.org" "https://api.my-ip.io/ip" "https://ipv4.icanhazip.com" "api.ipify.org")
-        for p in "${API_NET[@]}"; do
-            response=$(curl -s4m8 "$p")
-            sleep 1
-            if [ $? -eq 0 ] && ! echo "$response" | grep -q "error"; then
-                IP_API="$p"
-                IPV4="$response"
-                break
-            fi
-        done
+        get_public_ipv4_candidates
+        IPV4="$(echo "$PUBLIC_IPV4_CANDIDATES" | sed -n '1p')"
+        IP_API="$(echo "$PUBLIC_IPV4_SOURCES" | sed -n '1p')"
     fi
     export IPV4
+}
+
+is_valid_ipv4() {
+    local ip_address="$1"
+    if ! [[ "$ip_address" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]]; then
+        return 1
+    fi
+    IFS='.' read -r -a ip_parts <<<"$ip_address"
+    for part in "${ip_parts[@]}"; do
+        if [ "$part" -lt 0 ] || [ "$part" -gt 255 ]; then
+            return 1
+        fi
+    done
+    return 0
+}
+
+get_public_ipv4_candidates() {
+    PUBLIC_IPV4_CANDIDATES=""
+    PUBLIC_IPV4_SOURCES=""
+    local api_list=("ipv4.ip.sb" "ipget.net" "ip.ping0.cc" "https://ip4.seeip.org" "https://api.my-ip.io/ip" "https://ipv4.icanhazip.com" "api.ipify.org")
+    local candidate_ip
+    local response
+    for endpoint in "${api_list[@]}"; do
+        response=$(curl -s4m8 "$endpoint" | tr -d '[:space:]')
+        if [ $? -ne 0 ] || echo "$response" | grep -qi "error"; then
+            sleep 1
+            continue
+        fi
+        candidate_ip=$(echo "$response" | grep -oE '([0-9]{1,3}\.){3}[0-9]{1,3}' | head -n 1)
+        if is_valid_ipv4 "$candidate_ip" && ! is_private_ipv4 "$candidate_ip"; then
+            if ! echo "$PUBLIC_IPV4_CANDIDATES" | grep -qx "$candidate_ip"; then
+                PUBLIC_IPV4_CANDIDATES=$(printf "%s\n%s" "$PUBLIC_IPV4_CANDIDATES" "$candidate_ip" | sed '/^$/d')
+                PUBLIC_IPV4_SOURCES=$(printf "%s\n%s" "$PUBLIC_IPV4_SOURCES" "$endpoint" | sed '/^$/d')
+            fi
+        fi
+        sleep 1
+    done
+    export PUBLIC_IPV4_CANDIDATES PUBLIC_IPV4_SOURCES
 }
 
 statistics_of_run_times() {
@@ -701,6 +875,9 @@ get_system_arch() {
     "armv7l" | "armv8" | "armv8l" | "aarch64")
         system_arch="arm"
         ;;
+    "riscv64")
+        system_arch="riscv64"
+        ;;
     *)
         system_arch=""
         ;;
@@ -709,6 +886,7 @@ get_system_arch() {
 
 check_china() {
     _yellow "IP area being detected ......"
+    _yellow "正在检测 IP 所属地区......"
     if [[ -z "${CN}" ]]; then
         if [[ $(curl -m 6 -s https://ipapi.co/json | grep 'China') != "" ]]; then
             _yellow "根据ipapi.co提供的信息，当前IP可能在中国"
@@ -801,11 +979,13 @@ run_preliminary_checks() {
 check_and_configure_environment() {
     if [ "$(id -u)" != "0" ]; then
         _red "This script must be run as root"
+        _red "本脚本必须以 root 用户运行"
         exit 1
     fi
     get_system_arch
     if [ -z "${system_arch}" ] || [ ! -v system_arch ]; then
-        _red "This script can only run on machines under x86_64 or arm architecture."
+        _red "This script can only run on machines under x86_64, arm64, or riscv64 architecture."
+        _red "本脚本仅支持在 x86_64、arm64 或 riscv64 架构机器上运行。"
         exit 1
     fi
     if systemctl list-unit-files | grep -q '^NetworkManager\.service'; then
@@ -1016,42 +1196,92 @@ collect_ip_info() {
     # 收集主IPV4地址
     if [ ! -f /usr/local/bin/pve_main_ipv4 ]; then
         main_ipv4=$(ip -4 addr show | grep global | awk '{print $2}' | cut -d '/' -f1 | head -n 1)
+        selected_ip_mode="public"
         if is_private_ipv4 "$main_ipv4"; then
             _green "Detected that the main IP is a private IPv4 address: $main_ipv4"
             _green "检测到主 IP 是私有 IPv4 地址：$main_ipv4"
             echo
-            _green "The detected IP is private. If your host is a cloud VPS/cloud dedicated server, please use a public IPv4 address as the main PVE IP."
-            _green "If your host is a local physical machine without a fixed public IP, you can use the current private IP."
-            _green "当前检测到的是私有地址。如果你的宿主机是云服务器/云独立服务器，请选择公网 IPv4 作为 PVE 的主 IP。"
-            _green "如果你的宿主机是本地物理机，且没有固定公网 IPv4，可以使用当前私有地址。"
+            check_ipv4
+            if [ -n "$PUBLIC_IPV4_CANDIDATES" ]; then
+                _green "Detected candidate public IPv4 addresses for this host:"
+                _green "检测到该宿主机可用的候选公网 IPv4 地址："
+                local candidate_index=1
+                while IFS= read -r candidate_ip; do
+                    [ -z "$candidate_ip" ] && continue
+                    candidate_source=$(echo "$PUBLIC_IPV4_SOURCES" | sed -n "${candidate_index}p")
+                    _yellow "${candidate_index}. ${candidate_ip} (source: ${candidate_source})"
+                    candidate_index=$((candidate_index + 1))
+                done <<EOF
+$PUBLIC_IPV4_CANDIDATES
+EOF
+            else
+                _yellow "No reliable public IPv4 candidate was detected from the network APIs."
+                _yellow "暂未从网络 API 中检测到可靠的公网 IPv4 候选地址。"
+            fi
+            echo
+            _green "If you need to access PVE directly from the Internet, it is recommended to choose a public IPv4 only when that public IPv4 is fixed and bound to this host."
+            _green "If the public IPv4 is dynamic, only used for outbound NAT, or may change after reboot/rebuild, selecting it may cause hosts, certificates, and the 8006 web entry address to mismatch."
+            _green "如果你需要直接通过公网访问 PVE，建议仅在该公网 IPv4 是固定的、且确实绑定在当前宿主机上时才选择公网模式。"
+            _green "如果公网 IPv4 是动态的、仅作为出口 NAT 使用、或重启/重装后可能变化，选错后可能导致 hosts、证书和 8006 面板访问地址不一致。"
+            _green "If the machine is a local physical host, or only has an intranet address available to the system, choose private mode."
+            _green "如果机器是本地物理机，或者系统实际只能拿到内网地址，请选择内网模式。"
             echo
             if [[ -n "${USE_PRIVATE_IP}" ]]; then
                 if [[ "${USE_PRIVATE_IP^^}" == "TRUE" ]]; then
-                    use_private="y"
+                    ip_mode="private"
                     _yellow "USE_PRIVATE_IP=true, 使用私有 IP：$main_ipv4"
                 else
-                    use_private="n"
+                    ip_mode="public"
                     _yellow "USE_PRIVATE_IP=false, 自动获取公网 IP"
                 fi
             else
-                reading "Use the current private IPv4 address as the main PVE IP? (y/n) [Default: n]: " use_private
-                _green "是否使用当前私有 IPv4 地址作为 PVE 的主 IP？(y/n) [默认: n]: "
-                use_private=${use_private:-n}
+                if [ -n "$PUBLIC_IPV4_CANDIDATES" ]; then
+                    reading "Select main PVE IP mode: private/public [Default: public]: " ip_mode
+                    _green "请选择 PVE 主 IP 模式：内网(private)/公网(public) [默认: public]："
+                    ip_mode=${ip_mode:-public}
+                else
+                    reading "No public IPv4 candidate detected, use private IPv4 mode? (y/n) [Default: n]: " use_private
+                    _green "未检测到公网 IPv4 候选地址，是否使用内网 IPv4 模式？(y/n) [默认: n]："
+                    use_private=${use_private:-n}
+                    if [[ "$use_private" =~ ^[Yy]$ ]]; then
+                        ip_mode="private"
+                    else
+                        ip_mode="public"
+                    fi
+                fi
             fi
-            if [[ "$use_private" =~ ^[Yy]$ ]]; then
+            if [[ "${ip_mode,,}" == "private" ]] || [[ "$use_private" =~ ^[Yy]$ ]]; then
+                selected_ip_mode="private"
                 _green "Using private IP: $main_ipv4"
                 _green "使用私有 IP：$main_ipv4"
             else
-                check_ipv4
+                if [ -z "$IPV4" ]; then
+                    _red "No usable public IPv4 was detected, unable to continue with public IP mode."
+                    _red "未检测到可用的公网 IPv4，无法继续使用公网模式。"
+                    exit 1
+                fi
+                selected_ip_mode="public"
                 main_ipv4="$IPV4"
                 _green "Using public IP: $main_ipv4"
                 _green "使用公网 IP：$main_ipv4"
+                if [ -n "$IP_API" ]; then
+                    _yellow "Public IP source: $IP_API"
+                    _yellow "公网 IP 来源：$IP_API"
+                fi
             fi
         fi
         echo "$main_ipv4" >/usr/local/bin/pve_main_ipv4
+        echo "$selected_ip_mode" >/usr/local/bin/pve_main_ipv4_mode
     fi
     # 提取主IPV4地址
     main_ipv4=$(cat /usr/local/bin/pve_main_ipv4)
+    if [ -f /usr/local/bin/pve_main_ipv4_mode ]; then
+        selected_ip_mode=$(cat /usr/local/bin/pve_main_ipv4_mode)
+    elif is_private_ipv4 "$main_ipv4"; then
+        selected_ip_mode="private"
+    else
+        selected_ip_mode="public"
+    fi
     # 收集IPV4地址(含子网长度)
     if [ ! -f /usr/local/bin/pve_ipv4_address ]; then
         ipv4_address=$(ip addr show | awk '/inet .*global/ && !/inet6/ {print $2}' | sed -n '1p')
@@ -1640,32 +1870,93 @@ test_and_switch_mirrors() {
     fi
 }
 
+install_arm_pxvirt_repo_key() {
+    local key_targets=(
+        "https://mirrors.lierfang.com/pxcloud/pxvirt/pveport.gpg:/etc/apt/trusted.gpg.d/pveport.gpg"
+        "https://mirrors.lierfang.com/pxcloud/lierfang.gpg:/etc/apt/trusted.gpg.d/lierfang.gpg"
+    )
+    local entry=""
+    local key_url=""
+    local key_path=""
+    for entry in "${key_targets[@]}"; do
+        key_url="${entry%%:*}"
+        key_path="${entry#*:}"
+        if curl -fsSL "$key_url" -o "$key_path"; then
+            chmod +r "$key_path"
+            _green "PXVIRT repository signing key installed: $key_path"
+            _green "PXVIRT 仓库签名密钥已安装：$key_path"
+            echo "$key_path"
+            return 0
+        fi
+    done
+    _red "Failed to download the PXVIRT repository signing key"
+    _red "下载 PXVIRT 仓库签名密钥失败"
+    return 1
+}
+
+setup_pxvirt_repo_with_fallback() {
+    local suite="$1"
+    local repo_file="/etc/apt/sources.list.d/pxvirt-sources.list"
+    local selected_repo_file="/usr/local/bin/pve_pxvirt_repo_selected"
+    local mirrors=(
+        "https://mirrors.lierfang.com/pxcloud/pxvirt"
+        "https://us.mirrors.lierfang.com/pxcloud/pxvirt"
+        "https://jp.mirrors.lierfang.com/pxcloud/pxvirt"
+        "https://apt.dedi.zone/pxcloud/pxvirt"
+        "https://mirrors.homelabproject.cc/pxcloud/pxvirt"
+    )
+    local mirror=""
+    local apt_output=""
+    for mirror in "${mirrors[@]}"; do
+        echo "deb ${mirror} ${suite} main" >"$repo_file"
+        apt_output=$(apt-get update -o Dir::Etc::sourcelist="$repo_file" -o Dir::Etc::sourceparts='-' -o APT::Get::List-Cleanup=0 2>&1)
+        if [ $? -eq 0 ]; then
+            _green "PXVIRT repository selected: ${mirror} (${suite})"
+            _green "PXVIRT 仓库已选择：${mirror} (${suite})"
+            echo "${mirror} ${suite}" >"$selected_repo_file"
+            return 0
+        fi
+    done
+    _red "All PXVIRT mirrors failed for suite ${suite}"
+    _red "所有 PXVIRT 镜像在 ${suite} 版本上均不可用"
+    return 1
+}
+
 # 设置ARM架构的PVE源
 setup_arm_pve_repo() {
     local version="$1"
+    local repo_suite=""
     case $version in
-    stretch)
-        # https://gitlab.com/minkebox/pimox
-        curl https://gitlab.com/minkebox/pimox/-/raw/master/dev/KEY.gpg | apt-key add -
-        curl https://gitlab.com/minkebox/pimox/-/raw/master/dev/pimox.list >/etc/apt/sources.list.d/pimox.list
+    bookworm|trixie)
+        repo_suite="$version"
         ;;
-    buster|bullseye|bookworm)
-        echo "deb  https://mirrors.lierfang.com/pxcloud/pxvirt bookworm main">/etc/apt/sources.list.d/pxvirt-sources.list
-        curl -L https://mirrors.lierfang.com/pxcloud/lierfang.gpg -o /etc/apt/trusted.gpg.d/lierfang.gpg
-        ;;
-    trixie)
-        echo "deb  https://mirrors.lierfang.com/pxcloud/pxvirt trixie main">/etc/apt/sources.list.d/pxvirt-sources.list
-        curl -L https://mirrors.lierfang.com/pxcloud/lierfang.gpg -o /etc/apt/trusted.gpg.d/lierfang.gpg
+    stretch|buster|bullseye)
+        _red "PXVIRT ARM repository is not mapped for Debian release: $version"
+        _red "PXVIRT ARM 仓库未为该 Debian 版本提供匹配映射：$version"
+        return 1
         ;;
     *)
-        _red "Error: Unsupported Debian version"
-        if ! confirm_continue "是否要继续安装(识别到不是Debian9~Debian13的范围)？"; then
-            exit 1
-        fi
-        echo "deb  https://mirrors.lierfang.com/pxcloud/pxvirt trixie main">/etc/apt/sources.list.d/pxvirt-sources.list
-        curl -L https://mirrors.lierfang.com/pxcloud/lierfang.gpg -o /etc/apt/trusted.gpg.d/lierfang.gpg
+        _red "Error: Unsupported Debian version for PXVIRT ARM repository"
+        _red "错误：当前 Debian 版本没有对应的 PXVIRT ARM 仓库"
+        return 1
         ;;
     esac
+
+    if [ -n "$repo_suite" ]; then
+        install_arm_pxvirt_repo_key >/dev/null || return 1
+        setup_pxvirt_repo_with_fallback "$repo_suite" || return 1
+    fi
+}
+
+setup_riscv_pve_repo() {
+    local version="$1"
+    if [ "$version" != "trixie" ]; then
+        _red "PXVIRT riscv64 repository is currently only mapped for Debian trixie"
+        _red "PXVIRT riscv64 仓库当前仅支持 Debian trixie"
+        return 1
+    fi
+    install_arm_pxvirt_repo_key >/dev/null || return 1
+    setup_pxvirt_repo_with_fallback "trixie" || return 1
 }
 
 # 用户确认是否继续
@@ -1740,6 +2031,7 @@ fix_ipv6_configs() {
 
 # 安装必需包
 install_proxmox_packages() {
+    local pve_packages=(proxmox-ve pve-manager qemu-server pve-cluster)
     # 部分机器中途service丢失了，尝试修复
     install_package service
     # esxi 开设的部分机器中含有冲突组件 firmware-ath9k-htc ，需要预先卸载
@@ -1748,10 +2040,18 @@ install_proxmox_packages() {
         apt --fix-broken install
         dpkg --configure -a
     fi
-    # 正式安装PVE
-    install_package proxmox-ve
-    install_package postfix
-    install_package open-iscsi
+    # 按 PXVIRT 官方 Debian 安装文档显式安装核心组件，避免只装 meta 包后静默失败。
+    if ! install_dpkg_packages "${pve_packages[@]}"; then
+        _red "PVE core package installation failed"
+        _red "PVE 核心软件包安装失败"
+        rollback_failed_pve_install
+        exit 1
+    fi
+    if ! verify_pve_installation; then
+        rollback_failed_pve_install
+        exit 1
+    fi
+    install_optional_pve_packages
     rebuild_interfaces
 }
 
@@ -1914,20 +2214,131 @@ install_additional_packages() {
 }
 
 # 配置防火墙和PVE代理
+nft_backend_ready() {
+    command -v nft >/dev/null 2>&1 && nft list tables >/dev/null 2>&1
+}
+
+allow_tcp_port() {
+    local port="$1"
+    if nft_backend_ready; then
+        nft add table inet filter 2>/dev/null || true
+        nft 'add chain inet filter input { type filter hook input priority 0; policy accept; }' 2>/dev/null || true
+        if ! nft list chain inet filter input 2>/dev/null | grep -q "tcp dport ${port} accept"; then
+            nft add rule inet filter input tcp dport "$port" accept 2>/dev/null || true
+        fi
+    else
+        iptables -C INPUT -p tcp --dport "$port" -j ACCEPT 2>/dev/null || iptables -I INPUT -p tcp --dport "$port" -j ACCEPT
+    fi
+}
+
+allow_nat_forwarding() {
+    if nft_backend_ready; then
+        nft add table inet filter 2>/dev/null || true
+        nft 'add chain inet filter forward { type filter hook forward priority 0; policy accept; }' 2>/dev/null || true
+        if ! nft list chain inet filter forward 2>/dev/null | grep -q "ct state established,related accept"; then
+            nft add rule inet filter forward ct state established,related accept 2>/dev/null || true
+        fi
+        if ! nft list chain inet filter forward 2>/dev/null | grep -q 'iifname "vmbr1" oifname "vmbr0" accept'; then
+            nft add rule inet filter forward iifname "vmbr1" oifname "vmbr0" accept 2>/dev/null || true
+        fi
+        if ! nft list chain inet filter forward 2>/dev/null | grep -q 'iifname "vmbr0" oifname "vmbr1" ct state established,related accept'; then
+            nft add rule inet filter forward iifname "vmbr0" oifname "vmbr1" ct state established,related accept 2>/dev/null || true
+        fi
+    else
+        iptables -C FORWARD -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT 2>/dev/null || iptables -I FORWARD -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
+        iptables -C FORWARD -i vmbr1 -o vmbr0 -j ACCEPT 2>/dev/null || iptables -I FORWARD -i vmbr1 -o vmbr0 -j ACCEPT
+        iptables -C FORWARD -i vmbr0 -o vmbr1 -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT 2>/dev/null || iptables -I FORWARD -i vmbr0 -o vmbr1 -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
+    fi
+}
+
+persist_firewall_rules() {
+    if nft_backend_ready; then
+        printf '#!/usr/sbin/nft -f\nflush ruleset\n' > /etc/nftables.conf
+        nft list ruleset >> /etc/nftables.conf
+        systemctl enable nftables 2>/dev/null || true
+    else
+        install_package iptables-persistent
+        if command -v iptables-save >/dev/null 2>&1; then
+            mkdir -p /etc/iptables
+            iptables-save > /etc/iptables/rules.v4
+        fi
+        if command -v ip6tables-save >/dev/null 2>&1; then
+            ip6tables-save > /etc/iptables/rules.v6 2>/dev/null || true
+        fi
+        service netfilter-persistent restart 2>/dev/null || true
+    fi
+}
+
+ensure_firewall_access() {
+    # Keep host access and PVE UI reachable even when image default policy is DROP.
+    allow_tcp_port 22
+    allow_tcp_port 8006
+    allow_tcp_port 3128
+    allow_nat_forwarding
+    persist_firewall_rules
+}
+
 configure_firewall_and_proxy() {
     install_package ufw
     ufw disable
     echo LISTEN_IP="0.0.0.0" >/etc/default/pveproxy
+    ensure_firewall_access
+}
+
+is_8006_ready() {
+    if ss -lnt 2>/dev/null | grep -q ':8006 '; then
+        if curl -kI --connect-timeout 3 --max-time 6 https://127.0.0.1:8006/ >/dev/null 2>&1; then
+            return 0
+        fi
+    fi
+    return 1
+}
+
+wait_for_8006_ready() {
+    local total_wait=60
+    local interval=5
+    local elapsed=0
+
+    while [ "$elapsed" -lt "$total_wait" ]; do
+        if is_8006_ready; then
+            _green "PVE web service on 8006 is ready"
+            _green "PVE 的 8006 Web 服务已就绪"
+            return 0
+        fi
+        _yellow "Waiting for 8006 web service... ${elapsed}/${total_wait}s"
+        _yellow "等待 8006 Web 服务就绪... ${elapsed}/${total_wait}s"
+        sleep "$interval"
+        elapsed=$((elapsed + interval))
+    done
+
+    if is_8006_ready; then
+        _green "PVE web service on 8006 is ready"
+        _green "PVE 的 8006 Web 服务已就绪"
+        return 0
+    fi
+
+    _red "8006 web service did not become ready within ${total_wait}s"
+    _red "8006 Web 服务在 ${total_wait} 秒内未就绪"
+    _yellow "Please check: systemctl status pveproxy pvedaemon pve-cluster --no-pager -l"
+    _yellow "请检查：systemctl status pveproxy pvedaemon pve-cluster --no-pager -l"
+    return 1
 }
 
 setup_cn_dns
 rebuild_cloud_init
 setup_hostname
 version=$(lsb_release -cs)
+if [ "$system_arch" = "arm" ]; then
+    validate_arm_pxvirt_environment "$version"
+elif [ "$system_arch" = "riscv64" ]; then
+    validate_riscv_pxvirt_environment "$version"
+fi
 if [ "$system_arch" = "x86" ] || [ "$system_arch" = "x86_64" ]; then
-    setup_x86_pve_repo "$version"
+    setup_x86_pve_repo "$version" || exit 1
 elif [ "$system_arch" = "arm" ]; then
-    setup_arm_pve_repo "$version"
+    setup_arm_pve_repo "$version" || exit 1
+elif [ "$system_arch" = "riscv64" ]; then
+    setup_riscv_pve_repo "$version" || exit 1
 fi
 rebuild_interfaces
 fix_apt_issues2
@@ -1940,11 +2351,25 @@ configure_pve_sources
 clean_network_interfaces
 install_additional_packages
 configure_firewall_and_proxy
+if ! verify_pve_installation; then
+    rollback_failed_pve_install
+    exit 1
+fi
+if ! wait_for_8006_ready; then
+    exit 1
+fi
 
 ########## 打印安装成功的信息
 
 # 打印安装后的信息
 url="https://${main_ipv4}:8006/"
+if [ -f /usr/local/bin/pve_main_ipv4_mode ]; then
+    selected_ip_mode=$(cat /usr/local/bin/pve_main_ipv4_mode)
+elif is_private_ipv4 "$main_ipv4"; then
+    selected_ip_mode="private"
+else
+    selected_ip_mode="public"
+fi
 
 # 打印内核
 running_kernel=$(uname -r)
@@ -1955,6 +2380,17 @@ if [ ${#installed_kernels[@]} -gt 0 ]; then
     _green "PVE latest kernel: $latest_kernel"
 fi
 
+if [ "$selected_ip_mode" = "private" ]; then
+    _green "Selected main IP mode: private IPv4"
+    _green "当前选择的主 IP 模式：内网 IPv4"
+else
+    _green "Selected main IP mode: public IPv4"
+    _green "当前选择的主 IP 模式：公网 IPv4"
+fi
+if [ -f /usr/local/bin/pve_pxvirt_repo_selected ]; then
+    _green "PXVIRT repository in use: $(cat /usr/local/bin/pve_pxvirt_repo_selected)"
+    _green "当前使用的 PXVIRT 仓库：$(cat /usr/local/bin/pve_pxvirt_repo_selected)"
+fi
 _green "Installation complete, please open HTTPS web page $url"
 _green "The username and password are the username and password used by the server (e.g. root and root user's password)"
 _green "If the login is correct please do not rush to reboot the system, go to execute the commands of the pre-configured environment and then reboot the system"

@@ -46,13 +46,16 @@ check_cdn_file() {
     if [ "${WITHOUTCDN^^}" = "TRUE" ]; then
         export cdn_success_url=""
         echo "WITHOUTCDN=TRUE, skip CDN acceleration"
+        echo "WITHOUTCDN=TRUE，跳过 CDN 加速"
         return
     fi
     check_cdn "https://raw.githubusercontent.com/spiritLHLS/ecs/main/back/test"
     if [ -n "$cdn_success_url" ]; then
         echo "CDN available, using CDN"
+        echo "检测到可用 CDN，使用 CDN 加速"
     else
         echo "No CDN available, no use CDN"
+        echo "未检测到可用 CDN，不使用 CDN 加速"
     fi
 }
 
@@ -188,6 +191,7 @@ check_network() {
     public_network_check_res=$(pct exec $CTID -- curl -lk -m 6 ${cdn_success_url}https://raw.githubusercontent.com/spiritLHLS/ecs/main/back/test)
     if [[ $public_network_check_res == *"success"* ]]; then
         echo "network is public"
+        echo "网络连通正常"
     else
         echo "nameserver 8.8.8.8" | pct exec $CTID -- tee -a /etc/resolv.conf
         sleep 1
@@ -199,6 +203,7 @@ restart_ssh() {
     ssh_check_res=$(pct exec $CTID -- lsof -i:22)
     if [[ $ssh_check_res == *"ssh"* ]]; then
         echo "ssh config correct"
+        echo "SSH 配置正常"
     else
         pct exec $CTID -- service ssh restart
         pct exec $CTID -- service sshd restart

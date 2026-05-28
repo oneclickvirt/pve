@@ -31,7 +31,10 @@ get_system_arch() {
         system_arch="x86"
         ;;
     "armv7l" | "armv8" | "armv8l" | "aarch64")
-        system_arch="arch"
+        system_arch="arm"
+        ;;
+    "riscv64")
+        system_arch="riscv64"
         ;;
     *)
         system_arch=""

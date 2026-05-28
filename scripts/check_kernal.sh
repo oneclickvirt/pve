@@ -57,7 +57,10 @@ get_system_arch() {
         system_arch="x86"
         ;;
     "armv7l" | "armv8" | "armv8l" | "aarch64")
-        system_arch="arch"
+        system_arch="arm"
+        ;;
+    "riscv64")
+        system_arch="riscv64"
         ;;
     *)
         system_arch=""
@@ -228,9 +231,9 @@ check_interface() {
 # 检测系统是否支持
 get_system_arch
 version=$(lsb_release -cs)
-if [ "$system_arch" = "arch" ]; then
-    _blue "system_arch: arch"
-    _green "架构：arch"
+if [ "$system_arch" = "arm" ]; then
+    _blue "system_arch: arm"
+    _green "架构：arm"
     case $version in
     stretch | buster)
         _blue "The recognized system is $version"
@@ -247,6 +250,21 @@ if [ "$system_arch" = "arch" ]; then
     *)
         _yellow "Error: Recognized as an unsupported version of Debian, but you can force an installation attempt or use the custom partitioning method to install the PVE"
         _yellow "Error: 识别为不支持的Debian版本，但你可以强行安装尝试或使用自定义分区的方法安装PVE"
+        ;;
+    esac
+elif [ "$system_arch" = "riscv64" ]; then
+    _blue "system_arch: riscv64"
+    _green "架构：riscv64"
+    case $version in
+    trixie)
+        _blue "The recognized system is $version"
+        _green "识别到的系统为 $version"
+        _blue "Will use PXVIRT trixie for riscv64 host installation"
+        _green "将使用 PXVIRT trixie 进行 riscv64 宿主安装"
+        ;;
+    *)
+        _yellow "riscv64 PXVIRT currently targets Debian 13 trixie; other releases are not recommended"
+        _yellow "riscv64 PXVIRT 当前主要面向 Debian 13 trixie，其它版本暂不推荐"
         ;;
     esac
 elif [ "$system_arch" = "x86" ] || [ "$system_arch" = "x86_64" ]; then

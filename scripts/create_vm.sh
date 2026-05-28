@@ -31,7 +31,10 @@ get_system_arch() {
         system_arch="x86"
         ;;
     "armv7l" | "armv8" | "armv8l" | "aarch64")
-        system_arch="arch"
+        system_arch="arm"
+        ;;
+    "riscv64")
+        system_arch="riscv64"
         ;;
     *)
         system_arch=""
@@ -201,7 +204,7 @@ build_new_vms() {
                 _yellow "不支持该系统，请查看 https://github.com/spiritLHLS/Images 支持的系统名字"
             fi
         done
-    else
+    elif [ "$system_arch" = "arm" ]; then
         while true; do
             sys_status="false"
             _green "What system does each virtual machine use? (Leave blank or enter debian11 if all use debian11):"
@@ -221,6 +224,28 @@ build_new_vms() {
             else
                 _yellow "Unable to install corresponding system, please check http://cloud-images.ubuntu.com for supported system images "
                 _yellow "无法安装对应系统，请查看 http://cloud-images.ubuntu.com 支持的系统镜像 "
+            fi
+        done
+    else
+        while true; do
+            sys_status="false"
+            _green "What system does each virtual machine use on riscv64? (Leave blank or enter debian13):"
+            reading "riscv64 上每个虚拟机使用什么系统？(留空或输入 debian13) ：" system
+            if [ -z "$system" ]; then
+                system="debian13"
+            fi
+            systems=("debian12" "debian13")
+            for sys in ${systems[@]}; do
+                if [[ "$system" == "$sys" ]]; then
+                    sys_status="true"
+                    break
+                fi
+            done
+            if [ "$sys_status" = "true" ]; then
+                break
+            else
+                _yellow "On riscv64 experimental VM mode, only debian12/debian13 cloud images are supported by this script"
+                _yellow "当前脚本在 riscv64 实验模式下仅支持 debian12/debian13 云镜像"
             fi
         done
     fi
@@ -258,8 +283,19 @@ build_new_vms() {
 pre_check
 get_system_arch
 if [ -z "${system_arch}" ] || [ ! -v system_arch ]; then
-    _red "This script can only run on machines under x86_64 or arm architecture."
+    _red "This script can only run on machines under x86_64, arm64, or riscv64 architecture."
     exit 1
+fi
+if [ "$system_arch" = "riscv64" ]; then
+    if [[ "${PVE_RISCV_VM_EXPERIMENTAL^^}" != "TRUE" ]]; then
+        _yellow "riscv64 VM automation is experimental and disabled by default"
+        _yellow "riscv64 的虚拟机自动化为实验功能，默认关闭"
+        _yellow "Set PVE_RISCV_VM_EXPERIMENTAL=true to continue, or use CT workflows"
+        _yellow "如需继续请设置 PVE_RISCV_VM_EXPERIMENTAL=true，或优先使用 CT 工作流"
+        exit 1
+    fi
+    _yellow "Experimental riscv64 VM mode is enabled; fallback to TCG software virtualization is expected"
+    _yellow "已启用 riscv64 实验虚拟机模式；预计将使用 TCG 软件虚拟化回退路径"
 fi
 check_info
 build_new_vms
