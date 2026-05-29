@@ -222,13 +222,41 @@ setup_container_os() {
 }
 
 create_container() {
+    local ct_conf="/etc/pve/lxc/${CTID}.conf"
+    local retry=0
+    local max_retry=7
+    local wait_interval=3
     user_ip="172.16.1.${CTID}"
     if [ "$fixed_system" = true ]; then
         pct create $CTID /var/lib/vz/template/cache/${system_name} -cores $core -cpuunits 1024 -memory $memory -swap 128 -rootfs ${storage}:${disk} -onboot 1 -password $password -features nesting=1
     else
         pct create $CTID ${storage}:vztmpl/${system_name} -cores $core -cpuunits 1024 -memory $memory -swap 128 -rootfs ${storage}:${disk} -onboot 1 -password $password -features nesting=1
     fi
+    if [ $? -ne 0 ]; then
+        echo -e "\e[31mpct create failed for CT ${CTID}, container will not be started\e[0m"
+        echo -e "\e[31mCT ${CTID} 创建失败，已停止后续启动流程\e[0m"
+        exit 1
+    fi
+    while [ $retry -lt $max_retry ]; do
+        if [ -f "$ct_conf" ]; then
+            break
+        fi
+        sleep $wait_interval
+        retry=$((retry + 1))
+    done
+    if [ ! -f "$ct_conf" ]; then
+        echo -e "\e[31mLXC config not found after create: $ct_conf\e[0m"
+        echo -e "\e[31m创建后未检测到 LXC 配置文件：$ct_conf\e[0m"
+        echo -e "\e[31mPlease check pve-cluster status and /etc/pve mount state\e[0m"
+        echo -e "\e[31m请检查 pve-cluster 状态和 /etc/pve 挂载状态\e[0m"
+        exit 1
+    fi
     pct start $CTID
+    if [ $? -ne 0 ]; then
+        echo -e "\e[31mpct start failed for CT ${CTID}\e[0m"
+        echo -e "\e[31mCT ${CTID} 启动失败\e[0m"
+        exit 1
+    fi
     sleep 5
     pct set $CTID --hostname $CTID
     appended_file="/usr/local/bin/pve_appended_content.txt"
@@ -265,6 +293,7 @@ create_container() {
 }
 
 save_container_info() {
+    local ct_conf="/etc/pve/lxc/${CTID}.conf"
     echo "$CTID $password $core $memory $disk $system_ori $storage ${ct_external_ipv6}" >>"ct${CTID}"
     data=$(echo " CTID root密码-password CPU核数-CPU 内存-memory 硬盘-disk 系统-system 存储盘-storage 外网IPV6-ipv6")
     values=$(cat "ct${CTID}")
@@ -276,8 +305,13 @@ save_container_info() {
         echo ""
     done >"/tmp/temp${CTID}.txt"
     sed -i 's/^/# /' "/tmp/temp${CTID}.txt"
-    cat "/etc/pve/lxc/${CTID}.conf" >>"/tmp/temp${CTID}.txt"
-    cp "/tmp/temp${CTID}.txt" "/etc/pve/lxc/${CTID}.conf"
+    if [ -f "$ct_conf" ]; then
+        cat "$ct_conf" >>"/tmp/temp${CTID}.txt"
+        cp "/tmp/temp${CTID}.txt" "$ct_conf"
+    else
+        echo -e "\e[33mSkip writing metadata into missing LXC config: $ct_conf\e[0m"
+        echo -e "\e[33m跳过写入不存在的 LXC 配置文件：$ct_conf\e[0m"
+    fi
     rm -rf "/tmp/temp${CTID}.txt"
     cat "ct${CTID}"
 }
