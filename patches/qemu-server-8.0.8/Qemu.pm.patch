@@ -1,0 +1,21 @@
+--- /usr/share/perl5/PVE/API2/Qemu.pm.orig
++++ /usr/share/perl5/PVE/API2/Qemu.pm
+@@ -1540,10 +1540,16 @@
+ 
+     my $skip_cloud_init = extract_param($param, 'skip_cloud_init');
+ 
++    # WINDOWS CLOUD-INIT MODIFICATION
++    my $conf = PVE::QemuConfig->load_config($vmid);
++    my $ostype = $conf->{ostype};
++
+     if (defined(my $cipassword = $param->{cipassword})) {
+ 	# Same logic as in cloud-init (but with the regex fixed...)
+-	$param->{cipassword} = PVE::Tools::encrypt_pw($cipassword)
+-	    if $cipassword !~ /^\$(?:[156]|2[ay])(\$.+){2}/;
++	if (!(PVE::QemuServer::Helpers::windows_version($ostype))) {
++	    $param->{cipassword} = PVE::Tools::encrypt_pw($cipassword)
++	        if $cipassword !~ /^\$(?:[156]|2[ay])(\$.+){2}/;
++	}
+     }
+ 
+     my @paramarr = (); # used for log message

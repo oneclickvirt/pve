@@ -2013,16 +2013,22 @@ test_and_switch_mirrors() {
 
 install_arm_pxvirt_repo_key() {
     local key_targets=(
-        "https://mirrors.lierfang.com/pxcloud/pxvirt/pveport.gpg:/etc/apt/trusted.gpg.d/pveport.gpg"
-        "https://mirrors.lierfang.com/pxcloud/lierfang.gpg:/etc/apt/trusted.gpg.d/lierfang.gpg"
+        "https://mirrors.lierfang.com/pxcloud/pxvirt/pveport.gpg|/etc/apt/trusted.gpg.d/pveport.gpg"
+        "https://mirrors.lierfang.com/pxcloud/lierfang.gpg|/etc/apt/trusted.gpg.d/lierfang.gpg"
     )
     local entry=""
     local key_url=""
     local key_path=""
     for entry in "${key_targets[@]}"; do
-        key_url="${entry%%:*}"
-        key_path="${entry#*:}"
-        if curl -fsSL "$key_url" -o "$key_path"; then
+        key_url="${entry%%|*}"
+        key_path="${entry#*|}"
+        if [[ -z "$key_url" || -z "$key_path" ]]; then
+            continue
+        fi
+        if [[ "$key_url" != http*://* || "$key_path" != /* ]]; then
+            continue
+        fi
+        if curl -fsSL --connect-timeout 10 --max-time 30 "$key_url" -o "$key_path"; then
             chmod +r "$key_path"
             _green "PXVIRT repository signing key installed: $key_path"
             _green "PXVIRT 仓库签名密钥已安装：$key_path"
