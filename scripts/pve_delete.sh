@@ -3,7 +3,7 @@
 # https://github.com/oneclickvirt/pve
 # 2026.02.28
 # ./pve_delete.sh arg1 arg2
-# arg 可填入虚拟机/容器的序号，可以有任意多个
+# arg 可填入虚拟机/容器的序号，可以有任意多个；或使用 all 删除全部
 # 日志 /var/log/pve_delete.log
 
 set -e
@@ -46,6 +46,65 @@ safe_remove() {
     fi
 }
 
+# 防火墙后端自动识别（优先读取 interfaces 配置痕迹）
+FW_BACKEND=""
+
+get_interfaces_content() {
+    {
+        [ -f /etc/network/interfaces ] && cat /etc/network/interfaces
+        [ -d /etc/network/interfaces.d ] && cat /etc/network/interfaces.d/* 2>/dev/null || true
+    } 2>/dev/null || true
+}
+
+detect_firewall_backend() {
+    local interfaces_content
+    interfaces_content=$(get_interfaces_content)
+    local has_nft=1
+    local has_ipt=1
+
+    if command -v nft >/dev/null 2>&1 && nft list tables >/dev/null 2>&1; then
+        has_nft=0
+    fi
+    if command -v iptables >/dev/null 2>&1; then
+        has_ipt=0
+    fi
+
+    if echo "$interfaces_content" | grep -qiE '(^|[^a-z])(nft|nftables)($|[^a-z])'; then
+        FW_BACKEND="nft"
+    elif echo "$interfaces_content" | grep -qiE '(^|[^a-z])(iptables|ip6tables|netfilter-persistent)($|[^a-z])'; then
+        FW_BACKEND="iptables"
+    elif [ -f /etc/nftables.conf ] && [ $has_nft -eq 0 ]; then
+        FW_BACKEND="nft"
+    elif [ -f /etc/iptables/rules.v4 ] && [ $has_ipt -eq 0 ]; then
+        FW_BACKEND="iptables"
+    elif [ $has_nft -eq 0 ] && [ $has_ipt -ne 0 ]; then
+        FW_BACKEND="nft"
+    elif [ $has_ipt -eq 0 ]; then
+        FW_BACKEND="iptables"
+    else
+        FW_BACKEND="nft"
+    fi
+
+    log "Detected firewall backend: ${FW_BACKEND}"
+}
+
+use_nft_backend() {
+    [ "$FW_BACKEND" = "nft" ] && command -v nft >/dev/null 2>&1 && nft list tables >/dev/null 2>&1
+}
+
+should_restart_ndpresponder() {
+    if [ ! -f "/usr/local/bin/ndpresponder" ]; then
+        return 1
+    fi
+    if ! systemctl list-unit-files ndpresponder.service >/dev/null 2>&1; then
+        return 1
+    fi
+    if systemctl is-enabled --quiet ndpresponder.service 2>/dev/null || systemctl is-active --quiet ndpresponder.service 2>/dev/null; then
+        return 0
+    fi
+    return 1
+}
+
 # 清理IPv6 NAT映射规则
 cleanup_ipv6_nat_rules() {
     local vmctid=$1
@@ -56,7 +115,7 @@ cleanup_ipv6_nat_rules() {
         log "Cleaning up IPv6 NAT rules for VM $vmctid"
         local vm_internal_ipv6="2001:db8:1::${vmctid}"
         local host_external_ipv6=""
-        if command -v nft >/dev/null 2>&1 && nft list tables >/dev/null 2>&1; then
+        if use_nft_backend; then
             # nftables: find and remove matching rules
             host_external_ipv6=$(nft list chain ip6 nat prerouting 2>/dev/null | grep "dnat to $vm_internal_ipv6" | sed 's/.*ip6 daddr \([^ ]*\).*/\1/' | head -1)
             if [ -n "$host_external_ipv6" ]; then
@@ -106,7 +165,7 @@ cleanup_vmbr2_icmpv6_rule() {
     host_ipv6=$(cat /usr/local/bin/pve_check_ipv6)
     local ipv6_addr="${host_ipv6%:*}:${vmctid}"
     log "Cleaning up ICMPv6 ping block rule for $ipv6_addr"
-    if command -v nft >/dev/null 2>&1 && nft list tables >/dev/null 2>&1; then
+    if use_nft_backend; then
         nft -a list chain ip6 raw prerouting 2>/dev/null | grep "$ipv6_addr" | sed 's/.*# handle //' | awk '{print $1}' | while read -r h; do
             nft delete rule ip6 raw prerouting handle "$h" 2>/dev/null || true
         done
@@ -198,7 +257,7 @@ handle_vm_deletion() {
     # 更新防火墙规则
     if [ -n "$ip_address" ]; then
         log "Removing firewall rules for IP $ip_address"
-        if command -v nft >/dev/null 2>&1 && nft list tables >/dev/null 2>&1; then
+        if use_nft_backend; then
             for chain in prerouting postrouting; do
                 nft -a list chain ip nat $chain 2>/dev/null | grep "$ip_address" | sed 's/.*# handle //' | awk '{print $1}' | while read -r h; do
                     nft delete rule ip nat $chain handle "$h" 2>/dev/null || true
@@ -234,7 +293,7 @@ handle_ct_deletion() {
     # 更新防火墙规则
     if [ -n "$ip_address" ]; then
         log "Removing firewall rules for IP $ip_address"
-        if command -v nft >/dev/null 2>&1 && nft list tables >/dev/null 2>&1; then
+        if use_nft_backend; then
             for chain in prerouting postrouting; do
                 nft -a list chain ip nat $chain 2>/dev/null | grep "$ip_address" | sed 's/.*# handle //' | awk '{print $1}' | while read -r h; do
                     nft delete rule ip nat $chain handle "$h" 2>/dev/null || true
@@ -250,13 +309,17 @@ handle_ct_deletion() {
 main() {
     # 检查参数
     if [ $# -eq 0 ]; then
-        echo "Usage: $0 <VMID/CTID> [VMID/CTID...]"
+        echo "Usage: $0 <VMID/CTID|all> [VMID/CTID...]"
         exit 1
     fi
+    detect_firewall_backend
     # 创建唯一ID数组
     declare -A unique_ids
+    local delete_all=false
     for arg in "$@"; do
-        if [[ "$arg" =~ ^[0-9]+$ ]]; then
+        if [ "${arg,,}" = "all" ]; then
+            delete_all=true
+        elif [[ "$arg" =~ ^[0-9]+$ ]]; then
             unique_ids["$arg"]=1
         else
             log "Warning: Invalid ID format: $arg"
@@ -285,6 +348,15 @@ main() {
             fi
         done
     fi
+    if [ "$delete_all" = true ]; then
+        log "Deleting all existing VMs and CTs"
+        for vmid in $vmids; do
+            unique_ids["$vmid"]=1
+        done
+        for ctid in $ctids; do
+            unique_ids["$ctid"]=1
+        done
+    fi
     # 处理删除操作
     for id in "${!unique_ids[@]}"; do
         if [ -n "${vmip_array[$id]+x}" ]; then
@@ -297,7 +369,7 @@ main() {
     done
     # 重建防火墙规则
     log "Rebuilding firewall rules..."
-    if command -v nft >/dev/null 2>&1 && nft list tables >/dev/null 2>&1; then
+    if use_nft_backend; then
         printf '#!/usr/sbin/nft -f\nflush ruleset\n' > /etc/nftables.conf
         nft list ruleset >> /etc/nftables.conf
     else
@@ -308,9 +380,11 @@ main() {
         fi
     fi
     # 重启ndpresponder服务
-    if [ -f "/usr/local/bin/ndpresponder" ]; then
+    if should_restart_ndpresponder; then
         log "Restarting ndpresponder service..."
-        systemctl restart ndpresponder.service
+        systemctl restart ndpresponder.service 2>/dev/null || true
+    else
+        log "Skipping ndpresponder restart: service not in use"
     fi
     log "Operation completed successfully"
     echo "Finish."

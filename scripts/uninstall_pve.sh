@@ -28,6 +28,8 @@ else
     export LANGUAGE="$utf8_locale"
 fi
 
+SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
+
 ########## 权限检查
 
 if [ "$(id -u)" != "0" ]; then
@@ -69,26 +71,61 @@ echo ""
 _yellow "[1/9] Stopping and removing all VMs and containers..."
 _yellow "[1/9] 停止并删除所有虚拟机和容器..."
 
-if command -v qm &>/dev/null; then
-    vm_ids=$(qm list 2>/dev/null | awk 'NR>1 {print $1}')
-    for vmid in $vm_ids; do
-        _blue "Stopping VM $vmid..."
-        qm stop "$vmid" --skiplock 1 2>/dev/null || true
-        sleep 2
-        qm destroy "$vmid" --purge 1 --skiplock 1 2>/dev/null || true
-        _green "VM $vmid removed."
-    done
-fi
+if [ -f "$SCRIPT_DIR/pve_delete.sh" ]; then
+    _blue "Using pve_delete.sh all for unified cleanup logic..."
+    _blue "使用 pve_delete.sh all 执行统一清理逻辑..."
+    if bash "$SCRIPT_DIR/pve_delete.sh" all; then
+        _green "All VMs/CTs removed by pve_delete.sh."
+        _green "已通过 pve_delete.sh 完成全部 VM/CT 删除。"
+    else
+        _yellow "pve_delete.sh failed, fallback to built-in removal logic."
+        _yellow "pve_delete.sh 执行失败，回退到内置删除逻辑。"
+        if command -v qm &>/dev/null; then
+            vm_ids=$(qm list 2>/dev/null | awk 'NR>1 {print $1}')
+            for vmid in $vm_ids; do
+                _blue "Stopping VM $vmid..."
+                qm stop "$vmid" --skiplock 1 2>/dev/null || true
+                sleep 2
+                qm destroy "$vmid" --purge 1 --skiplock 1 2>/dev/null || true
+                _green "VM $vmid removed."
+            done
+        fi
 
-if command -v pct &>/dev/null; then
-    ct_ids=$(pct list 2>/dev/null | awk 'NR>1 {print $1}')
-    for ctid in $ct_ids; do
-        _blue "Stopping CT $ctid..."
-        pct stop "$ctid" 2>/dev/null || true
-        sleep 2
-        pct destroy "$ctid" 2>/dev/null || true
-        _green "CT $ctid removed."
-    done
+        if command -v pct &>/dev/null; then
+            ct_ids=$(pct list 2>/dev/null | awk 'NR>1 {print $1}')
+            for ctid in $ct_ids; do
+                _blue "Stopping CT $ctid..."
+                pct stop "$ctid" 2>/dev/null || true
+                sleep 2
+                pct destroy "$ctid" 2>/dev/null || true
+                _green "CT $ctid removed."
+            done
+        fi
+    fi
+else
+    _yellow "pve_delete.sh not found, using built-in removal logic."
+    _yellow "未找到 pve_delete.sh，使用内置删除逻辑。"
+    if command -v qm &>/dev/null; then
+        vm_ids=$(qm list 2>/dev/null | awk 'NR>1 {print $1}')
+        for vmid in $vm_ids; do
+            _blue "Stopping VM $vmid..."
+            qm stop "$vmid" --skiplock 1 2>/dev/null || true
+            sleep 2
+            qm destroy "$vmid" --purge 1 --skiplock 1 2>/dev/null || true
+            _green "VM $vmid removed."
+        done
+    fi
+
+    if command -v pct &>/dev/null; then
+        ct_ids=$(pct list 2>/dev/null | awk 'NR>1 {print $1}')
+        for ctid in $ct_ids; do
+            _blue "Stopping CT $ctid..."
+            pct stop "$ctid" 2>/dev/null || true
+            sleep 2
+            pct destroy "$ctid" 2>/dev/null || true
+            _green "CT $ctid removed."
+        done
+    fi
 fi
 
 ########## 停止 PVE 相关服务
