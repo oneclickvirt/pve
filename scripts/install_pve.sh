@@ -1893,21 +1893,42 @@ update_hostname() {
 }
 
 # 添加PVE GPG密钥
+download_pve_key_with_fallback() {
+    local keyfile="$1"
+    shift
+    local key_url
+    for key_url in "$@"; do
+        if wget -q "$key_url" -O "$keyfile"; then
+            chmod +r "$keyfile"
+            return 0
+        fi
+    done
+    return 1
+}
+
 add_pve_gpg_key() {
     local version="$1"
     local keyfile
     case $version in
     stretch)
         keyfile="/etc/apt/trusted.gpg.d/proxmox-ve-release-4.x.gpg"
-        [ ! -f "$keyfile" ] && wget -q http://download.proxmox.com/debian/proxmox-ve-release-4.x.gpg -O "$keyfile" && chmod +r "$keyfile"
+        [ ! -f "$keyfile" ] && download_pve_key_with_fallback "$keyfile" \
+            "http://download.proxmox.com/debian/proxmox-ve-release-4.x.gpg" \
+            "http://archive.proxmox.com/debian/proxmox-ve-release-4.x.gpg"
         keyfile="/etc/apt/trusted.gpg.d/proxmox-ve-release-5.x.gpg"
-        [ ! -f "$keyfile" ] && wget -q http://download.proxmox.com/debian/proxmox-ve-release-5.x.gpg -O "$keyfile" && chmod +r "$keyfile"
+        [ ! -f "$keyfile" ] && download_pve_key_with_fallback "$keyfile" \
+            "http://download.proxmox.com/debian/proxmox-ve-release-5.x.gpg" \
+            "http://archive.proxmox.com/debian/proxmox-ve-release-5.x.gpg"
         ;;
     buster)
         keyfile="/etc/apt/trusted.gpg.d/proxmox-ve-release-5.x.gpg"
-        [ ! -f "$keyfile" ] && wget -q http://download.proxmox.com/debian/proxmox-ve-release-5.x.gpg -O "$keyfile" && chmod +r "$keyfile"
+        [ ! -f "$keyfile" ] && download_pve_key_with_fallback "$keyfile" \
+            "http://download.proxmox.com/debian/proxmox-ve-release-5.x.gpg" \
+            "http://archive.proxmox.com/debian/proxmox-ve-release-5.x.gpg"
         keyfile="/etc/apt/trusted.gpg.d/proxmox-ve-release-6.x.gpg"
-        [ ! -f "$keyfile" ] && wget -q http://download.proxmox.com/debian/proxmox-ve-release-6.x.gpg -O "$keyfile" && chmod +r "$keyfile"
+        [ ! -f "$keyfile" ] && download_pve_key_with_fallback "$keyfile" \
+            "http://download.proxmox.com/debian/proxmox-ve-release-6.x.gpg" \
+            "http://archive.proxmox.com/debian/proxmox-ve-release-6.x.gpg"
         ;;
     bullseye)
         keyfile="/etc/apt/trusted.gpg.d/proxmox-release-bullseye.gpg"
@@ -1926,6 +1947,10 @@ add_pve_gpg_key() {
         return 1
         ;;
     esac
+    if [ ! -f "$keyfile" ]; then
+        echo "Failed to download required Proxmox GPG key for $version"
+        return 1
+    fi
     echo "$keyfile"
 }
 
@@ -1937,7 +1962,10 @@ setup_x86_pve_repo() {
     keyfile=$(add_pve_gpg_key "$version") || return 1
     # 根据Debian版本选择仓库URL
     case $version in
-    stretch|buster|bullseye|bookworm|trixie)
+    stretch|buster)
+        repo_url="http://archive.proxmox.com/debian/pve"
+        ;;
+    bullseye|bookworm|trixie)
         repo_url="http://download.proxmox.com/debian/pve"
         ;;
     *)
@@ -1947,7 +1975,7 @@ setup_x86_pve_repo() {
         ;;
     esac
     # 判断是否需要使用CN镜像
-    if [[ "${CN}" == true ]]; then
+    if [[ "${CN}" == true && "$version" != "stretch" && "$version" != "buster" ]]; then
         repo_url="https://mirrors.tuna.tsinghua.edu.cn/proxmox/debian/pve"
     fi
     # Debian13及以上版本的系统使用 .sources 文件
@@ -1980,11 +2008,17 @@ test_and_switch_mirrors() {
     if ! apt-get update >/dev/null 2>&1; then
         _yellow "当前镜像源连接失败，将尝试切换其他镜像源..."
         # 定义备选镜像源数组
-        mirrors=(
-            "https://mirrors.bfsu.edu.cn/proxmox/debian/pve"          # 北京外国语大学镜像源
-            "https://mirrors.nju.edu.cn/proxmox/debian/pve"           # 南京大学镜像源
-            "https://mirrors.tuna.tsinghua.edu.cn/proxmox/debian/pve" # 清华大学镜像源
-        )
+        if [[ "$version" == "stretch" || "$version" == "buster" ]]; then
+            mirrors=(
+                "http://archive.proxmox.com/debian/pve" # 官方归档源（PVE 1-6）
+            )
+        else
+            mirrors=(
+                "https://mirrors.bfsu.edu.cn/proxmox/debian/pve"          # 北京外国语大学镜像源
+                "https://mirrors.nju.edu.cn/proxmox/debian/pve"           # 南京大学镜像源
+                "https://mirrors.tuna.tsinghua.edu.cn/proxmox/debian/pve" # 清华大学镜像源
+            )
+        fi
         # 标记是否找到可用镜像源
         success=false
         # 遍历所有备选镜像源进行测试
@@ -2106,6 +2140,73 @@ setup_riscv_pve_repo() {
     setup_pxvirt_repo_with_fallback "trixie" || return 1
 }
 
+select_arm_compatible_qemu_server_version() {
+    local candidate=""
+    local dep_line=""
+
+    while read -r candidate; do
+        if [ -z "$candidate" ]; then
+            continue
+        fi
+        dep_line=$(apt-cache show "qemu-server=$candidate" 2>/dev/null | awk '/^Depends:/{print; exit}')
+        if [ -z "$dep_line" ]; then
+            continue
+        fi
+        if echo "$dep_line" | grep -q 'python3-virt-firmware'; then
+            continue
+        fi
+        echo "$candidate"
+        return 0
+    done < <(apt-cache madison qemu-server 2>/dev/null | awk '{print $3}')
+
+    return 1
+}
+
+ensure_arm_qemu_server_installable() {
+    local dep_line=""
+    local compat_version=""
+    local pin_file="/etc/apt/preferences.d/pve-arm-qemu-server-compat.pref"
+
+    if [ "$system_arch" != "arm" ]; then
+        return 0
+    fi
+
+    dep_line=$(apt-cache show qemu-server 2>/dev/null | awk '/^Depends:/{print; exit}')
+    if [ -z "$dep_line" ] || ! echo "$dep_line" | grep -q 'python3-virt-firmware'; then
+        return 0
+    fi
+
+    if apt-cache show python3-virt-firmware >/dev/null 2>&1; then
+        _green "qemu-server requires python3-virt-firmware and the package is available"
+        _green "qemu-server 依赖 python3-virt-firmware，且该依赖包可用"
+        return 0
+    fi
+
+    _yellow "Detected qemu-server dependency python3-virt-firmware is unavailable on current repositories"
+    _yellow "检测到 qemu-server 依赖 python3-virt-firmware，但当前仓库无法提供该包"
+
+    compat_version=$(select_arm_compatible_qemu_server_version)
+    if [ -z "$compat_version" ]; then
+        _red "Cannot find a compatible qemu-server version in current APT metadata"
+        _red "在当前 APT 元数据中未找到可兼容的 qemu-server 版本"
+        return 1
+    fi
+
+    cat >"$pin_file" <<EOF
+Package: qemu-server
+Pin: version ${compat_version}
+Pin-Priority: 1001
+EOF
+
+    _yellow "Pinned qemu-server to compatible version: ${compat_version}"
+    _yellow "已将 qemu-server 固定到可兼容版本：${compat_version}"
+    _yellow "A compatibility pin file was generated at ${pin_file}"
+    _yellow "已生成兼容性 pin 文件：${pin_file}"
+
+    apt-get update -y >/dev/null 2>&1 || true
+    return 0
+}
+
 # 用户确认是否继续
 confirm_continue() {
     local prompt_text="$1"
@@ -2186,6 +2287,12 @@ install_proxmox_packages() {
         dpkg --remove --force-remove-reinstreq firmware-ath9k-htc
         apt --fix-broken install
         dpkg --configure -a
+    fi
+    if ! ensure_arm_qemu_server_installable; then
+        _red "ARM qemu-server dependency precheck failed"
+        _red "ARM qemu-server 依赖预检查失败"
+        rollback_failed_pve_install
+        exit 1
     fi
     # 按 PXVIRT 官方 Debian 安装文档显式安装核心组件，避免只装 meta 包后静默失败。
     if ! install_dpkg_packages "${pve_packages[@]}"; then

@@ -56,6 +56,14 @@ patches/
 └── qemu-server-8.2.3/    适用于 PVE 8.2.0 – 8.2.3（Debian 12 bookworm）
       ├── Cloudinit.pm.patch
       └── Qemu.pm.patch
+├── LocalScripts/         Cloudbase-Init 本地脚本（Windows 客体内使用）
+│   ├── 00ActivateDHCP.py
+│   ├── 01ActivateAdministrator.py
+│   └── 99EjectDrive.py
+└── powershell/           Windows 配置与封装脚本
+      ├── ModifyConf.ps1
+      ├── FixUserService.ps1
+      └── sysprep.bat
 ```
 
 > **PVE 8.2.4+（含 8.3.x、8.4.x、9.x+）已原生支持 Cloudbase-Init**，无需补丁。
@@ -192,6 +200,33 @@ systemctl restart pvedaemon.service
 
 详细说明参见：[Geco-Cloudbase-Init README](https://github.com/kruisdraad/Geco-Cloudbase-Init)
 和 [使用教程（中文）](https://foxi.buduanwang.vip/windows/1789.html/)
+
+---
+
+## LocalScripts 与 PowerShell 使用说明（中文）
+
+本仓库已内置以下 Windows 侧辅助脚本：
+
+- `patches/LocalScripts/00ActivateDHCP.py`：按 metadata 中 DHCP 网卡列表启用 DHCP
+- `patches/LocalScripts/01ActivateAdministrator.py`：当 Cloudbase-Init 用户为本地管理员名时，自动启用内置管理员账户
+- `patches/LocalScripts/99EjectDrive.py`：完成后弹出 config-2 光驱
+- `patches/powershell/ModifyConf.ps1`：将 Cloudbase-Init 配置中的默认英文管理员/组名替换为系统本地语言对应名称
+- `patches/powershell/FixUserService.ps1`：安装 OpenSSH Server、调整 cloudbase-init 服务用户为 LocalSystem、清理可能影响 sysprep 的语言包
+- `patches/powershell/sysprep.bat`：执行 sysprep 封装并关机
+
+推荐顺序：
+
+1. 在 Windows 模板机中安装 Cloudbase-Init Continuous Build
+2. 将 `patches/LocalScripts/*.py` 复制到 `C:\Program Files\Cloudbase Solutions\Cloudbase-Init\LocalScripts\`
+3. 在管理员 PowerShell 中执行 `patches/powershell/ModifyConf.ps1`
+4. 再执行 `patches/powershell/FixUserService.ps1`
+5. 确认系统状态后执行 `patches/powershell/sysprep.bat`
+
+说明：
+
+- 这些脚本运行在 Windows 客体内，不在 PVE 宿主机执行
+- 仅用于 Windows + Cloudbase-Init 模板制作流程，不影响 Linux 虚拟机
+- PowerShell 脚本需以管理员权限运行
 
 ---
 
