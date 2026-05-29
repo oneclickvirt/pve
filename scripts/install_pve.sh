@@ -168,6 +168,8 @@ package_installed() {
 install_dpkg_packages() {
     local packages=("$@")
     local apt_output=""
+    local apt_log=""
+    local apt_exit=0
     local apt_opts=(-o Dpkg::Options::="--force-confnew" -y)
 
     prepare_grub_noninteractive
@@ -181,8 +183,18 @@ install_dpkg_packages() {
         _yellow "PVE_INSTALL_CEPH=true，核心包将安装推荐依赖"
     fi
 
-    apt_output=$(DEBIAN_FRONTEND=noninteractive apt-get install "${apt_opts[@]}" "${packages[@]}" 2>&1)
-    if [ $? -eq 0 ]; then
+    _yellow "Installing core packages, this may take several minutes depending on mirror speed"
+    _yellow "正在安装核心软件包，按镜像速度可能需要几分钟"
+
+    apt_log=$(mktemp /tmp/pve-core-install.XXXXXX.log)
+    DEBIAN_FRONTEND=noninteractive apt-get install "${apt_opts[@]}" "${packages[@]}" 2>&1 | tee "$apt_log"
+    apt_exit=${PIPESTATUS[0]}
+    if [ -s "$apt_log" ]; then
+        apt_output=$(cat "$apt_log")
+    fi
+    rm -f "$apt_log"
+
+    if [ $apt_exit -eq 0 ]; then
         return 0
     fi
 
