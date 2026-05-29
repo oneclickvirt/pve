@@ -14,6 +14,8 @@
 # USE_MAX_IPV6_SUBNET=true  - SLAAC 场景下使用最大 IPv6 子网范围
 # USE_MAX_IPV6_SUBNET=false - SLAAC 场景下不使用最大 IPv6 子网范围
 # PVE_HOSTNAME=<name>  - 直接设定 PVE 主机名，跳过交互输入（只能包含英文字母和数字）
+# PVE_INSTALL_CEPH=true - 安装核心包时允许安装推荐依赖（可能包含 ceph 相关组件）
+#                        默认不设置时将使用最小化安装（--no-install-recommends）
 #
 # 示例（一键无交互安装）:
 #   CN=true FORCE_INSTALL=true PVE_HOSTNAME=mypve bash install_pve.sh
@@ -130,13 +132,7 @@ install_package() {
             if echo "$apt_output" | grep -qE 'DEBIAN_FRONTEND=dialog dpkg --configure grub-pc' &&
                 echo "$apt_output" | grep -qE 'dpkg --configure -a' &&
                 echo "$apt_output" | grep -qE 'dpkg: error processing package grub-pc \(--configure\):'; then
-                # 手动选择
-                # DEBIAN_FRONTEND=dialog dpkg --configure grub-pc
-                # 设置debconf的选择
-                echo "grub-pc grub-pc/install_devices multiselect /dev/sda" | sudo debconf-set-selections
-                # 配置grub-pc并自动选择第一个选项确认
-                sudo DEBIAN_FRONTEND=noninteractive dpkg --configure grub-pc
-                dpkg --configure -a
+                recover_grub_install_state
                 if [ $? -ne 0 ]; then
                     _green "$package_name tried to install but failed, exited the program"
                     _green "$package_name 已尝试安装但失败，退出程序"
@@ -171,7 +167,110 @@ package_installed() {
 
 install_dpkg_packages() {
     local packages=("$@")
-    DEBIAN_FRONTEND=noninteractive apt-get install -o Dpkg::Options::="--force-confnew" -y "${packages[@]}"
+    local apt_output=""
+    local apt_opts=(-o Dpkg::Options::="--force-confnew" -y)
+
+    prepare_grub_noninteractive
+
+    if [[ "${PVE_INSTALL_CEPH^^}" != "TRUE" ]]; then
+        apt_opts+=(--no-install-recommends)
+        _yellow "Minimal mode enabled for core packages: recommends disabled (Ceph-related recommends will be skipped)"
+        _yellow "核心包启用最小化模式：已关闭推荐依赖（将跳过 Ceph 相关推荐组件）"
+    else
+        _yellow "PVE_INSTALL_CEPH=true, installing core packages with recommends enabled"
+        _yellow "PVE_INSTALL_CEPH=true，核心包将安装推荐依赖"
+    fi
+
+    apt_output=$(DEBIAN_FRONTEND=noninteractive apt-get install "${apt_opts[@]}" "${packages[@]}" 2>&1)
+    if [ $? -eq 0 ]; then
+        return 0
+    fi
+
+    if echo "$apt_output" | grep -qE 'grub-pc|dpkg: error processing package'; then
+        _yellow "Detected grub/dpkg interactive configuration issue, trying noninteractive recovery"
+        _yellow "检测到 grub/dpkg 交互配置问题，正在尝试非交互修复"
+        recover_grub_install_state
+        DEBIAN_FRONTEND=noninteractive apt-get install "${apt_opts[@]}" "${packages[@]}"
+        return $?
+    fi
+
+    return 1
+}
+
+detect_boot_disk() {
+    local boot_source=""
+    local parent_disk=""
+    boot_source=$(findmnt -nro SOURCE /boot 2>/dev/null)
+    if [ -z "$boot_source" ]; then
+        boot_source=$(findmnt -nro SOURCE / 2>/dev/null)
+    fi
+    if [ -n "$boot_source" ]; then
+        parent_disk=$(lsblk -ndo PKNAME "$boot_source" 2>/dev/null | head -n 1)
+        if [ -n "$parent_disk" ]; then
+            echo "/dev/$parent_disk"
+            return 0
+        fi
+        if echo "$boot_source" | grep -qE '^/dev/nvme[0-9]+n[0-9]+p[0-9]+$'; then
+            echo "${boot_source%p*}"
+            return 0
+        fi
+        if echo "$boot_source" | grep -qE '^/dev/[a-z]+[0-9]+$'; then
+            echo "$boot_source" | sed 's/[0-9]*$//'
+            return 0
+        fi
+    fi
+    return 1
+}
+
+recover_grub_install_state() {
+    local boot_disk=""
+    local grub_pc_status=""
+
+    prepare_grub_noninteractive
+
+    if [ -d /sys/firmware/efi ] && [ "$(dpkg --print-architecture 2>/dev/null)" = "amd64" ]; then
+        _yellow "EFI detected, attempting grub-efi-amd64 recovery"
+        _yellow "检测到 EFI，正在尝试 grub-efi-amd64 恢复"
+        DEBIAN_FRONTEND=noninteractive apt-get install -y --reinstall grub-efi-amd64 grub-efi-amd64-bin grub2-common >/dev/null 2>&1 || true
+        DEBIAN_FRONTEND=noninteractive dpkg --configure -a >/dev/null 2>&1 || true
+        grub_pc_status=$(dpkg-query -W -f='${Status}' grub-pc 2>/dev/null || true)
+        if [ -n "$grub_pc_status" ] && ! echo "$grub_pc_status" | grep -q 'install ok installed'; then
+            _yellow "Purging broken grub-pc state on EFI system"
+            _yellow "EFI 系统检测到 grub-pc 半安装状态，正在清理"
+            DEBIAN_FRONTEND=noninteractive apt-get purge -y grub-pc grub-pc-bin >/dev/null 2>&1 || true
+        fi
+    else
+        boot_disk=$(detect_boot_disk || true)
+        if [ -n "$boot_disk" ] && dpkg -s grub-pc >/dev/null 2>&1; then
+            _yellow "BIOS mode detected, setting grub-pc install device: $boot_disk"
+            _yellow "检测到 BIOS 模式，设置 grub-pc 安装设备：$boot_disk"
+            echo "grub-pc grub-pc/install_devices_empty boolean false" | debconf-set-selections || true
+            echo "grub-pc grub-pc/install_devices multiselect $boot_disk" | debconf-set-selections || true
+        fi
+    fi
+
+    DEBIAN_FRONTEND=noninteractive apt-get -f install -y >/dev/null 2>&1 || true
+    DEBIAN_FRONTEND=noninteractive dpkg --configure -a >/dev/null 2>&1 || true
+    return 0
+}
+
+prepare_grub_noninteractive() {
+    # Avoid grub-pc interactive prompts causing dpkg failure in automated installations.
+    local boot_disk=""
+    if dpkg -s grub-pc >/dev/null 2>&1; then
+        boot_disk=$(detect_boot_disk || true)
+        if [ -n "$boot_disk" ]; then
+            echo "grub-pc grub-pc/install_devices_empty boolean false" | debconf-set-selections || true
+            echo "grub-pc grub-pc/install_devices multiselect $boot_disk" | debconf-set-selections || true
+        else
+            echo "grub-pc grub-pc/install_devices_empty boolean true" | debconf-set-selections || true
+            echo "grub-pc grub-pc/install_devices multiselect" | debconf-set-selections || true
+        fi
+        echo "grub-pc grub2/update_nvram boolean true" | debconf-set-selections || true
+    fi
+    if [ -d /sys/firmware/efi ] && [ "$(dpkg --print-architecture 2>/dev/null)" = "amd64" ]; then
+        echo "grub-efi-amd64 grub2/force_efi_extra_removable boolean true" | debconf-set-selections || true
+    fi
 }
 
 rollback_failed_pve_install() {
@@ -232,6 +331,36 @@ install_optional_pve_packages() {
     for package_name in "${optional_packages[@]}"; do
         install_package "$package_name"
     done
+}
+
+cleanup_ceph_service_packages() {
+    local ceph_service_packages=(
+        ceph
+        ceph-base
+        ceph-common
+        ceph-fuse
+        ceph-mon
+        ceph-osd
+        ceph-mds
+        ceph-mgr
+        ceph-volume
+    )
+    local installed=()
+    local pkg
+    if [[ "${PVE_INSTALL_CEPH^^}" == "TRUE" ]]; then
+        return 0
+    fi
+    for pkg in "${ceph_service_packages[@]}"; do
+        if package_installed "$pkg"; then
+            installed+=("$pkg")
+        fi
+    done
+    if [ ${#installed[@]} -gt 0 ]; then
+        _yellow "Removing Ceph service packages to keep minimal host install: ${installed[*]}"
+        _yellow "为保持宿主最小化安装，正在移除 Ceph 服务包：${installed[*]}"
+        DEBIAN_FRONTEND=noninteractive apt-get purge -y "${installed[@]}" >/dev/null 2>&1 || true
+        DEBIAN_FRONTEND=noninteractive apt-get autoremove -y >/dev/null 2>&1 || true
+    fi
 }
 
 validate_arm_pxvirt_environment() {
@@ -2051,6 +2180,7 @@ install_proxmox_packages() {
         rollback_failed_pve_install
         exit 1
     fi
+    cleanup_ceph_service_packages
     install_optional_pve_packages
     rebuild_interfaces
 }
