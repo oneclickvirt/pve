@@ -9,7 +9,30 @@ _red() { echo -e "\033[31m\033[01m$@\033[0m"; }
 _green() { echo -e "\033[32m\033[01m$@\033[0m"; }
 _yellow() { echo -e "\033[33m\033[01m$@\033[0m"; }
 _blue() { echo -e "\033[36m\033[01m$@\033[0m"; }
-reading() { read -rp "$(_green "$1")" "$2"; }
+is_noninteractive() {
+    case "${noninteractive:-}" in
+    true | TRUE | True | 1 | yes | YES | Yes | y | Y)
+        return 0
+        ;;
+    esac
+    case "${NONINTERACTIVE:-}" in
+    true | TRUE | True | 1 | yes | YES | Yes | y | Y)
+        return 0
+        ;;
+    esac
+    return 1
+}
+reading() {
+    local prompt="$1"
+    local var_name="$2"
+    local default_value="${3:-}"
+    if is_noninteractive; then
+        printf -v "$var_name" '%s' "$default_value"
+        _yellow "noninteractive=true, using default for ${var_name}: ${default_value:-<empty>}"
+    else
+        read -rp "$(_green "$prompt")" "$var_name"
+    fi
+}
 utf8_locale=$(locale -a 2>/dev/null | grep -i -m 1 -E "UTF-8|utf8")
 if [[ -z "$utf8_locale" ]]; then
     echo "No UTF-8 locale found"
@@ -135,9 +158,13 @@ check_info() {
 build_new_cts() {
     while true; do
         _green "How many more NAT servers need to be generated? (Enter how many new NAT servers to add):"
-        reading "还需要生成几个NAT服务器？(输入新增几个NAT服务器)：" new_nums
+        reading "还需要生成几个NAT服务器？(输入新增几个NAT服务器)：" new_nums "${PVE_CREATE_COUNT:-1}"
         if [[ "$new_nums" =~ ^[1-9][0-9]*$ ]]; then
             break
+        elif is_noninteractive; then
+            _red "PVE_CREATE_COUNT must be a positive integer in noninteractive mode."
+            _red "无交互模式下 PVE_CREATE_COUNT 必须是正整数。"
+            exit 1
         else
             _yellow "Invalid input, please enter a positive integer."
             _yellow "输入无效，请输入一个正整数。"
@@ -145,9 +172,13 @@ build_new_cts() {
     done
     while true; do
         _green "How many CPUs are assigned to each container? (Enter 1 if 1 core is assigned to each container):"
-        reading "每个容器分配几个CPU？(若每个容器分配1核，则输入1)：" cpu_nums
+        reading "每个容器分配几个CPU？(若每个容器分配1核，则输入1)：" cpu_nums "${PVE_CREATE_CPU:-1}"
         if [[ "$cpu_nums" =~ ^[1-9][0-9]*$ ]]; then
             break
+        elif is_noninteractive; then
+            _red "PVE_CREATE_CPU must be a positive integer in noninteractive mode."
+            _red "无交互模式下 PVE_CREATE_CPU 必须是正整数。"
+            exit 1
         else
             _yellow "Invalid input, please enter a positive integer."
             _yellow "输入无效，请输入一个正整数。"
@@ -155,9 +186,13 @@ build_new_cts() {
     done
     while true; do
         _green "How much memory is allocated per container? (If 512 MB of memory is allocated per container, enter 512):"
-        reading "每个容器分配多少内存？(若每个容器分配512MB内存，则输入512)：" memory_nums
+        reading "每个容器分配多少内存？(若每个容器分配512MB内存，则输入512)：" memory_nums "${PVE_CREATE_MEMORY:-512}"
         if [[ "$memory_nums" =~ ^[1-9][0-9]*$ ]]; then
             break
+        elif is_noninteractive; then
+            _red "PVE_CREATE_MEMORY must be a positive integer in noninteractive mode."
+            _red "无交互模式下 PVE_CREATE_MEMORY 必须是正整数。"
+            exit 1
         else
             _yellow "Invalid input, please enter a positive integer."
             _yellow "输入无效，请输入一个正整数。"
@@ -165,7 +200,7 @@ build_new_cts() {
     done
     while true; do
         _green "On which storage drive are the containers opened? (Leave blank or enter 'local' if the container is to be opened on the system disk):"
-        reading "容器们开设在哪个存储盘上？(若容器要开设在系统盘上，则留空或输入local)：" storage
+        reading "容器们开设在哪个存储盘上？(若容器要开设在系统盘上，则留空或输入local)：" storage "${PVE_CREATE_STORAGE:-local}"
         if [ -z "$storage" ]; then
             storage="local"
         fi
@@ -173,9 +208,13 @@ build_new_cts() {
     done
     while true; do
         _green "How many hard disks are allocated per container? (If 5G hard drives are allocated per container, enter 5):"
-        reading "每个容器分配多少硬盘？(若每个容器分配5G硬盘，则输入5)：" disk_nums
+        reading "每个容器分配多少硬盘？(若每个容器分配5G硬盘，则输入5)：" disk_nums "${PVE_CREATE_DISK:-5}"
         if [[ "$disk_nums" =~ ^[1-9][0-9]*$ ]]; then
             break
+        elif is_noninteractive; then
+            _red "PVE_CREATE_DISK must be a positive integer in noninteractive mode."
+            _red "无交互模式下 PVE_CREATE_DISK 必须是正整数。"
+            exit 1
         else
             _yellow "Invalid input, please enter a positive integer."
             _yellow "输入无效，请输入一个正整数。"
@@ -183,7 +222,7 @@ build_new_cts() {
     done
     while true; do
         _green "What system does each container use? (Leave blank or enter debian11 if all use debian11):"
-        reading "每个容器都使用什么系统？(若都使用debian11，则留空或输入debian11)：" system
+        reading "每个容器都使用什么系统？(若都使用debian11，则留空或输入debian11)：" system "${PVE_CREATE_SYSTEM:-debian11}"
         if [ -z "$system" ]; then
             system="debian11"
         fi
@@ -192,10 +231,17 @@ build_new_cts() {
     done
     while true; do
         _green "Need to attach a separate IPV6 address to each container?([N]/y)"
-        reading "是否附加独立的IPV6地址？([N]/y)" independent_ipv6
+        reading "是否附加独立的IPV6地址？([N]/y)" independent_ipv6 "${PVE_CREATE_IPV6:-n}"
         independent_ipv6=$(echo "$independent_ipv6" | tr '[:upper:]' '[:lower:]')
+        if [ -z "$independent_ipv6" ]; then
+            independent_ipv6="n"
+        fi
         if [ "$independent_ipv6" = "y" ] || [ "$independent_ipv6" = "n" ]; then
             break
+        elif is_noninteractive; then
+            _red "PVE_CREATE_IPV6 must be y or n in noninteractive mode."
+            _red "无交互模式下 PVE_CREATE_IPV6 必须是 y 或 n。"
+            exit 1
         else
             _yellow "Invalid input, please enter y or n."
             _yellow "输入无效，请输入Y或者N。"

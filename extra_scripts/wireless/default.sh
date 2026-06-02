@@ -1,8 +1,10 @@
+#!/bin/bash
 # from
 # https://github.com/oneclickvirt/pve
 # 2025.07.05
-apt update
-apt install curl lsb-release -y
+export DEBIAN_FRONTEND=noninteractive
+apt-get update
+apt-get install curl lsb-release -y
 cp -rf /usr/share/perl5/PVE/APLInfo.pm /usr/share/perl5/PVE/APLInfo.pm.bak
 sed -i 's|http://download.proxmox.com|https://mirrors.tuna.tsinghua.edu.cn/proxmox|g' /usr/share/perl5/PVE/APLInfo.pm
 sed -i 's|http://mirrors.ustc.edu.cn/proxmox|https://mirrors.tuna.tsinghua.edu.cn/proxmox|g' /usr/share/perl5/PVE/APLInfo.pm
@@ -26,11 +28,11 @@ if lvdisplay /dev/pve/data > /dev/null 2>&1; then
   resize2fs /dev/mapper/pve-root
   sed -i '/^lvmthin: local-lvm/,/^$/d' /etc/pve/storage.cfg
 fi
-apt update
-apt install -y xorg xfce4 xfce4-goodies lightdm lightdm-gtk-greeter
-apt install -y fonts-wqy-zenhei fonts-wqy-microhei fonts-noto-cjk
-apt install -y fcitx5 fcitx5-chinese-addons fcitx5-frontend-gtk3 fcitx5-frontend-gtk2
-apt install -y firefox-esr
+apt-get update
+apt-get install -y xorg xfce4 xfce4-goodies lightdm lightdm-gtk-greeter
+apt-get install -y fonts-wqy-zenhei fonts-wqy-microhei fonts-noto-cjk
+apt-get install -y fcitx5 fcitx5-chinese-addons fcitx5-frontend-gtk3 fcitx5-frontend-gtk2
+apt-get install -y firefox-esr
 cat > /etc/environment << 'EOF'
 GTK_IM_MODULE=fcitx
 QT_IM_MODULE=fcitx
@@ -85,6 +87,6 @@ if pvesh get /pools/$POOL_ID >/dev/null 2>&1; then
 else
     pvesh create /pools --poolid $POOL_ID
 fi
-apt autoremove -y
-apt autoclean
+apt-get autoremove -y
+apt-get autoclean
 echo "Please execute reboot to reboot the system to load the configuration."

@@ -20,6 +20,17 @@ bash /mnt/wireless.sh
 
 配置脚本执行过程中会提示输入WIFI的名字和密码，由于纯CI环境无中文输入法，WIFI的名字必须仅英文数字组成，密码也是
 
+无交互配置可使用：
+
+```shell
+export noninteractive=true
+export WIFI_SSID="your_ssid"
+export WIFI_PASSWORD="your_password"
+bash /mnt/wireless.sh
+```
+
+如果是隐藏 SSID 或扫描不可用，可额外设置 `WIFI_SKIP_SCAN=true`。
+
 ## 其他初始设置
 
 使用前务必确保```curl ip.sb```无问题

@@ -34,7 +34,38 @@ _text() {
     fi
 }
 
-reading() { read -rp "$(_green "$1")" "$2"; }
+is_noninteractive() {
+    case "${noninteractive:-}" in
+    true | TRUE | True | 1 | yes | YES | Yes | y | Y)
+        return 0
+        ;;
+    esac
+    case "${NONINTERACTIVE:-}" in
+    true | TRUE | True | 1 | yes | YES | Yes | y | Y)
+        return 0
+        ;;
+    esac
+    return 1
+}
+
+reading() {
+    local prompt="$1"
+    local var_name="$2"
+    local default_value="${3:-}"
+    if is_noninteractive; then
+        printf -v "$var_name" '%s' "$default_value"
+        _yellow "noninteractive=true, using default for ${var_name}: ${default_value:-<empty>}"
+    else
+        read -rp "$(_green "$prompt")" "$var_name"
+    fi
+}
+return_action_error() {
+    if is_noninteractive; then
+        return 1
+    fi
+    return 0
+}
+export DEBIAN_FRONTEND=noninteractive
 utf8_locale=$(locale -a 2>/dev/null | grep -i -m 1 -E "UTF-8|utf8")
 if [[ -z "$utf8_locale" ]]; then
     _yellow "$(_text "未找到 UTF-8 本地化" "No UTF-8 locale found")"
@@ -56,7 +87,7 @@ touch "$DOWNLOAD_TASKS" "$DECOMPRESS_TASKS"
 rm -f "${DOWNLOAD_TASKS}.tmp" "${DECOMPRESS_TASKS}.tmp"
 
 if ! command -v 7z >/dev/null 2>&1; then
-    apt install p7zip-full -y
+    apt-get install p7zip-full -y
     if ! command -v 7z >/dev/null 2>&1; then
         _red "$(_text "错误：未找到 '7z' 命令。请安装 p7zip-full" "ERROR: '7z' command not found. Please install p7zip-full")"
         exit 1
@@ -157,13 +188,13 @@ start_download() {
     done
     if [[ -z "$size" ]]; then
         _red "$(_text "错误：无法获取文件大小" "Error: Unable to determine file size")"
-        return
+        return_action_error; return $?
     fi
     avail=$(get_avail_space)
     req=$((size * 2 + 2 * 1024 * 1024 * 1024))
     if ((avail < req)); then
         _red "$(_text "空间不足: 可用=${avail} 字节, 需要=${req} 字节" "Insufficient space: available=${avail} bytes, required=${req} bytes")"
-        return
+        return_action_error; return $?
     fi
     nohup curl -L "$url" -o "$DOWNLOAD_DIR/$fileName" >"$DOWNLOAD_DIR/$fileName.log" 2>&1 &
     pid=$!
@@ -193,10 +224,14 @@ show_downloads() {
 }
 
 delete_download() {
-    reading "$(_text "输入要删除的下载 PID" "Enter download PID to delete"): " pid
+    reading "$(_text "输入要删除的下载 PID" "Enter download PID to delete"): " pid "${MACOS_DOWNLOAD_PID:-${MACOS_TASK_PID:-}}"
+    if [ -z "$pid" ]; then
+        _red "$(_text "未指定下载 PID" "Download PID is required")"
+        return_action_error; return $?
+    fi
     if ! grep -q "^$pid|" "$DOWNLOAD_TASKS"; then
         _red "$(_text "PID $pid 未找到" "PID $pid not found")"
-        return
+        return_action_error; return $?
     fi
     line=$(grep "^$pid|" "$DOWNLOAD_TASKS")
     file=${line#*|}
@@ -211,17 +246,17 @@ extract_7z() {
     mapfile -t archives < <(ls "$DOWNLOAD_DIR"/*.7z 2>/dev/null)
     if [[ ${#archives[@]} -eq 0 ]]; then
         _yellow "$(_text "目录中无 .7z 文件" "No .7z archives found in $DOWNLOAD_DIR")"
-        return
+        return_action_error; return $?
     fi
     _blue "$(_text "可用 .7z 归档:" "Available .7z archives:")"
     for i in "${!archives[@]}"; do
         num=$((i + 1))
         _yellow "  $num) $(basename "${archives[i]}")"
     done
-    reading "$(_text "选择要解压的索引" "Select index to extract"): " idx
+    reading "$(_text "选择要解压的索引" "Select index to extract"): " idx "${MACOS_EXTRACT_INDEX:-${MACOS_IMAGE_INDEX:-1}}"
     if ! [[ "$idx" =~ ^[0-9]+$ ]] || ((idx < 1 || idx > ${#archives[@]})); then
         _red "$(_text "无效选择" "Invalid selection")"
-        return
+        return_action_error; return $?
     fi
     archive="${archives[$((idx - 1))]}"
     nohup 7z x "$archive" -o"$DOWNLOAD_DIR" >"$DOWNLOAD_DIR/$(basename "$archive").extract.log" 2>&1 &
@@ -270,10 +305,14 @@ show_extracts() {
 }
 
 delete_extract() {
-    reading "$(_text "输入要删除的解压 PID" "Enter extraction PID to delete"): " pid
+    reading "$(_text "输入要删除的解压 PID" "Enter extraction PID to delete"): " pid "${MACOS_EXTRACT_PID:-${MACOS_TASK_PID:-}}"
+    if [ -z "$pid" ]; then
+        _red "$(_text "未指定解压 PID" "Extraction PID is required")"
+        return_action_error; return $?
+    fi
     if ! grep -q "^$pid|" "$DECOMPRESS_TASKS"; then
         _red "$(_text "PID $pid 未找到" "PID $pid not found")"
-        return
+        return_action_error; return $?
     fi
     line=$(grep "^$pid|" "$DECOMPRESS_TASKS")
     archive=${line#*|}
@@ -287,9 +326,56 @@ delete_extract() {
     _green "$(_text "已删除解压任务: $archive，路径=$DOWNLOAD_DIR/$archive" "Deleted extraction task for $archive, path=$DOWNLOAD_DIR/$archive")"
 }
 
+run_noninteractive_action() {
+    local action="${MACOS_IMAGE_ACTION:-status}"
+    local idx pair fname fsize furl fexact_size
+    case "$action" in
+    status | show)
+        show_downloads
+        show_extracts
+        ;;
+    show-downloads)
+        show_downloads
+        ;;
+    show-extracts)
+        show_extracts
+        ;;
+    download)
+        idx="${MACOS_IMAGE_INDEX:-}"
+        if ! [[ "$idx" =~ ^[1-8]$ ]]; then
+            _red "$(_text "MACOS_IMAGE_INDEX 必须是 1 到 8" "MACOS_IMAGE_INDEX must be between 1 and 8")"
+            return 1
+        fi
+        pair=${files[$idx]}
+        IFS='|' read -r fname fsize furl fexact_size <<<"$pair"
+        start_download "$fname" "$furl"
+        ;;
+    extract)
+        extract_7z
+        ;;
+    delete-download)
+        delete_download
+        ;;
+    delete-extract)
+        delete_extract
+        ;;
+    exit | none)
+        ;;
+    *)
+        _red "$(_text "未知 MACOS_IMAGE_ACTION: $action" "Unknown MACOS_IMAGE_ACTION: $action")"
+        return 1
+        ;;
+    esac
+}
+
+if is_noninteractive; then
+    run_noninteractive_action
+    exit $?
+fi
+
 while true; do
     print_menu
-    reading "$(_text "选择操作" "Choice"): " choice
+    reading "$(_text "选择操作" "Choice"): " choice "0"
     case "$choice" in
     [1-8])
         clear

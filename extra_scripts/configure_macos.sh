@@ -2,6 +2,7 @@
 # from https://github.com/oneclickvirt/pve
 # 2025.05.08
 
+export DEBIAN_FRONTEND=noninteractive
 echo 1 | tee /sys/module/kvm/parameters/ignore_msrs
 grep -Fxq 'options kvm ignore_msrs=Y' /etc/modprobe.d/kvm.conf || echo 'options kvm ignore_msrs=Y' >> /etc/modprobe.d/kvm.conf && update-initramfs -k all -u
 if [ "$(lscpu | grep -i 'Vendor ID' | grep -i amd | wc -l)" -eq 1 ]; then
@@ -11,7 +12,7 @@ else
 fi
 if [ ! -e /etc/pve/qemu-server/.macos_preset ]; then
     echo "未检测到预设配置，正在安装依赖与配置系统（Installing prerequisites and configuring system）..."
-    apt update && apt install -y vim sysstat parted iptraf
+    apt-get update && apt-get install -y vim sysstat parted iptraf
     if [ $? -ne 0 ]; then
         echo "软件包安装失败（Package installation failed）"
         exit 1

@@ -8,6 +8,7 @@
 # CN=true              - 使用中国镜像源（跳过地区检测询问）
 # CN=false             - 强制不使用中国镜像源
 # WITHOUTCDN=TRUE      - 不使用 CDN 加速
+# noninteractive=true  - 统一无交互模式，跳过需要确认的提示并使用默认值
 # FORCE_INSTALL=true   - 跳过系统最低要求检查和所有"是否继续"确认提示
 # USE_PRIVATE_IP=true  - 检测到私有 IPv4 时直接使用该私有 IP 作为 PVE 主 IP
 # USE_PRIVATE_IP=false - 检测到私有 IPv4 时自动通过 API 获取公网 IP
@@ -18,7 +19,8 @@
 #                        默认不设置时将使用最小化安装（--no-install-recommends）
 #
 # 示例（一键无交互安装）:
-#   CN=true FORCE_INSTALL=true PVE_HOSTNAME=mypve bash install_pve.sh
+#   export noninteractive=true
+#   CN=true PVE_HOSTNAME=mypve bash install_pve.sh
 
 ########## 预设部分输出和部分中间变量
 
@@ -27,7 +29,30 @@ _red() { echo -e "\033[31m\033[01m$@\033[0m"; }
 _green() { echo -e "\033[32m\033[01m$@\033[0m"; }
 _yellow() { echo -e "\033[33m\033[01m$@\033[0m"; }
 _blue() { echo -e "\033[36m\033[01m$@\033[0m"; }
-reading() { read -rp "$(_green "$1")" "$2"; }
+is_noninteractive() {
+    case "${noninteractive:-}" in
+    true | TRUE | True | 1 | yes | YES | Yes | y | Y)
+        return 0
+        ;;
+    esac
+    case "${NONINTERACTIVE:-}" in
+    true | TRUE | True | 1 | yes | YES | Yes | y | Y)
+        return 0
+        ;;
+    esac
+    return 1
+}
+reading() {
+    local prompt="$1"
+    local var_name="$2"
+    local default_value="${3:-}"
+    if is_noninteractive; then
+        printf -v "$var_name" '%s' "$default_value"
+        _yellow "noninteractive=true, using default for ${var_name}: ${default_value:-<empty>}"
+    else
+        read -rp "$(_green "$prompt")" "$var_name"
+    fi
+}
 export DEBIAN_FRONTEND=noninteractive
 utf8_locale=$(locale -a 2>/dev/null | grep -i -m 1 -E "UTF-8|utf8")
 if [[ -z "$utf8_locale" ]]; then
@@ -1031,7 +1056,12 @@ check_china() {
     if [[ -z "${CN}" ]]; then
         if [[ $(curl -m 6 -s https://ipapi.co/json | grep 'China') != "" ]]; then
             _yellow "根据ipapi.co提供的信息，当前IP可能在中国"
-            read -e -r -p "是否选用中国镜像完成相关组件安装? ([y]/n) " input
+            if is_noninteractive; then
+                input="${CN_DEFAULT:-y}"
+                _yellow "noninteractive=true, 使用中国镜像选择默认值: $input"
+            else
+                read -e -r -p "是否选用中国镜像完成相关组件安装? ([y]/n) " input
+            fi
             case $input in
             [yY][eE][sS] | [yY])
                 echo "使用中国镜像"
@@ -1271,8 +1301,8 @@ check_system_requirements() {
         echo $?
     ) -ne 0 ]; then
         _red "Error: This system does not meet the minimum requirements for Proxmox VE installation."
-        if [[ "${FORCE_INSTALL^^}" == "TRUE" ]]; then
-            _yellow "FORCE_INSTALL=true, 跳过最低要求检查，强制继续安装"
+        if [[ "${FORCE_INSTALL^^}" == "TRUE" ]] || is_noninteractive; then
+            _yellow "FORCE_INSTALL=true 或 noninteractive=true，跳过最低要求检查，强制继续安装"
         else
             _yellow "Do you want to continue the installation? (Enter to not continue the installation by default) (y/[n])"
             reading "是否要继续安装？(回车则默认不继续安装) (y/[n]) " confirm
@@ -1377,11 +1407,11 @@ EOF
                 fi
             else
                 if [ -n "$PUBLIC_IPV4_CANDIDATES" ]; then
-                    reading "Select main PVE IP mode: private/public [Default: public]: " ip_mode
+                    reading "Select main PVE IP mode: private/public [Default: public]: " ip_mode "public"
                     _green "请选择 PVE 主 IP 模式：内网(private)/公网(public) [默认: public]："
                     ip_mode=${ip_mode:-public}
                 else
-                    reading "No public IPv4 candidate detected, use private IPv4 mode? (y/n) [Default: n]: " use_private
+                    reading "No public IPv4 candidate detected, use private IPv4 mode? (y/n) [Default: n]: " use_private "n"
                     _green "未检测到公网 IPv4 候选地址，是否使用内网 IPv4 模式？(y/n) [默认: n]："
                     use_private=${use_private:-n}
                     if [[ "$use_private" =~ ^[Yy]$ ]]; then
@@ -1593,7 +1623,7 @@ ask_maximum_subnet() {
             fi
         else
             _blue "Is the maximum subnet range feasible with IPV6 used?([n]/y)"
-            reading "是否使用IPV6可行的最大子网范围？([n]/y)" select_maximum_subset
+            reading "是否使用IPV6可行的最大子网范围？([n]/y)" select_maximum_subset "n"
         fi
         if [ "$select_maximum_subset" = "y" ] || [ "$select_maximum_subset" = "Y" ]; then
             echo "true" >/usr/local/bin/pve_maximum_subset
@@ -1805,7 +1835,7 @@ setup_hostname() {
     else
         while true; do
             _green "Please enter a new host name (can only contain English letters and numbers, not pure numbers or special characters, enter the default pve):"
-            reading "请输入新的主机名(只能包含英文字母和数字,不能是纯数字或特殊字符,回车默认为pve):" new_hostname
+            reading "请输入新的主机名(只能包含英文字母和数字,不能是纯数字或特殊字符,回车默认为pve):" new_hostname "pve"
             if [ -z "$new_hostname" ]; then
                 new_hostname="pve"
                 break
@@ -2211,8 +2241,8 @@ EOF
 confirm_continue() {
     local prompt_text="$1"
     local confirm=""
-    if [[ "${FORCE_INSTALL^^}" == "TRUE" ]]; then
-        _yellow "FORCE_INSTALL=true, 跳过确认提示，强制继续"
+    if [[ "${FORCE_INSTALL^^}" == "TRUE" ]] || is_noninteractive; then
+        _yellow "FORCE_INSTALL=true 或 noninteractive=true，跳过确认提示，强制继续"
         return 0
     fi
     _yellow "Do you want to continue the installation? (Enter to not continue the installation by default) (y/[n])"

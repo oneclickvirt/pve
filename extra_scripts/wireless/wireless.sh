@@ -3,12 +3,28 @@
 # https://github.com/oneclickvirt/pve
 # 2025.07.06
 # 不支持debian13及更新版本的debian，未对sysctl做适配
+export DEBIAN_FRONTEND=noninteractive
+is_noninteractive() {
+    case "${noninteractive:-}" in
+    true | TRUE | True | 1 | yes | YES | Yes | y | Y)
+        return 0
+        ;;
+    esac
+    case "${NONINTERACTIVE:-}" in
+    true | TRUE | True | 1 | yes | YES | Yes | y | Y)
+        return 0
+        ;;
+    esac
+    return 1
+}
 cd /mnt/wireless || exit 1
+shopt -s nullglob
+deb_files=(*.deb)
 for i in {1..6}; do
     INSTALLED_PACKAGES=""
     FAILED_PACKAGES=""
-    for deb in *.deb; do
-        if apt install -y "./$deb" &>/dev/null; then
+    for deb in "${deb_files[@]}"; do
+        if apt-get install -y "./$deb" &>/dev/null; then
             INSTALLED_PACKAGES="$INSTALLED_PACKAGES $deb"
         else
             FAILED_PACKAGES="$FAILED_PACKAGES $deb"
@@ -31,28 +47,51 @@ if [ -z "$WIFI_INTERFACE" ]; then
     exit 1
 fi
 echo "Detected WiFi interface: $WIFI_INTERFACE"
-while true; do
-    read -p "Enter WiFi SSID: " SSID
-    read -p "Enter WiFi Password: " PASSWORD
-    echo "WiFi Configuration:"
-    echo "SSID: $SSID"
-    echo "Password: $PASSWORD"
-    read -p "Is this correct? (y/n): " CONFIRM
-    if [[ "$CONFIRM" =~ ^[Yy]$ ]]; then
-        SCAN_RESULT=$(iwlist $WIFI_INTERFACE scan 2>/dev/null | grep -i "ESSID:\"$SSID\"")
+if is_noninteractive; then
+    SSID="${WIFI_SSID:-}"
+    PASSWORD="${WIFI_PASSWORD:-}"
+    if [ -z "$SSID" ] || [ -z "$PASSWORD" ]; then
+        echo "noninteractive=true requires WIFI_SSID and WIFI_PASSWORD"
+        echo "无交互模式需要设置 WIFI_SSID 和 WIFI_PASSWORD"
+        exit 1
+    fi
+    if [[ "${WIFI_SKIP_SCAN^^}" != "TRUE" ]]; then
+        SCAN_RESULT=$(iwlist "$WIFI_INTERFACE" scan 2>/dev/null | grep -iF "ESSID:\"$SSID\"")
         if [ -n "$SCAN_RESULT" ]; then
-            break
+            echo "WiFi network '$SSID' found."
         else
             echo "Error: WiFi network '$SSID' not found in available networks."
-            echo "Please check the SSID and try again."
+            echo "Set WIFI_SKIP_SCAN=true if the SSID is hidden or scanning is unavailable."
+            echo "如果 SSID 隐藏或扫描不可用，可设置 WIFI_SKIP_SCAN=true。"
             echo "Available networks:"
-            iwlist $WIFI_INTERFACE scan 2>/dev/null | grep "ESSID:" | grep -v "ESSID:\"\"" | sort | uniq
+            iwlist "$WIFI_INTERFACE" scan 2>/dev/null | grep "ESSID:" | grep -v "ESSID:\"\"" | sort | uniq
+            exit 1
+        fi
+    fi
+else
+    while true; do
+        read -p "Enter WiFi SSID: " SSID
+        read -p "Enter WiFi Password: " PASSWORD
+        echo "WiFi Configuration:"
+        echo "SSID: $SSID"
+        echo "Password: ********"
+        read -p "Is this correct? (y/n): " CONFIRM
+        if [[ "$CONFIRM" =~ ^[Yy]$ ]]; then
+            SCAN_RESULT=$(iwlist "$WIFI_INTERFACE" scan 2>/dev/null | grep -iF "ESSID:\"$SSID\"")
+            if [ -n "$SCAN_RESULT" ]; then
+                break
+            else
+                echo "Error: WiFi network '$SSID' not found in available networks."
+                echo "Please check the SSID and try again."
+                echo "Available networks:"
+                iwlist "$WIFI_INTERFACE" scan 2>/dev/null | grep "ESSID:" | grep -v "ESSID:\"\"" | sort | uniq
+                echo "Please re-enter the WiFi credentials..."
+            fi
+        else
             echo "Please re-enter the WiFi credentials..."
         fi
-    else
-        echo "Please re-enter the WiFi credentials..."
-    fi
-done
+    done
+fi
 rm -rf /etc/wpa_supplicant/wpa_supplicant.conf
 wpa_passphrase "$SSID" "$PASSWORD" >> /etc/wpa_supplicant/wpa_supplicant.conf
 if [ ! -f /etc/systemd/system/wpa_supplicant.service ]; then

@@ -6,9 +6,11 @@
 ########## 支持的环境变量（用于无交互一键卸载）
 #
 # AUTO_CONFIRM=yes  - 跳过卸载确认提示，直接执行卸载
+# noninteractive=true - 统一无交互模式，等同于 AUTO_CONFIRM=yes
 #
 # 示例（一键无交互卸载）:
-#   AUTO_CONFIRM=yes bash uninstall_pve.sh
+#   export noninteractive=true
+#   bash uninstall_pve.sh
 
 ########## 输出颜色函数
 
@@ -16,7 +18,30 @@ _red() { echo -e "\033[31m\033[01m$@\033[0m"; }
 _green() { echo -e "\033[32m\033[01m$@\033[0m"; }
 _yellow() { echo -e "\033[33m\033[01m$@\033[0m"; }
 _blue() { echo -e "\033[36m\033[01m$@\033[0m"; }
-reading() { read -rp "$(_green "$1")" "$2"; }
+is_noninteractive() {
+    case "${noninteractive:-}" in
+    true | TRUE | True | 1 | yes | YES | Yes | y | Y)
+        return 0
+        ;;
+    esac
+    case "${NONINTERACTIVE:-}" in
+    true | TRUE | True | 1 | yes | YES | Yes | y | Y)
+        return 0
+        ;;
+    esac
+    return 1
+}
+reading() {
+    local prompt="$1"
+    local var_name="$2"
+    local default_value="${3:-}"
+    if is_noninteractive; then
+        printf -v "$var_name" '%s' "$default_value"
+        _yellow "noninteractive=true, using default for ${var_name}: ${default_value:-<empty>}"
+    else
+        read -rp "$(_green "$prompt")" "$var_name"
+    fi
+}
 
 export DEBIAN_FRONTEND=noninteractive
 utf8_locale=$(locale -a 2>/dev/null | grep -i -m 1 -E "UTF-8|utf8")
@@ -50,8 +75,8 @@ _red "警告：本脚本将彻底卸载 Proxmox VE 及所有相关配置！"
 _red "All VMs and containers data under /var/lib/vz/ will be DELETED."
 _red "所有位于 /var/lib/vz/ 下的虚拟机和容器数据将被删除。"
 echo ""
-if [[ "${AUTO_CONFIRM^^}" == "YES" ]]; then
-    _yellow "AUTO_CONFIRM=yes, 跳过确认提示，直接执行卸载"
+if [[ "${AUTO_CONFIRM^^}" == "YES" ]] || is_noninteractive; then
+    _yellow "AUTO_CONFIRM=yes 或 noninteractive=true，跳过确认提示，直接执行卸载"
 else
     reading "Are you sure you want to uninstall PVE? (Type 'yes' to confirm / 确认卸载请输入 yes): " confirm
     if [ "$confirm" != "yes" ]; then
@@ -252,8 +277,8 @@ _yellow "[5/9] Purging PVE and related packages..."
 _yellow "[5/9] 清除 PVE 及相关软件包..."
 
 touch '/please-remove-proxmox-ve'
-apt purge proxmox-ve -y
-apt autoremove -y
+apt-get purge proxmox-ve -y
+apt-get autoremove -y
 
 pve_packages=(
     proxmox-ve

@@ -30,6 +30,18 @@
 
 说明文档中 Proxmox VE 分区内容
 
+## 无交互模式
+
+需要跳过脚本确认和输入提示时，统一使用：
+
+```bash
+export noninteractive=true
+```
+
+安装和批量创建流程仍可通过环境变量覆盖默认值，例如 `CN=true`、`PVE_HOSTNAME=mypve`、`USE_PRIVATE_IP=true`、`USE_MAX_IPV6_SUBNET=false`、`PVE_CREATE_COUNT=1`、`PVE_CREATE_CPU=1`、`PVE_CREATE_MEMORY=512`、`PVE_CREATE_DISK=5`、`PVE_CREATE_STORAGE=local`、`PVE_CREATE_SYSTEM=debian11`、`PVE_CREATE_IPV6=n`。
+
+卸载脚本中 `noninteractive=true` 等同于 `AUTO_CONFIRM=yes`，会跳过卸载确认。
+
 自修补虚拟机镜像源：
 
 [https://github.com/oneclickvirt/pve_kvm_images](https://github.com/oneclickvirt/pve_kvm_images)
