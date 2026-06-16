@@ -26,7 +26,7 @@ check_vmct_status() {
             if [ "$(qm status "$id" 2>/dev/null | grep -w "status:" | awk '{print $2}')" = "stopped" ]; then
                 return 0
             fi
-            elif [ "$type" = "ct" ]; then
+        elif [ "$type" = "ct" ]; then
             # 检查容器是否已经停止
             if [ "$(pct status "$id" 2>/dev/null | grep -w "status:" | awk '{print $2}')" = "stopped" ]; then
                 return 0
@@ -44,6 +44,115 @@ safe_remove() {
         log "Removing: $path"
         rm -rf "$path"
     fi
+}
+
+is_ipv4_address() {
+    local ip=$1
+    local IFS=.
+    local -a octets=()
+    [[ "$ip" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]] || return 1
+    read -r -a octets <<< "$ip"
+    [ "${#octets[@]}" -eq 4 ] || return 1
+    local octet
+    for octet in "${octets[@]}"; do
+        [[ "$octet" =~ ^[0-9]+$ ]] || return 1
+        [ "$octet" -le 255 ] || return 1
+    done
+    return 0
+}
+
+extract_first_ipv4_from_config() {
+    local config_text=$1
+    local candidate=""
+
+    while IFS= read -r candidate; do
+        if is_ipv4_address "$candidate"; then
+            printf '%s' "$candidate"
+            return 0
+        fi
+    done < <(printf '%s\n' "$config_text" | grep -oE '(^|[,[:space:]])ip=([0-9]{1,3}\.){3}[0-9]{1,3}' | sed 's/.*ip=//')
+
+    printf ''
+    return 0
+}
+
+delete_nft_ipv4_rules_for_ip() {
+    local ip_address=$1
+    local chain=""
+
+    [ -n "$ip_address" ] || return 0
+    for chain in prerouting postrouting; do
+        nft -a list chain ip nat "$chain" 2>/dev/null |
+            awk -v ip="$ip_address" '
+                BEGIN {
+                    escaped = ip
+                    gsub(/\./, "\\.", escaped)
+                    boundary_re = "(^|[^0-9.])" escaped "([^0-9.]|$)"
+                }
+                $0 ~ boundary_re && match($0, /# handle [0-9]+/) {
+                    handle = substr($0, RSTART + 9, RLENGTH - 9)
+                    print handle
+                }
+            ' |
+            while IFS= read -r h; do
+                [ -n "$h" ] && nft delete rule ip nat "$chain" handle "$h" 2>/dev/null || true
+            done
+    done
+}
+
+delete_iptables_ipv4_rules_for_ip() {
+    local ip_address=$1
+    local escaped_ip=""
+
+    [ -n "$ip_address" ] || return 0
+    [ -f /etc/iptables/rules.v4 ] || return 0
+    escaped_ip="${ip_address//./\\.}"
+    sed -i -E "/(^|[^0-9.])${escaped_ip}([^0-9.]|$)/d" /etc/iptables/rules.v4
+}
+
+declare -A STORAGE_VOLUMES_BY_ID
+
+build_storage_volume_index() {
+    local storages=""
+    local storage=""
+    local volume_rows=""
+    local volid=""
+    local owner_id=""
+
+    STORAGE_VOLUMES_BY_ID=()
+    storages=$(pvesm status 2>/dev/null | awk 'NR > 1 {print $1}' || true)
+    while IFS= read -r storage; do
+        [ -z "$storage" ] && continue
+        volume_rows=$(pvesm list "$storage" 2>/dev/null | awk 'NR > 1 && $5 ~ /^[0-9]+$/ {print $1, $5}' || true)
+        while read -r volid owner_id; do
+            [ -z "$volid" ] && continue
+            [ -z "$owner_id" ] && continue
+            STORAGE_VOLUMES_BY_ID["$owner_id"]+="${volid}"$'\n'
+        done <<<"$volume_rows"
+    done <<<"$storages"
+}
+
+cleanup_indexed_volume_files() {
+    local id=$1
+    local kind=$2
+    local volid=""
+    local vol_path=""
+    local volumes="${STORAGE_VOLUMES_BY_ID[$id]-}"
+
+    if [ -z "$volumes" ]; then
+        log "No indexed storage volumes found for ${kind} $id"
+        return 0
+    fi
+
+    while IFS= read -r volid; do
+        [ -z "$volid" ] && continue
+        vol_path=$(pvesm path "$volid" 2>/dev/null || true)
+        if [ -n "$vol_path" ]; then
+            safe_remove "$vol_path"
+        else
+            log "Warning: Failed to resolve path for volume $volid"
+        fi
+    done <<<"$volumes"
 }
 
 # 防火墙后端自动识别（优先读取 interfaces 配置痕迹）
@@ -117,16 +226,16 @@ cleanup_ipv6_nat_rules() {
         local host_external_ipv6=""
         if use_nft_backend; then
             # nftables: find and remove matching rules
-            host_external_ipv6=$(nft list chain ip6 nat prerouting 2>/dev/null | grep "dnat to $vm_internal_ipv6" | sed 's/.*ip6 daddr \([^ ]*\).*/\1/' | head -1)
+            host_external_ipv6=$(nft list chain ip6 nat prerouting 2>/dev/null | grep -F "dnat to $vm_internal_ipv6" | sed 's/.*ip6 daddr \([^ ]*\).*/\1/' | head -1)
             if [ -n "$host_external_ipv6" ]; then
                 log "Removing nftables IPv6 NAT rules: $vm_internal_ipv6 -> $host_external_ipv6"
                 for chain in prerouting postrouting; do
-                    nft -a list chain ip6 nat $chain 2>/dev/null | grep -E "$vm_internal_ipv6|$host_external_ipv6" | sed 's/.*# handle //' | awk '{print $1}' | while read -r h; do
+                    nft -a list chain ip6 nat $chain 2>/dev/null | grep -F -e "$vm_internal_ipv6" -e "$host_external_ipv6" | sed 's/.*# handle //' | awk '{print $1}' | while read -r h; do
                         nft delete rule ip6 nat $chain handle "$h" 2>/dev/null || true
                     done
                 done
                 # 同时清除该隙道IPv6地址的ICMPv6 ping屏蔽规则
-                nft -a list chain ip6 raw prerouting 2>/dev/null | grep "$host_external_ipv6" | sed 's/.*# handle //' | awk '{print $1}' | while read -r h; do
+                nft -a list chain ip6 raw prerouting 2>/dev/null | grep -F "$host_external_ipv6" | sed 's/.*# handle //' | awk '{print $1}' | while read -r h; do
                     nft delete rule ip6 raw prerouting handle "$h" 2>/dev/null || true
                 done
                 printf '#!/usr/sbin/nft -f\nflush ruleset\n' > /etc/nftables.conf
@@ -166,7 +275,7 @@ cleanup_vmbr2_icmpv6_rule() {
     local ipv6_addr="${host_ipv6%:*}:${vmctid}"
     log "Cleaning up ICMPv6 ping block rule for $ipv6_addr"
     if use_nft_backend; then
-        nft -a list chain ip6 raw prerouting 2>/dev/null | grep "$ipv6_addr" | sed 's/.*# handle //' | awk '{print $1}' | while read -r h; do
+        nft -a list chain ip6 raw prerouting 2>/dev/null | grep -F "$ipv6_addr" | sed 's/.*# handle //' | awk '{print $1}' | while read -r h; do
             nft delete rule ip6 raw prerouting handle "$h" 2>/dev/null || true
         done
         printf '#!/usr/sbin/nft -f\nflush ruleset\n' > /etc/nftables.conf
@@ -190,18 +299,7 @@ cleanup_vmbr2_icmpv6_rule() {
 cleanup_vm_files() {
     local vmid=$1
     log "Cleaning up files for VM $vmid"
-    # 获取所有存储名称
-    pvesm status | awk 'NR > 1 {print $1}' | while read -r storage; do
-        # 遍历存储并列出相关的卷
-        pvesm list "$storage" | awk -v vmid="$vmid" '$5 == vmid {print $1}' | while read -r volid; do
-            vol_path=$(pvesm path "$volid" 2>/dev/null || true)
-            if [ -n "$vol_path" ]; then
-                safe_remove "$vol_path"
-            else
-                log "Warning: Failed to resolve path for volume $volid in storage $storage"
-            fi
-        done
-    done
+    cleanup_indexed_volume_files "$vmid" "VM"
     rm -rf "/root/vm${vmid}"
     # 清理 macOS VM 专属 opencore ISO（由 buildvm_macos.sh 的 SMBIOS 注入流程生成）
     local opencore_iso="/var/lib/vz/template/iso/opencore_${vmid}.iso"
@@ -215,18 +313,7 @@ cleanup_vm_files() {
 cleanup_ct_files() {
     local ctid=$1
     log "Cleaning up files for CT $ctid"
-    # 获取所有存储名称
-    pvesm status | awk 'NR > 1 {print $1}' | while read -r storage; do
-        # 遍历存储并列出相关的卷
-        pvesm list "$storage" | awk -v ctid="$ctid" '$5 == ctid {print $1}' | while read -r volid; do
-            vol_path=$(pvesm path "$volid" 2>/dev/null || true)
-            if [ -n "$vol_path" ]; then
-                safe_remove "$vol_path"
-            else
-                log "Warning: Failed to resolve path for volume $volid in storage $storage"
-            fi
-        done
-    done
+    cleanup_indexed_volume_files "$ctid" "CT"
     rm -rf "/root/ct${ctid}"
 }
 
@@ -258,13 +345,9 @@ handle_vm_deletion() {
     if [ -n "$ip_address" ]; then
         log "Removing firewall rules for IP $ip_address"
         if use_nft_backend; then
-            for chain in prerouting postrouting; do
-                nft -a list chain ip nat $chain 2>/dev/null | grep "$ip_address" | sed 's/.*# handle //' | awk '{print $1}' | while read -r h; do
-                    nft delete rule ip nat $chain handle "$h" 2>/dev/null || true
-                done
-            done
+            delete_nft_ipv4_rules_for_ip "$ip_address"
         else
-            [ -f /etc/iptables/rules.v4 ] && sed -i "/$ip_address:/d" /etc/iptables/rules.v4
+            delete_iptables_ipv4_rules_for_ip "$ip_address"
         fi
     fi
 }
@@ -294,13 +377,9 @@ handle_ct_deletion() {
     if [ -n "$ip_address" ]; then
         log "Removing firewall rules for IP $ip_address"
         if use_nft_backend; then
-            for chain in prerouting postrouting; do
-                nft -a list chain ip nat $chain 2>/dev/null | grep "$ip_address" | sed 's/.*# handle //' | awk '{print $1}' | while read -r h; do
-                    nft delete rule ip nat $chain handle "$h" 2>/dev/null || true
-                done
-            done
+            delete_nft_ipv4_rules_for_ip "$ip_address"
         else
-            [ -f /etc/iptables/rules.v4 ] && sed -i "/$ip_address:/d" /etc/iptables/rules.v4
+            delete_iptables_ipv4_rules_for_ip "$ip_address"
         fi
     fi
 }
@@ -332,20 +411,16 @@ main() {
     vmids=$(qm list | awk '{if(NR>1)print $1}')
     if [ -n "$vmids" ]; then
         for vmid in $vmids; do
-            ip_address=$(qm config "$vmid" | grep -oP 'ip=\K[0-9.]+' || true)
-            if [ -n "$ip_address" ]; then
-                vmip_array["$vmid"]=$ip_address
-            fi
+            ip_address=$(extract_first_ipv4_from_config "$(qm config "$vmid" 2>/dev/null || true)")
+            vmip_array["$vmid"]="${ip_address:-}"
         done
     fi
     # 获取CT的IP
     ctids=$(pct list | awk '{if(NR>1)print $1}')
     if [ -n "$ctids" ]; then
         for ctid in $ctids; do
-            ip_address=$(pct config "$ctid" | grep -oP 'ip=\K[0-9.]+' || true)
-            if [ -n "$ip_address" ]; then
-                ctip_array["$ctid"]=$ip_address
-            fi
+            ip_address=$(extract_first_ipv4_from_config "$(pct config "$ctid" 2>/dev/null || true)")
+            ctip_array["$ctid"]="${ip_address:-}"
         done
     fi
     if [ "$delete_all" = true ]; then
@@ -357,11 +432,12 @@ main() {
             unique_ids["$ctid"]=1
         done
     fi
+    build_storage_volume_index
     # 处理删除操作
     for id in "${!unique_ids[@]}"; do
         if [ -n "${vmip_array[$id]+x}" ]; then
             handle_vm_deletion "$id" "${vmip_array[$id]}"
-            elif [ -n "${ctip_array[$id]+x}" ]; then
+        elif [ -n "${ctip_array[$id]+x}" ]; then
             handle_ct_deletion "$id" "${ctip_array[$id]}"
         else
             log "Warning: ID $id not found in existing VMs or CTs"
@@ -374,7 +450,7 @@ main() {
         nft list ruleset >> /etc/nftables.conf
     else
         if [ -f "/etc/iptables/rules.v4" ]; then
-            cat /etc/iptables/rules.v4 | iptables-restore
+            iptables-restore < /etc/iptables/rules.v4
         else
             log "Warning: iptables rules file not found"
         fi

@@ -8,6 +8,15 @@
 
 cd /root >/dev/null 2>&1
 
+validate_storage_name() {
+    local value="$1"
+    if [[ -z "$value" || ! "$value" =~ ^[A-Za-z0-9_.-]+$ ]]; then
+        echo "Invalid storage name: $value"
+        echo "存储盘名称无效：$value"
+        exit 1
+    fi
+}
+
 init_params() {
     vm_num="${1:-102}"
     core="${2:-1}"
@@ -18,6 +27,7 @@ init_params() {
     system="${7:-big‑sur}"
     storage="${8:-local}"
     independent_ipv6="${9:-N}"
+    validate_storage_name "$storage"
     independent_ipv6=$(echo "$independent_ipv6" | tr '[:upper:]' '[:lower:]')
     rm -rf "vm$vm_num"
 }
@@ -190,13 +200,13 @@ create_vm() {
             --name macos-${vm_num} \
             ${kvm_flag}
     fi
-    qm set $vm_num --efidisk0 ${storage}:4
+    qm set $vm_num --efidisk0 "${storage}:4"
     if [[ "$system" == "high-sierra" || "$system" == "mojave" ]]; then
-        qm set $vm_num --sata0 ${storage}:${disk},cache=none,ssd=1,discard=on
+        qm set $vm_num --sata0 "${storage}:${disk},cache=none,ssd=1,discard=on"
         if [ $? -ne 0 ]; then
             echo "Failed to mount ${storage}:${disk}. Trying alternative disk file..."
             echo "挂载 ${storage}:${disk} 失败，正在尝试其他磁盘文件..."
-            qm set $vm_num --sata0 ${storage}-lvm:${disk},cache=none,ssd=1,discard=on
+            qm set $vm_num --sata0 "${storage}-lvm:${disk},cache=none,ssd=1,discard=on"
             if [ $? -ne 0 ]; then
                 echo "Failed to mount ${storage}-lvm:${disk}. Trying fallback file..."
                 echo "挂载 ${storage}-lvm:${disk} 失败，正在尝试回退文件..."
@@ -214,11 +224,11 @@ create_vm() {
             fi
         fi
     else
-        qm set $vm_num --virtio0 ${storage}:${disk},cache=none,discard=on
+        qm set $vm_num --virtio0 "${storage}:${disk},cache=none,discard=on"
         if [ $? -ne 0 ]; then
             echo "Failed to mount ${storage}:${disk}. Trying alternative disk file..."
             echo "挂载 ${storage}:${disk} 失败，正在尝试其他磁盘文件..."
-            qm set $vm_num --virtio0 ${storage}-lvm:${disk},cache=none,discard=on
+            qm set $vm_num --virtio0 "${storage}-lvm:${disk},cache=none,discard=on"
             if [ $? -ne 0 ]; then
                 echo "Failed to mount ${storage}-lvm:${disk}. Trying fallback file..."
                 echo "挂载 ${storage}-lvm:${disk} 失败，正在尝试回退文件..."
@@ -239,8 +249,8 @@ create_vm() {
     # 使用专属 opencore ISO（含独立SMBIOS）；若生成失败则回退到共享 opencore.iso
     local opencore_iso_name
     opencore_iso_name=$(basename "${MACOS_OPENCORE_ISO:-/var/lib/vz/template/iso/opencore.iso}")
-    qm set $vm_num --ide0 ${storage}:iso/${opencore_iso_name},media=cdrom,cache=unsafe
-    qm set $vm_num --ide1 ${storage}:iso/${system}.iso,media=cdrom,cache=unsafe
+    qm set $vm_num --ide0 "${storage}:iso/${opencore_iso_name},media=cdrom,cache=unsafe"
+    qm set $vm_num --ide1 "${storage}:iso/${system}.iso,media=cdrom,cache=unsafe"
     if [[ "$system" == "high-sierra" || "$system" == "mojave" ]]; then
         grep -q '^boot:' /etc/pve/qemu-server/${vm_num}.conf &&
             sed -i 's/^boot:.*/boot: order=ide0;ide1;sata0;net0/' /etc/pve/qemu-server/${vm_num}.conf ||

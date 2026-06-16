@@ -5,10 +5,10 @@
 
 ########## 预设部分输出和部分中间变量
 
-_red() { echo -e "\033[31m\033[01m$@\033[0m"; }
-_green() { echo -e "\033[32m\033[01m$@\033[0m"; }
-_yellow() { echo -e "\033[33m\033[01m$@\033[0m"; }
-_blue() { echo -e "\033[36m\033[01m$@\033[0m"; }
+_red() { echo -e "\033[31m\033[01m$*\033[0m"; }
+_green() { echo -e "\033[32m\033[01m$*\033[0m"; }
+_yellow() { echo -e "\033[33m\033[01m$*\033[0m"; }
+_blue() { echo -e "\033[36m\033[01m$*\033[0m"; }
 is_noninteractive() {
     case "${noninteractive:-}" in
     true | TRUE | True | 1 | yes | YES | Yes | y | Y)
@@ -330,8 +330,8 @@ detect_he_tunnel() {
     status_he=false
     if grep -q "he-ipv6" /etc/network/interfaces; then
         wget ${cdn_success_url}https://raw.githubusercontent.com/oneclickvirt/6in4/main/covert.sh -O /root/covert.sh
-        chmod 777 covert.sh
-        ./covert.sh
+        chmod 755 /root/covert.sh
+        /root/covert.sh
         sleep 1
         status_he=true
         chattr -i /etc/network/interfaces
@@ -934,7 +934,9 @@ setup_firewall() {
         nft add table ip nat 2>/dev/null || true
         nft 'add chain ip nat prerouting { type nat hook prerouting priority dstnat; policy accept; }' 2>/dev/null || true
         nft 'add chain ip nat postrouting { type nat hook postrouting priority srcnat; policy accept; }' 2>/dev/null || true
-        nft add rule ip nat postrouting ip saddr 172.16.1.0/24 oifname "vmbr0" masquerade
+        if ! nft list chain ip nat postrouting 2>/dev/null | grep -Fq 'ip saddr 172.16.1.0/24 oifname "vmbr0" masquerade'; then
+            nft add rule ip nat postrouting ip saddr 172.16.1.0/24 oifname "vmbr0" masquerade
+        fi
         nft add table ip6 nat 2>/dev/null || true
         nft 'add chain ip6 nat prerouting { type nat hook prerouting priority dstnat; policy accept; }' 2>/dev/null || true
         nft 'add chain ip6 nat postrouting { type nat hook postrouting priority srcnat; policy accept; }' 2>/dev/null || true
@@ -948,7 +950,9 @@ setup_firewall() {
         modprobe ip6table_nat 2>/dev/null || true
         modprobe ip6table_raw 2>/dev/null || true
         modprobe nf_nat 2>/dev/null || true
-        iptables -t nat -A POSTROUTING -s '172.16.1.0/24' -o vmbr0 -j MASQUERADE
+        if ! iptables -t nat -C POSTROUTING -s '172.16.1.0/24' -o vmbr0 -j MASQUERADE 2>/dev/null; then
+            iptables -t nat -A POSTROUTING -s '172.16.1.0/24' -o vmbr0 -j MASQUERADE
+        fi
     fi
     update_sysctl "net.ipv4.ip_forward=1"
     ${sysctl_path} -p

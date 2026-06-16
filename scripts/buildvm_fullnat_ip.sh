@@ -9,14 +9,32 @@
 
 # ./buildvm_fullnat_ip.sh VMID 用户名 密码 CPU核数 内存 硬盘 系统 存储盘 外网IPV4地址 是否附加IPV6(默认为N)
 # 示例：
-# ./buildvm_fullnat_ip.sh 152 test1 oneclick123 1 1024 10 debian11 local a.b.c.d N
+# ./buildvm_fullnat_ip.sh 152 test1 examplePass123 1 1024 10 debian11 local a.b.c.d N
 
 cd /root >/dev/null 2>&1
+
+generate_password() {
+    local value
+    value=$(LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom | head -c 12)
+    if [ -z "$value" ]; then
+        value="$(date +%s%N | md5sum | cut -c 3-14)"
+    fi
+    printf '%s' "$value"
+}
+
+validate_storage_name() {
+    local value="$1"
+    if [[ -z "$value" || ! "$value" =~ ^[A-Za-z0-9_.-]+$ ]]; then
+        echo "Invalid storage name: $value"
+        echo "存储盘名称无效：$value"
+        exit 1
+    fi
+}
 
 init_params() {
     vm_num="${1:-152}"
     user="${2:-test}"
-    password="${3:-123456}"
+    password="${3:-$(generate_password)}"
     core="${4:-1}"
     memory="${5:-512}"
     disk="${6:-5}"
@@ -24,6 +42,7 @@ init_params() {
     storage="${8:-local}"
     extranet_ipv4="${9}"
     independent_ipv6="${10:-N}"
+    validate_storage_name "$storage"
     independent_ipv6=$(echo "$independent_ipv6" | tr '[:upper:]' '[:lower:]')
     rm -rf "vm$vm_num"
     if [[ -z "$extranet_ipv4" ]]; then
@@ -159,11 +178,11 @@ create_vm() {
         qm importdisk $vm_num /root/qcow/${system}.${ext} ${storage}
     fi
     sleep 3
-    volid=$(pvesm list ${storage} | awk -v vmid="${vm_num}" '$5 == vmid && $1 ~ /\.raw$/ {print $1}' | tail -n 1)
+    volid=$(pvesm list "$storage" | awk -v vmid="${vm_num}" '$5 == vmid && $1 ~ /\.raw$/ {print $1}' | tail -n 1)
     if [ -z "$volid" ]; then
         echo "No .raw file found for VM ID '${vm_num}' in storage '${storage}'. Searching for other formats..."
         echo "在存储 '${storage}' 中未找到 VM ID '${vm_num}' 的 .raw 文件，正在尝试其他格式..."
-        volid=$(pvesm list ${storage} | awk -v vmid="${vm_num}" '$5 == vmid {print $1}' | tail -n 1)
+        volid=$(pvesm list "$storage" | awk -v vmid="${vm_num}" '$5 == vmid {print $1}' | tail -n 1)
     fi
     if [ -z "$volid" ]; then
         echo "Error: No file found for VM ID '${vm_num}' in storage '${storage}'"

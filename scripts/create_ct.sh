@@ -5,10 +5,12 @@
 
 # cd /root
 
-_red() { echo -e "\033[31m\033[01m$@\033[0m"; }
-_green() { echo -e "\033[32m\033[01m$@\033[0m"; }
-_yellow() { echo -e "\033[33m\033[01m$@\033[0m"; }
-_blue() { echo -e "\033[36m\033[01m$@\033[0m"; }
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
+
+_red() { echo -e "\033[31m\033[01m$*\033[0m"; }
+_green() { echo -e "\033[32m\033[01m$*\033[0m"; }
+_yellow() { echo -e "\033[33m\033[01m$*\033[0m"; }
+_blue() { echo -e "\033[36m\033[01m$*\033[0m"; }
 is_noninteractive() {
     case "${noninteractive:-}" in
     true | TRUE | True | 1 | yes | YES | Yes | y | Y)
@@ -96,7 +98,11 @@ cdn_urls=("https://cdn0.spiritlhl.top/" "http://cdn3.spiritlhl.net/" "http://cdn
 check_cdn_file
 
 pre_check() {
-    home_dir=$(eval echo "~$(whoami)")
+    home_dir=""
+    if command -v getent >/dev/null 2>&1; then
+        home_dir=$(getent passwd "$(id -un)" | cut -d: -f6)
+    fi
+    home_dir="${home_dir:-${HOME:-}}"
     if [ "$home_dir" != "/root" ]; then
         _red "The script will exit if the current path is not /root."
         _red "当前路径不是/root，脚本将退出。"
@@ -106,7 +112,12 @@ pre_check() {
         apt-get install dos2unix -y
     fi
     if [ ! -f "buildct.sh" ]; then
-        curl -L ${cdn_success_url}https://raw.githubusercontent.com/oneclickvirt/pve/main/scripts/buildct.sh -o buildct.sh && chmod +x buildct.sh
+        if [ -f "${script_dir}/buildct.sh" ]; then
+            cp -f "${script_dir}/buildct.sh" buildct.sh
+        else
+            curl -L "${cdn_success_url}https://raw.githubusercontent.com/oneclickvirt/pve/main/scripts/buildct.sh" -o buildct.sh
+        fi
+        chmod 755 buildct.sh
         dos2unix buildct.sh
     fi
 }
@@ -249,14 +260,16 @@ build_new_cts() {
     done
     for ((i = 1; i <= $new_nums; i++)); do
         ct_num=$(($ct_num + 1))
-        ori=$(date | md5sum)
-        password=${ori:2:9}
+        password=$(LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom | head -c 12)
+        if [ -z "$password" ]; then
+            password=$(date +%s%N | md5sum | cut -c 3-14)
+        fi
         ssh_port=$(($web2_port + 1))
         web1_port=$(($web2_port + 2))
         web2_port=$(($web1_port + 1))
         port_start=$(($port_end + 1))
         port_end=$(($port_start + 25))
-        ./buildct.sh $ct_num $password $cpu_nums $memory_nums $disk_nums $ssh_port $web1_port $web2_port $port_start $port_end $system $storage $independent_ipv6
+        ./buildct.sh "$ct_num" "$password" "$cpu_nums" "$memory_nums" "$disk_nums" "$ssh_port" "$web1_port" "$web2_port" "$port_start" "$port_end" "$system" "$storage" "$independent_ipv6"
         cat "ct$ct_num" >>ctlog
         rm -rf "ct$ct_num"
         if [ "$i" = "$new_nums" ]; then

@@ -25,10 +25,10 @@
 ########## 预设部分输出和部分中间变量
 
 cd /root >/dev/null 2>&1
-_red() { echo -e "\033[31m\033[01m$@\033[0m"; }
-_green() { echo -e "\033[32m\033[01m$@\033[0m"; }
-_yellow() { echo -e "\033[33m\033[01m$@\033[0m"; }
-_blue() { echo -e "\033[36m\033[01m$@\033[0m"; }
+_red() { echo -e "\033[31m\033[01m$*\033[0m"; }
+_green() { echo -e "\033[32m\033[01m$*\033[0m"; }
+_yellow() { echo -e "\033[33m\033[01m$*\033[0m"; }
+_blue() { echo -e "\033[36m\033[01m$*\033[0m"; }
 is_noninteractive() {
     case "${noninteractive:-}" in
     true | TRUE | True | 1 | yes | YES | Yes | y | Y)
@@ -672,7 +672,7 @@ rebuild_interfaces() {
             fi
         fi
         # 修复部分网络运行部分未空
-        if [ ! -e /run/network/interfaces.d/* ]; then
+        if ! compgen -G "/run/network/interfaces.d/*" >/dev/null; then
             if [ -f "/etc/network/interfaces" ]; then
                 chattr -i /etc/network/interfaces
                 if ! grep -q "^#.*source-directory \/run\/network\/interfaces\.d" /etc/network/interfaces; then
@@ -787,15 +787,20 @@ clean_control_alias_blocks() {
     local tmp_file
     tmp_file=$(mktemp)
     local control_alias_total
+    if [ ! -f "$input_file" ]; then
+        rm -f "$tmp_file"
+        return 0
+    fi
     control_alias_total=$(grep -c "^# control-alias" "$input_file")
     if (( control_alias_total <= 2 )); then
+        rm -f "$tmp_file"
         return 0
     fi
     local control_alias_count=0
     local in_control_alias_block=false
     local buffer=""
-    > "$tmp_file"
-    > "$output_file"
+    : > "$tmp_file"
+    : > "$output_file"
     while IFS= read -r line || [[ -n "$line" ]]; do
         if [[ "$line" =~ ^#\ control-alias\ eth0 ]]; then
             in_control_alias_block=true
@@ -937,8 +942,8 @@ prebuild_ifupdown2() {
     if [ ! -f "/usr/local/bin/ifupdown2_installed.txt" ]; then
         wget ${cdn_success_url}https://raw.githubusercontent.com/oneclickvirt/pve/main/extra_scripts/install_ifupdown2.sh -O /usr/local/bin/install_ifupdown2.sh
         wget ${cdn_success_url}https://raw.githubusercontent.com/oneclickvirt/pve/main/extra_scripts/ifupdown2-install.service -O /etc/systemd/system/ifupdown2-install.service
-        chmod 777 /usr/local/bin/install_ifupdown2.sh
-        chmod 777 /etc/systemd/system/ifupdown2-install.service
+        chmod 755 /usr/local/bin/install_ifupdown2.sh
+        chmod 644 /etc/systemd/system/ifupdown2-install.service
         if [ -f "/usr/local/bin/install_ifupdown2.sh" ]; then
             # _green "This script will automatically reboot the system after 5 seconds, please wait a few minutes to log into SSH and execute this script again"
             # _green "本脚本将在5秒后自动重启系统，请待几分钟后退出SSH再次执行本脚本"
@@ -952,12 +957,21 @@ prebuild_ifupdown2() {
 }
 
 is_private_ipv4() {
-    local ip_address=$1
+    local ip_address=${1:-}
     local ip_parts
+    local part
     if [[ -z $ip_address ]]; then
-        echo "0" # 输入为空
+        return 0 # 输入为空
+    fi
+    if ! [[ "$ip_address" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]]; then
+        return 0 # 非法 IPv4 不应当作为公网地址使用
     fi
     IFS='.' read -r -a ip_parts <<<"$ip_address"
+    for part in "${ip_parts[@]}"; do
+        if [ "$part" -gt 255 ]; then
+            return 0
+        fi
+    done
     # 检查IP地址是否符合内网IP地址的范围
     # 去除 回环，RFC 1918，多播，RFC 6598 地址
     if [[ ${ip_parts[0]} -eq 10 ]] ||
@@ -965,9 +979,10 @@ is_private_ipv4() {
         [[ ${ip_parts[0]} -eq 192 && ${ip_parts[1]} -eq 168 ]] ||
         [[ ${ip_parts[0]} -eq 127 ]] ||
         [[ ${ip_parts[0]} -eq 0 ]] ||
+        [[ ${ip_parts[0]} -eq 169 && ${ip_parts[1]} -eq 254 ]] ||
         [[ ${ip_parts[0]} -eq 100 && ${ip_parts[1]} -ge 64 && ${ip_parts[1]} -le 127 ]] ||
         [[ ${ip_parts[0]} -ge 224 ]]; then
-        echo "0" # 是内网IP地址
+        return 0 # 是内网IP地址
     else
         return 1 # 不是内网IP地址
     fi
@@ -1171,8 +1186,8 @@ setup_dns_check_service() {
     if [ ! -f "/usr/local/bin/check-dns.sh" ]; then
         wget ${cdn_success_url}https://raw.githubusercontent.com/oneclickvirt/pve/main/extra_scripts/check-dns.sh -O /usr/local/bin/check-dns.sh
         wget ${cdn_success_url}https://raw.githubusercontent.com/oneclickvirt/pve/main/extra_scripts/check-dns.service -O /etc/systemd/system/check-dns.service
-        chmod +x /usr/local/bin/check-dns.sh
-        chmod +x /etc/systemd/system/check-dns.service
+        chmod 755 /usr/local/bin/check-dns.sh
+        chmod 644 /etc/systemd/system/check-dns.service
         systemctl daemon-reload
         systemctl enable check-dns.service
         systemctl start check-dns.service
@@ -1214,11 +1229,11 @@ fix_apt_issues1() {
 switch_mirrors() {
     if [[ -z "${CN}" || "${CN}" != true ]]; then
         curl -lk https://raw.githubusercontent.com/SuperManito/LinuxMirrors/main/ChangeMirrors.sh -o ChangeMirrors.sh
-        chmod 777 ChangeMirrors.sh
+        chmod 755 ChangeMirrors.sh
         ./ChangeMirrors.sh --use-official-source --web-protocol http --intranet false --backup true --updata-software false --clean-cache false --ignore-backup-tips > /dev/null
     else
         curl -lk https://gitee.com/SuperManito/LinuxMirrors/raw/main/ChangeMirrors.sh -o ChangeMirrors.sh
-        chmod 777 ChangeMirrors.sh
+        chmod 755 ChangeMirrors.sh
         ./ChangeMirrors.sh --source mirrors.tuna.tsinghua.edu.cn --web-protocol http --intranet false --backup true --updata-software false --clean-cache false --ignore-backup-tips > /dev/null
     fi
     rm -rf ChangeMirrors.sh
@@ -1226,7 +1241,7 @@ switch_mirrors() {
     # 如果仍然报错，切换到阿里云镜像源
     if [ $? -ne 0 ]; then
         curl -lk https://gitee.com/SuperManito/LinuxMirrors/raw/main/ChangeMirrors.sh -o ChangeMirrors.sh
-        chmod 777 ChangeMirrors.sh
+        chmod 755 ChangeMirrors.sh
         ./ChangeMirrors.sh --source mirrors.aliyun.com --web-protocol http --intranet false --backup true --updata-software false --clean-cache false --ignore-backup-tips > /dev/null
         rm -rf ChangeMirrors.sh
         apt-get update -y
@@ -1352,8 +1367,8 @@ setup_interface_route_cache_cleaner() {
     if [ ! -f "/usr/local/bin/clear_interface_route_cache.sh" ]; then
         wget ${cdn_success_url}https://raw.githubusercontent.com/oneclickvirt/pve/main/extra_scripts/clear_interface_route_cache.sh -O /usr/local/bin/clear_interface_route_cache.sh
         wget ${cdn_success_url}https://raw.githubusercontent.com/oneclickvirt/pve/main/extra_scripts/clear_interface_route_cache.service -O /etc/systemd/system/clear_interface_route_cache.service
-        chmod +x /usr/local/bin/clear_interface_route_cache.sh
-        chmod +x /etc/systemd/system/clear_interface_route_cache.service
+        chmod 755 /usr/local/bin/clear_interface_route_cache.sh
+        chmod 644 /etc/systemd/system/clear_interface_route_cache.service
         systemctl daemon-reload
         systemctl enable clear_interface_route_cache.service
         _green "An anomaly was detected with the routing conflict, perform a reboot to reboot the machine to start the repaired daemon and try the installation again."
@@ -1928,12 +1943,23 @@ download_pve_key_with_fallback() {
     shift
     local key_url
     for key_url in "$@"; do
-        if wget -q "$key_url" -O "$keyfile"; then
+        rm -f "$keyfile"
+        if wget -q "$key_url" -O "$keyfile" && [ -s "$keyfile" ]; then
             chmod +r "$keyfile"
             return 0
         fi
     done
+    rm -f "$keyfile"
     return 1
+}
+
+ensure_pve_key() {
+    local keyfile="$1"
+    shift
+    if [ -s "$keyfile" ]; then
+        return 0
+    fi
+    download_pve_key_with_fallback "$keyfile" "$@" || true
 }
 
 add_pve_gpg_key() {
@@ -1942,42 +1968,42 @@ add_pve_gpg_key() {
     case $version in
     stretch)
         keyfile="/etc/apt/trusted.gpg.d/proxmox-ve-release-4.x.gpg"
-        [ ! -f "$keyfile" ] && download_pve_key_with_fallback "$keyfile" \
+        ensure_pve_key "$keyfile" \
             "http://download.proxmox.com/debian/proxmox-ve-release-4.x.gpg" \
             "http://archive.proxmox.com/debian/proxmox-ve-release-4.x.gpg"
         keyfile="/etc/apt/trusted.gpg.d/proxmox-ve-release-5.x.gpg"
-        [ ! -f "$keyfile" ] && download_pve_key_with_fallback "$keyfile" \
+        ensure_pve_key "$keyfile" \
             "http://download.proxmox.com/debian/proxmox-ve-release-5.x.gpg" \
             "http://archive.proxmox.com/debian/proxmox-ve-release-5.x.gpg"
         ;;
     buster)
         keyfile="/etc/apt/trusted.gpg.d/proxmox-ve-release-5.x.gpg"
-        [ ! -f "$keyfile" ] && download_pve_key_with_fallback "$keyfile" \
+        ensure_pve_key "$keyfile" \
             "http://download.proxmox.com/debian/proxmox-ve-release-5.x.gpg" \
             "http://archive.proxmox.com/debian/proxmox-ve-release-5.x.gpg"
         keyfile="/etc/apt/trusted.gpg.d/proxmox-ve-release-6.x.gpg"
-        [ ! -f "$keyfile" ] && download_pve_key_with_fallback "$keyfile" \
+        ensure_pve_key "$keyfile" \
             "http://download.proxmox.com/debian/proxmox-ve-release-6.x.gpg" \
             "http://archive.proxmox.com/debian/proxmox-ve-release-6.x.gpg"
         ;;
     bullseye)
         keyfile="/etc/apt/trusted.gpg.d/proxmox-release-bullseye.gpg"
-        [ ! -f "$keyfile" ] && wget -q http://download.proxmox.com/debian/proxmox-release-bullseye.gpg -O "$keyfile" && chmod +r "$keyfile"
+        ensure_pve_key "$keyfile" "http://download.proxmox.com/debian/proxmox-release-bullseye.gpg"
         ;;
     bookworm)
         keyfile="/etc/apt/trusted.gpg.d/proxmox-release-bookworm.gpg"
-        [ ! -f "$keyfile" ] && wget -q http://download.proxmox.com/debian/proxmox-release-bookworm.gpg -O "$keyfile" && chmod +r "$keyfile"
+        ensure_pve_key "$keyfile" "http://download.proxmox.com/debian/proxmox-release-bookworm.gpg"
         ;;
     trixie)
         keyfile="/etc/apt/trusted.gpg.d/proxmox-release-trixie.gpg"
-        [ ! -f "$keyfile" ] && wget -q https://enterprise.proxmox.com/debian/proxmox-archive-keyring-trixie.gpg -O "$keyfile" && chmod +r "$keyfile"
+        ensure_pve_key "$keyfile" "https://enterprise.proxmox.com/debian/proxmox-archive-keyring-trixie.gpg"
         ;;
     *)
         echo "Unsupported Debian version: $version"
         return 1
         ;;
     esac
-    if [ ! -f "$keyfile" ]; then
+    if [ ! -s "$keyfile" ]; then
         echo "Failed to download required Proxmox GPG key for $version"
         return 1
     fi
@@ -2012,16 +2038,14 @@ setup_x86_pve_repo() {
     if [[ "$version" == "trixie" ]]; then
         yes Y | apt modernize-sources
         local sources_file="/etc/apt/sources.list.d/proxmox-trixie.sources"
-        if [ ! -f "$sources_file" ]; then
-            cat >"$sources_file" <<EOF
+        cat >"$sources_file" <<EOF
 Types: deb
 URIs: $repo_url
 Suites: $version
-Components: pve-test
+Components: pve-no-subscription
 Signed-By: $keyfile
 EOF
-            echo "Proxmox $version source written to $sources_file"
-        fi
+        echo "Proxmox $version source written to $sources_file"
     else
         # 老系统直接写入 sources.list 无需转换
         if ! grep -q "^deb.*pve-no-subscription" /etc/apt/sources.list; then

@@ -8,21 +8,33 @@ on:
     - cron: '0 12 * * *'
   workflow_dispatch:
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build-and-upload:
     name: Build, Upload ndpresponder, and Push Docker Image
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     strategy:
+      fail-fast: false
       matrix:
         architecture: [amd64, arm64]
     steps:
       - name: Checkout ndpresponder repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           repository: oneclickvirt/ndpresponder
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
 
@@ -32,7 +44,7 @@ jobs:
           CGO_ENABLED=0 GOARCH=${{ matrix.architecture }} GOOS=linux go build -o build/ndpresponder .
 
       - name: Upload to GitHub Releases
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: build/ndpresponder
           tag_name: ${{ matrix.architecture == 'amd64' && 'ndpresponder_x86' || 'ndpresponder_aarch64' }}
@@ -45,7 +57,7 @@ jobs:
           docker build -t spiritlhl/ndpresponder_${arch_suffix}:latest .
 
       - name: Log in to Docker Hub
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}

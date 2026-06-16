@@ -19,10 +19,10 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-_red() { echo -e "\033[31m\033[01m$@\033[0m"; }
-_green() { echo -e "\033[32m\033[01m$@\033[0m"; }
-_yellow() { echo -e "\033[33m\033[01m$@\033[0m"; }
-_blue() { echo -e "\033[36m\033[01m$@\033[0m"; }
+_red() { echo -e "\033[31m\033[01m$*\033[0m"; }
+_green() { echo -e "\033[32m\033[01m$*\033[0m"; }
+_yellow() { echo -e "\033[33m\033[01m$*\033[0m"; }
+_blue() { echo -e "\033[36m\033[01m$*\033[0m"; }
 
 _text() {
     local zh="$1"
@@ -130,7 +130,7 @@ final_url="${cdn_success_url}${origin_url}"
 if [ ! -f "$target_path" ]; then
     _yellow "File not found: $target_path"
     _yellow "Downloading opencore.iso from: $([ -n "$cdn_success_url" ] && echo "$final_url" || echo "$origin_url")"
-    wget "$([ -n "$cdn_success_url" ] && echo "$final_url" || echo "$origin_url")" -O "$target_path" && chmod 777 "$target_path"
+    wget "$([ -n "$cdn_success_url" ] && echo "$final_url" || echo "$origin_url")" -O "$target_path" && chmod 644 "$target_path"
     _yellow "Download completed and permissions set."
 fi
 

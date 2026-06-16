@@ -5,10 +5,12 @@
 
 # cd /root
 
-_red() { echo -e "\033[31m\033[01m$@\033[0m"; }
-_green() { echo -e "\033[32m\033[01m$@\033[0m"; }
-_yellow() { echo -e "\033[33m\033[01m$@\033[0m"; }
-_blue() { echo -e "\033[36m\033[01m$@\033[0m"; }
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
+
+_red() { echo -e "\033[31m\033[01m$*\033[0m"; }
+_green() { echo -e "\033[32m\033[01m$*\033[0m"; }
+_yellow() { echo -e "\033[33m\033[01m$*\033[0m"; }
+_blue() { echo -e "\033[36m\033[01m$*\033[0m"; }
 is_noninteractive() {
     case "${noninteractive:-}" in
     true | TRUE | True | 1 | yes | YES | Yes | y | Y)
@@ -96,7 +98,11 @@ cdn_urls=("https://cdn0.spiritlhl.top/" "http://cdn3.spiritlhl.net/" "http://cdn
 check_cdn_file
 
 pre_check() {
-    home_dir=$(eval echo "~$(whoami)")
+    home_dir=""
+    if command -v getent >/dev/null 2>&1; then
+        home_dir=$(getent passwd "$(id -un)" | cut -d: -f6)
+    fi
+    home_dir="${home_dir:-${HOME:-}}"
     if [ "$home_dir" != "/root" ]; then
         _red "The script will exit if the current path is not /root."
         _red "当前路径不是/root，脚本将退出。"
@@ -106,7 +112,12 @@ pre_check() {
         apt-get install dos2unix -y
     fi
     if [ ! -f "buildvm.sh" ]; then
-        curl -L ${cdn_success_url}https://raw.githubusercontent.com/oneclickvirt/pve/main/scripts/buildvm.sh -o buildvm.sh && chmod +x buildvm.sh
+        if [ -f "${script_dir}/buildvm.sh" ]; then
+            cp -f "${script_dir}/buildvm.sh" buildvm.sh
+        else
+            curl -L "${cdn_success_url}https://raw.githubusercontent.com/oneclickvirt/pve/main/scripts/buildvm.sh" -o buildvm.sh
+        fi
+        chmod 755 buildvm.sh
         dos2unix buildvm.sh
     fi
 }
@@ -230,7 +241,7 @@ build_new_vms() {
                 system="debian11"
             fi
             systems=("debian10" "debian11" "debian9" "ubuntu18" "ubuntu20" "ubuntu22" "archlinux" "centos9-stream" "centos8-stream" "almalinux8" "almalinux9" "fedora33" "fedora34" "opensuse-leap-15")
-            for sys in ${systems[@]}; do
+            for sys in "${systems[@]}"; do
                 if [[ "$system" == "$sys" ]]; then
                     sys_status="true"
                     break
@@ -256,7 +267,7 @@ build_new_vms() {
                 system="ubuntu22"
             fi
             systems=("ubuntu14" "ubuntu16" "ubuntu18" "ubuntu20" "ubuntu22")
-            for sys in ${systems[@]}; do
+            for sys in "${systems[@]}"; do
                 if [[ "$system" == "$sys" ]]; then
                     sys_status="true"
                     break
@@ -282,7 +293,7 @@ build_new_vms() {
                 system="debian13"
             fi
             systems=("debian12" "debian13")
-            for sys in ${systems[@]}; do
+            for sys in "${systems[@]}"; do
                 if [[ "$system" == "$sys" ]]; then
                     sys_status="true"
                     break
@@ -321,14 +332,16 @@ build_new_vms() {
     for ((i = 1; i <= $new_nums; i++)); do
         vm_num=$(($vm_num + 1))
         user=$(cat /dev/urandom | tr -dc 'a-zA-Z' | fold -w 4 | head -n 1)
-        ori=$(date | md5sum)
-        password=${ori:2:9}
+        password=$(LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom | head -c 12)
+        if [ -z "$password" ]; then
+            password=$(date +%s%N | md5sum | cut -c 3-14)
+        fi
         ssh_port=$(($web2_port + 1))
         web1_port=$(($web2_port + 2))
         web2_port=$(($web1_port + 1))
         port_start=$(($port_end + 1))
         port_end=$(($port_start + 25))
-        ./buildvm.sh $vm_num $user $password $cpu_nums $memory_nums $disk_nums $ssh_port $web1_port $web2_port $port_start $port_end $system $storage $independent_ipv6
+        ./buildvm.sh "$vm_num" "$user" "$password" "$cpu_nums" "$memory_nums" "$disk_nums" "$ssh_port" "$web1_port" "$web2_port" "$port_start" "$port_end" "$system" "$storage" "$independent_ipv6"
         cat "vm$vm_num" >>vmlog
         rm -rf "vm$vm_num"
         if [ "$i" = "$new_nums" ]; then

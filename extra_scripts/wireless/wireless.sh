@@ -17,6 +17,22 @@ is_noninteractive() {
     esac
     return 1
 }
+detect_wifi_interface() {
+    ip -o link show | awk -F': ' '
+        {
+            iface = $2
+            sub(/@.*/, "", iface)
+            if (iface ~ /^(wlp|wlan|wlx|wl)[[:alnum:]_.-]*$/) {
+                print iface
+                exit
+            }
+        }
+    '
+}
+validate_interface_name() {
+    local iface="$1"
+    [[ "$iface" =~ ^[A-Za-z0-9_.-]+$ ]]
+}
 cd /mnt/wireless || exit 1
 shopt -s nullglob
 deb_files=(*.deb)
@@ -41,11 +57,20 @@ if [ -n "$FAILED_PACKAGES" ]; then
     echo "Failed to install packages:$FAILED_PACKAGES"
 fi
 rfkill unblock wifi
-WIFI_INTERFACE=$(ip a | grep -o "wlp[^:]*" | head -1)
+WIFI_INTERFACE="${WIFI_INTERFACE:-$(detect_wifi_interface)}"
+WIFI_INTERFACE="${WIFI_INTERFACE%%@*}"
 if [ -z "$WIFI_INTERFACE" ]; then
     echo "Could not detect WiFi interface"
+    echo "Set WIFI_INTERFACE manually, for example: export WIFI_INTERFACE=wlan0"
+    echo "无法检测无线网卡接口，可手动设置 WIFI_INTERFACE，例如：export WIFI_INTERFACE=wlan0"
     exit 1
 fi
+if ! validate_interface_name "$WIFI_INTERFACE"; then
+    echo "Invalid WiFi interface name: $WIFI_INTERFACE"
+    echo "无线网卡接口名无效：$WIFI_INTERFACE"
+    exit 1
+fi
+WIFI_INTERFACE_REGEX=$(printf '%s' "$WIFI_INTERFACE" | sed 's/[][\\.^$*+?{}()|/]/\\&/g')
 echo "Detected WiFi interface: $WIFI_INTERFACE"
 if is_noninteractive; then
     SSID="${WIFI_SSID:-}"
@@ -70,12 +95,12 @@ if is_noninteractive; then
     fi
 else
     while true; do
-        read -p "Enter WiFi SSID: " SSID
-        read -p "Enter WiFi Password: " PASSWORD
+        read -r -p "Enter WiFi SSID: " SSID
+        read -r -p "Enter WiFi Password: " PASSWORD
         echo "WiFi Configuration:"
         echo "SSID: $SSID"
         echo "Password: ********"
-        read -p "Is this correct? (y/n): " CONFIRM
+        read -r -p "Is this correct? (y/n): " CONFIRM
         if [[ "$CONFIRM" =~ ^[Yy]$ ]]; then
             SCAN_RESULT=$(iwlist "$WIFI_INTERFACE" scan 2>/dev/null | grep -iF "ESSID:\"$SSID\"")
             if [ -n "$SCAN_RESULT" ]; then
@@ -115,11 +140,11 @@ Alias=dbus-fi.w1.wpa_supplicant1.service
 EOF
     systemctl daemon-reload
 fi
-if ! grep -q "^auto $WIFI_INTERFACE$" /etc/network/interfaces; then
-    if grep -q "^iface $WIFI_INTERFACE inet \(auto\|static\|manual\)" /etc/network/interfaces; then
+if ! grep -Fxq "auto $WIFI_INTERFACE" /etc/network/interfaces; then
+    if grep -q "^iface $WIFI_INTERFACE_REGEX inet \(auto\|static\|manual\)" /etc/network/interfaces; then
         echo "Found existing iface configuration for $WIFI_INTERFACE, commenting it out..."
         cp /etc/network/interfaces /etc/network/interfaces.backup
-        sed -i "/^iface $WIFI_INTERFACE inet \(auto\|static\|manual\)/,/^$/s/^/#/" /etc/network/interfaces
+        sed -i "/^iface $WIFI_INTERFACE_REGEX inet \(auto\|static\|manual\)/,/^$/s/^/#/" /etc/network/interfaces
     fi
     if grep -q '^iface vmbr0 inet static' /etc/network/interfaces && \
        ! grep -A 5 '^iface vmbr0 inet static' /etc/network/interfaces | grep -q '^\s*metric\s\+100'; then
@@ -150,9 +175,9 @@ EOF
 else
     echo "Network interface $WIFI_INTERFACE already configured"
 fi
-ifup $WIFI_INTERFACE
+ifup "$WIFI_INTERFACE"
 sleep 5
-ip link set $WIFI_INTERFACE up
+ip link set "$WIFI_INTERFACE" up
 sleep 5
 systemctl restart networking
 sleep 5

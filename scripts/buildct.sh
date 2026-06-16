@@ -8,9 +8,27 @@
 
 cd /root >/dev/null 2>&1
 
+generate_password() {
+    local value
+    value=$(LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom | head -c 12)
+    if [ -z "$value" ]; then
+        value="$(date +%s%N | md5sum | cut -c 3-14)"
+    fi
+    printf '%s' "$value"
+}
+
+validate_storage_name() {
+    local value="$1"
+    if [[ -z "$value" || ! "$value" =~ ^[A-Za-z0-9_.-]+$ ]]; then
+        echo "Invalid storage name: $value"
+        echo "存储盘名称无效：$value"
+        exit 1
+    fi
+}
+
 init() {
     CTID="${1:-102}"
-    password="${2:-123456}"
+    password="${2:-$(generate_password)}"
     core="${3:-1}"
     memory="${4:-512}"
     disk="${5:-5}"
@@ -22,6 +40,7 @@ init() {
     system_ori="${11:-debian11}"
     storage="${12:-local}"
     independent_ipv6="${13:-N}"
+    validate_storage_name "$storage"
     independent_ipv6=$(echo "$independent_ipv6" | tr '[:upper:]' '[:lower:]')
     rm -rf "ct${CTID}"
     en_system=$(echo "$system_ori" | sed 's/[0-9]*//g; s/\.$//')
@@ -180,7 +199,7 @@ configure_networking() {
 
 change_mirrors() {
     pct exec $CTID -- curl -lk https://gitee.com/SuperManito/LinuxMirrors/raw/main/ChangeMirrors.sh -o ChangeMirrors.sh
-    pct exec $CTID -- chmod 777 ChangeMirrors.sh
+    pct exec $CTID -- chmod 755 ChangeMirrors.sh
     pct exec $CTID -- ./ChangeMirrors.sh --source mirrors.tuna.tsinghua.edu.cn --web-protocol http --intranet false --close-firewall true --backup true --updata-software false --clean-cache false --ignore-backup-tips > /dev/null
     pct exec $CTID -- rm -rf ChangeMirrors.sh
 }
@@ -204,12 +223,12 @@ setup_ssh() {
     local system_type=$1
     if echo "$system_type" | grep -qiE "alpine|archlinux|gentoo|openwrt" >/dev/null 2>&1; then
         pct exec $CTID -- curl -L ${cdn_success_url}https://raw.githubusercontent.com/oneclickvirt/pve/main/scripts/ssh_sh.sh -o ssh_sh.sh
-        pct exec $CTID -- chmod 777 ssh_sh.sh
+        pct exec $CTID -- chmod 755 ssh_sh.sh
         pct exec $CTID -- dos2unix ssh_sh.sh
         pct exec $CTID -- bash ssh_sh.sh
     else
         pct exec $CTID -- curl -L ${cdn_success_url}https://raw.githubusercontent.com/oneclickvirt/pve/main/scripts/ssh_bash.sh -o ssh_bash.sh
-        pct exec $CTID -- chmod 777 ssh_bash.sh
+        pct exec $CTID -- chmod 755 ssh_bash.sh
         pct exec $CTID -- dos2unix ssh_bash.sh
         pct exec $CTID -- bash ssh_bash.sh
     fi
@@ -260,7 +279,7 @@ configure_os() {
         elif echo "$system" | grep -qiE "alpine|archlinux" >/dev/null 2>&1; then
             if [[ "${CN}" == true ]]; then
                 pct exec $CTID -- wget https://gitee.com/SuperManito/LinuxMirrors/raw/main/ChangeMirrors.sh
-                pct exec $CTID -- chmod 777 ChangeMirrors.sh
+                pct exec $CTID -- chmod 755 ChangeMirrors.sh
                 pct exec $CTID -- ./ChangeMirrors.sh --source mirrors.tuna.tsinghua.edu.cn --web-protocol http --intranet false --close-firewall true --backup true --updata-software false --clean-cache false --ignore-backup-tips > /dev/null
                 pct exec $CTID -- rm -rf ChangeMirrors.sh
             fi

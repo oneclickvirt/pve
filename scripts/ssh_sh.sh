@@ -70,7 +70,7 @@ elif [ "$(cat /etc/os-release | grep -E '^ID=' | cut -d '=' -f 2 | tr -d '"')" =
     /etc/init.d/sshd restart
 elif [ "$(grep . /etc/issue 2>/dev/null | cut -d \\ -f1 | sed '/^[ ]*$/d')" =~ *"Arch"* ]; then
     curl -slk https://raw.githubusercontent.com/SuperManito/LinuxMirrors/main/ChangeMirrors.sh -o ChangeMirrors.sh
-    chmod 777 ChangeMirrors.sh
+    chmod 755 ChangeMirrors.sh
     ./ChangeMirrors.sh --use-official-source --web-protocol http --intranet false --close-firewall true --backup true --updata-software false --clean-cache false --ignore-backup-tips > /dev/null
     rm -rf /etc/pacman.d/gnupg/
     pacman-key --init

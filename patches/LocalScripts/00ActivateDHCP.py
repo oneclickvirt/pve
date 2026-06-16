@@ -5,9 +5,8 @@ from cloudbaseinit.utils import network
 
 
 def load_json_variable(file_path,variable):
-    file = open(file_path)
-    data = json.load(file)
-    file.close()
+    with open(file_path) as file:
+        data = json.load(file)
     return data.get(variable)
 
 def find_drive(file_path):
@@ -29,17 +28,19 @@ def activate_dhcp(name, family):
 
 
 # variables
-meta_data_path = find_drive(":\OPENSTACK\LATEST\META_DATA.json")
+meta_data_path = find_drive(r":\OPENSTACK\LATEST\META_DATA.json")
 # 2 for ipv4 and 6 for ipv6
 family = 2
 # execute
-if meta_data_path != "False":
-    macs = load_json_variable(meta_data_path,"dhcp")
+if meta_data_path:
+    macs = load_json_variable(meta_data_path,"dhcp") or []
     
     for mac in macs:
         name = get_name_by_mac(mac)
-        activate_dhcp(name, family)
-    sys.exit(1001)
+        if name:
+            activate_dhcp(name, family)
+    if macs:
+        sys.exit(1001)
+    sys.exit(0)
 else:
     sys.exit(0)
-

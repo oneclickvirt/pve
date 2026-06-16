@@ -14,10 +14,10 @@
 
 ########## 输出颜色函数
 
-_red() { echo -e "\033[31m\033[01m$@\033[0m"; }
-_green() { echo -e "\033[32m\033[01m$@\033[0m"; }
-_yellow() { echo -e "\033[33m\033[01m$@\033[0m"; }
-_blue() { echo -e "\033[36m\033[01m$@\033[0m"; }
+_red() { echo -e "\033[31m\033[01m$*\033[0m"; }
+_green() { echo -e "\033[32m\033[01m$*\033[0m"; }
+_yellow() { echo -e "\033[33m\033[01m$*\033[0m"; }
+_blue() { echo -e "\033[36m\033[01m$*\033[0m"; }
 is_noninteractive() {
     case "${noninteractive:-}" in
     true | TRUE | True | 1 | yes | YES | Yes | y | Y)
@@ -466,9 +466,14 @@ for f in "${misc_files[@]}"; do
     [ -f "$f" ] && rm -f "$f" && _green "Removed backup $f."
 done
 
-sudo dpkg -l | awk '/^rc/ {print $2}' | xargs sudo dpkg --purge
-sudo dpkg --configure -a
-sudo update-initramfs -u -k all
+rc_packages=$(dpkg -l | awk '/^rc/ {print $2}')
+if [ -n "$rc_packages" ]; then
+    dpkg --purge $rc_packages
+fi
+dpkg --configure -a
+if command -v update-initramfs >/dev/null 2>&1; then
+    update-initramfs -u -k all
+fi
 
 ########## 恢复 gai.conf（IPv4优先级调整）
 

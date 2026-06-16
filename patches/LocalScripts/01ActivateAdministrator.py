@@ -9,9 +9,8 @@ def find_drive(file_path):
     return False
 
 def load_json_file(file_path,variable):
-    file = open(file_path)
-    data = json.load(file)
-    file.close()
+    with open(file_path) as file:
+        data = json.load(file)
     return data.get(variable)
 
 def get_administrator_status():
@@ -43,12 +42,12 @@ def get_data(variable,path):
 
 
 # variables
-meta_data_path = find_drive(":\OPENSTACK\LATEST\META_DATA.json")
+meta_data_path = find_drive(r":\OPENSTACK\LATEST\META_DATA.json")
 admin_name = get_administrator_name()
 
 # execute
-if (meta_data_path) and ("admin_username" in load_json_file(meta_data_path,"meta")):
-    meta_data = load_json_file(meta_data_path,"meta")
+meta_data = load_json_file(meta_data_path,"meta") if meta_data_path else {}
+if isinstance(meta_data, dict) and meta_data.get("admin_username"):
     meta_username = meta_data["admin_username"]
     print("Meta_Data admin_username is :" + meta_username)
 else:

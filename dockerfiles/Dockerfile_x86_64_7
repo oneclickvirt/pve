@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1.7
 FROM debian:11
 
 # Set official Debian sources
@@ -40,8 +41,14 @@ RUN apt-get update && \
 ##install again
 RUN dpkg -i /tmp/*.deb || echo ok
 
-#set passwd for root
-RUN echo "root:root" | chpasswd
+# Set a root password only when explicitly provided as a BuildKit secret.
+RUN --mount=type=secret,id=root_password \
+    if [ -s /run/secrets/root_password ]; then \
+        root_password="$(cat /run/secrets/root_password)" && \
+        echo "root:${root_password}" | chpasswd; \
+    else \
+        passwd -l root; \
+    fi
 
 #clean
 RUN rm -rf /var/lib/apt/lists/* /*.deb

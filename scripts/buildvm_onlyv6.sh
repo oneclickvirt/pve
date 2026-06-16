@@ -8,15 +8,34 @@
 
 cd /root >/dev/null 2>&1
 
+generate_password() {
+    local value
+    value=$(LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom | head -c 12)
+    if [ -z "$value" ]; then
+        value="$(date +%s%N | md5sum | cut -c 3-14)"
+    fi
+    printf '%s' "$value"
+}
+
+validate_storage_name() {
+    local value="$1"
+    if [[ -z "$value" || ! "$value" =~ ^[A-Za-z0-9_.-]+$ ]]; then
+        echo "Invalid storage name: $value"
+        echo "存储盘名称无效：$value"
+        exit 1
+    fi
+}
+
 init_params() {
     vm_num="${1:-152}"
     user="${2:-test}"
-    password="${3:-123456}"
+    password="${3:-$(generate_password)}"
     core="${4:-1}"
     memory="${5:-512}"
     disk="${6:-5}"
     system="${7:-ubuntu22}"
     storage="${8:-local}"
+    validate_storage_name "$storage"
     rm -rf "vm$vm_num"
     if [ ! -d "qcow" ]; then
         mkdir qcow
@@ -151,11 +170,11 @@ create_vm() {
 }
 
 configure_vm() {
-    volid=$(pvesm list ${storage} | awk -v vmid="${vm_num}" '$5 == vmid && $1 ~ /\.raw$/ {print $1}' | tail -n 1)
+    volid=$(pvesm list "$storage" | awk -v vmid="${vm_num}" '$5 == vmid && $1 ~ /\.raw$/ {print $1}' | tail -n 1)
     if [ -z "$volid" ]; then
         echo "No .raw file found for VM ID '${vm_num}' in storage '${storage}'. Searching for other formats..."
         echo "在存储 '${storage}' 中未找到 VM ID '${vm_num}' 的 .raw 文件，正在尝试其他格式..."
-        volid=$(pvesm list ${storage} | awk -v vmid="${vm_num}" '$5 == vmid {print $1}' | tail -n 1)
+        volid=$(pvesm list "$storage" | awk -v vmid="${vm_num}" '$5 == vmid {print $1}' | tail -n 1)
     fi
     if [ -z "$volid" ]; then
         echo "Error: No file found for VM ID '${vm_num}' in storage '${storage}'"
