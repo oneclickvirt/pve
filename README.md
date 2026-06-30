@@ -13,14 +13,6 @@
 - 安装脚本在检测到主网口后会显示候选网口、IPv4、网关和 MAC，可输入序号选择 PVE 主桥接网口；直接回车仍使用原自动检测逻辑
 - 无交互安装支持通过 `PVE_MAIN_INTERFACE=<iface>` 预设主桥接网口
 
-2026.06.04
-
-- 修复删除脚本对无 `ip=` 配置、仅 IPv6 或 cloud-init 缺失 IP 的 VM/CT 识别问题
-- 收紧按 IPv4 清理 NAT 规则时的匹配方式，降低误删相近地址规则的风险
-- 无线无人值守配置支持 `WIFI_INTERFACE` 覆盖、接口名校验并扩展常见无线接口自动识别
-- 修复 Debian 13/Trixie x86 PVE 源组件名，避免默认使用测试仓库，并加固 PVE GPG key 下载校验
-- 加固 NAT 网络初始化，重复执行时不再追加重复的基础 masquerade 规则
-
 [更新日志](CHANGELOG.md)
 
 ## 说明文档
