@@ -14,6 +14,7 @@
 # USE_PRIVATE_IP=false - 检测到私有 IPv4 时自动通过 API 获取公网 IP
 # USE_MAX_IPV6_SUBNET=true  - SLAAC 场景下使用最大 IPv6 子网范围
 # USE_MAX_IPV6_SUBNET=false - SLAAC 场景下不使用最大 IPv6 子网范围
+# PVE_MAIN_INTERFACE=<iface> - 直接指定 PVE 主桥接物理网口，跳过网口选择确认
 # PVE_HOSTNAME=<name>  - 直接设定 PVE 主机名，跳过交互输入（只能包含英文字母和数字）
 # PVE_INSTALL_CEPH=true - 安装核心包时允许安装推荐依赖（可能包含 ceph 相关组件）
 #                        默认不设置时将使用最小化安装（--no-install-recommends）
@@ -1491,16 +1492,237 @@ EOF
     ipv4_subnet=$(cat /usr/local/bin/pve_ipv4_subnet)
 }
 
+validate_interface_name() {
+    local iface="$1"
+    [[ -n "$iface" && "$iface" =~ ^[A-Za-z0-9_.-]+$ && -d "/sys/class/net/$iface" ]]
+}
+
+get_interface_mac() {
+    local iface="$1"
+    if [ -f "/sys/class/net/$iface/address" ]; then
+        cat "/sys/class/net/$iface/address"
+    else
+        ip -o link show dev "$iface" 2>/dev/null | awk '{print $17}'
+    fi
+}
+
+get_interface_state() {
+    local iface="$1"
+    if [ -f "/sys/class/net/$iface/operstate" ]; then
+        cat "/sys/class/net/$iface/operstate"
+    else
+        ip -o link show dev "$iface" 2>/dev/null | awk -F'[<>]' '{print $2}' | cut -d, -f1
+    fi
+}
+
+get_interface_ipv4_addresses() {
+    local iface="$1"
+    ip -o -4 addr show dev "$iface" scope global 2>/dev/null | awk '{print $4}' | paste -sd "," -
+}
+
+get_interface_primary_ipv4() {
+    local iface="$1"
+    ip -o -4 addr show dev "$iface" scope global 2>/dev/null | awk '{print $4}' | head -n 1
+}
+
+get_interface_gateway() {
+    local iface="$1"
+    ip -4 route show default dev "$iface" 2>/dev/null | awk '/default/ {print $3; exit}'
+}
+
+interface_has_default_route() {
+    local iface="$1"
+    ip -4 route show default 2>/dev/null | awk -v iface="$iface" '{
+        for (i = 1; i <= NF; i++) {
+            if ($i == "dev" && $(i + 1) == iface) {
+                found = 1
+            }
+        }
+    } END { exit found ? 0 : 1 }'
+}
+
+add_interface_candidate() {
+    local iface="$1"
+    local existing
+    iface="${iface%%@*}"
+    if ! validate_interface_name "$iface" || [ "$iface" = "lo" ]; then
+        return
+    fi
+    for existing in "${interface_candidates[@]}"; do
+        if [ "$existing" = "$iface" ]; then
+            return
+        fi
+    done
+    interface_candidates+=("$iface")
+}
+
+build_interface_candidates() {
+    local iface
+    interface_candidates=()
+    add_interface_candidate "$interface"
+    add_interface_candidate "$interface_1"
+    add_interface_candidate "$interface_2"
+    while IFS= read -r iface; do
+        add_interface_candidate "$iface"
+    done < <(lshw -C network 2>/dev/null | awk '/logical name:/{print $3}')
+    while IFS= read -r iface; do
+        add_interface_candidate "$iface"
+    done < <(ip -o link show 2>/dev/null | awk -F': ' '{print $2}' | cut -d@ -f1)
+}
+
+sync_selected_network_info() {
+    local selected_ipv4=""
+    local selected_ipv4_plain=""
+    local selected_gateway=""
+    local selected_subnet=""
+
+    echo "$interface" >/usr/local/bin/pve_main_interface
+
+    mac_address=$(get_interface_mac "$interface")
+    if [ -n "$mac_address" ]; then
+        echo "$mac_address" >/usr/local/bin/pve_mac_address
+    fi
+
+    selected_ipv4=$(get_interface_primary_ipv4 "$interface")
+    if [ -n "$selected_ipv4" ]; then
+        ipv4_address="$selected_ipv4"
+        echo "$ipv4_address" >/usr/local/bin/pve_ipv4_address
+        selected_ipv4_plain="${selected_ipv4%%/*}"
+        if ! is_private_ipv4 "$selected_ipv4_plain"; then
+            main_ipv4="$selected_ipv4_plain"
+            selected_ip_mode="public"
+            echo "$main_ipv4" >/usr/local/bin/pve_main_ipv4
+            echo "$selected_ip_mode" >/usr/local/bin/pve_main_ipv4_mode
+        elif [ "${selected_ip_mode:-private}" = "private" ] || [ -z "$main_ipv4" ] || is_private_ipv4 "$main_ipv4"; then
+            main_ipv4="$selected_ipv4_plain"
+            selected_ip_mode="private"
+            echo "$main_ipv4" >/usr/local/bin/pve_main_ipv4
+            echo "$selected_ip_mode" >/usr/local/bin/pve_main_ipv4_mode
+        else
+            _yellow "Keeping public main PVE IP: ${main_ipv4}; bridge IPv4 uses ${ipv4_address}"
+            _yellow "保留公网 PVE 主 IP：${main_ipv4}；桥接 IPv4 使用 ${ipv4_address}"
+        fi
+    else
+        _yellow "Selected interface ${interface} has no global IPv4 address, keeping detected IPv4: ${ipv4_address}"
+        _yellow "所选网口 ${interface} 未检测到全局 IPv4，保留已检测 IPv4：${ipv4_address}"
+    fi
+
+    selected_gateway=$(get_interface_gateway "$interface")
+    if [ -n "$selected_gateway" ]; then
+        ipv4_gateway="$selected_gateway"
+        echo "$ipv4_gateway" >/usr/local/bin/pve_ipv4_gateway
+    else
+        _yellow "Selected interface ${interface} has no IPv4 default gateway, keeping detected gateway: ${ipv4_gateway}"
+        _yellow "所选网口 ${interface} 未检测到 IPv4 默认网关，保留已检测网关：${ipv4_gateway}"
+    fi
+
+    if [ -n "$ipv4_address" ]; then
+        selected_subnet=$(ipcalc -n "$ipv4_address" 2>/dev/null | grep -oP 'Netmask:\s+\K.*' | awk '{print $1}')
+        if [ -n "$selected_subnet" ]; then
+            ipv4_subnet="$selected_subnet"
+            echo "$ipv4_subnet" >/usr/local/bin/pve_ipv4_subnet
+        fi
+    fi
+}
+
+confirm_main_network_interface() {
+    local saved_interface=""
+    local selected_interface=""
+    local selected_index=""
+    local selection_source="auto"
+    local iface
+    local idx
+    local state
+    local mac
+    local iface_ipv4
+    local iface_gateway
+    local default_flag
+
+    if [[ -n "${PVE_MAIN_INTERFACE}" ]]; then
+        if validate_interface_name "$PVE_MAIN_INTERFACE"; then
+            interface="$PVE_MAIN_INTERFACE"
+            selection_source="env"
+            _yellow "PVE_MAIN_INTERFACE=${PVE_MAIN_INTERFACE}, using this interface as main bridge port"
+            _yellow "PVE_MAIN_INTERFACE=${PVE_MAIN_INTERFACE}，使用该网口作为主桥接网口"
+        else
+            _red "PVE_MAIN_INTERFACE=${PVE_MAIN_INTERFACE} is not a valid local network interface"
+            _red "PVE_MAIN_INTERFACE=${PVE_MAIN_INTERFACE} 不是当前系统有效网口"
+            exit 1
+        fi
+    elif [ -s /usr/local/bin/pve_main_interface ]; then
+        saved_interface=$(sed -n '1p' /usr/local/bin/pve_main_interface)
+        if validate_interface_name "$saved_interface"; then
+            interface="$saved_interface"
+            selection_source="saved"
+        fi
+    fi
+
+    build_interface_candidates
+
+    if [ "${selection_source}" != "env" ] && ! is_noninteractive; then
+        _green "Current detected PVE network configuration:"
+        _green "当前检测到的 PVE 网络配置："
+        _yellow "  main interface / 主网口: ${interface}"
+        _yellow "  bridge IPv4 / 桥接 IPv4: ${ipv4_address:-<empty>}"
+        _yellow "  IPv4 gateway / IPv4 网关: ${ipv4_gateway:-<empty>}"
+        _yellow "  main PVE IP / PVE 主 IP: ${main_ipv4:-<empty>} (${selected_ip_mode:-unknown})"
+        _green "Available network interfaces:"
+        _green "可选网口："
+
+        idx=1
+        for iface in "${interface_candidates[@]}"; do
+            state=$(get_interface_state "$iface")
+            mac=$(get_interface_mac "$iface")
+            iface_ipv4=$(get_interface_ipv4_addresses "$iface")
+            iface_gateway=$(get_interface_gateway "$iface")
+            default_flag=""
+            if interface_has_default_route "$iface"; then
+                default_flag=" default-route"
+            fi
+            _yellow "  ${idx}) ${iface} state=${state:-unknown} mac=${mac:-unknown} ipv4=${iface_ipv4:-none} gateway=${iface_gateway:-none}${default_flag}"
+            idx=$((idx + 1))
+        done
+
+        reading "Select the main PVE bridge interface by number (Enter keeps current: ${interface}): " selected_index ""
+        echo ""
+        if [ -n "$selected_index" ]; then
+            if [[ "$selected_index" =~ ^[0-9]+$ ]] && [ "$selected_index" -ge 1 ] && [ "$selected_index" -le "${#interface_candidates[@]}" ]; then
+                selected_interface="${interface_candidates[$((selected_index - 1))]}"
+                interface="$selected_interface"
+                selection_source="interactive"
+                _green "Selected main network interface: ${interface}"
+                _green "已选择主网口：${interface}"
+            else
+                _yellow "Invalid selection, keeping current detected interface: ${interface}"
+                _yellow "输入序号无效，保留当前检测网口：${interface}"
+            fi
+        fi
+    elif is_noninteractive && [ "${selection_source}" = "auto" ]; then
+        _yellow "noninteractive=true, using detected main network interface: ${interface}"
+        _yellow "noninteractive=true，使用自动检测主网口：${interface}"
+    fi
+
+    if [ "${selection_source}" != "auto" ]; then
+        sync_selected_network_info
+    fi
+
+    _green "Final PVE main interface: ${interface}"
+    _green "最终 PVE 主网口：${interface}"
+    _green "Final bridge IPv4/gateway: ${ipv4_address:-<empty>} / ${ipv4_gateway:-<empty>}"
+    _green "最终桥接 IPv4/网关：${ipv4_address:-<empty>} / ${ipv4_gateway:-<empty>}"
+}
+
 # 检测网络接口和MAC地址
 detect_network_interfaces() {
     # 检测物理接口
     interface_1=$(lshw -C network | awk '/logical name:/{print $3}' | sed -n '1p')
     interface_2=$(lshw -C network | awk '/logical name:/{print $3}' | sed -n '2p')
     check_interface
+    confirm_main_network_interface
 
     # 收集MAC地址
     if [ ! -f /usr/local/bin/pve_mac_address ] || [ ! -s /usr/local/bin/pve_mac_address ] || [ "$(sed -e '/^[[:space:]]*$/d' /usr/local/bin/pve_mac_address)" = "" ]; then
-        mac_address=$(ip -o link show dev ${interface} | awk '{print $17}')
+        mac_address=$(get_interface_mac "$interface")
         echo "$mac_address" >/usr/local/bin/pve_mac_address
     fi
     mac_address=$(cat /usr/local/bin/pve_mac_address)

@@ -8,6 +8,11 @@
 
 ## 更新
 
+2026.06.30
+
+- 安装脚本在检测到主网口后会显示候选网口、IPv4、网关和 MAC，可输入序号选择 PVE 主桥接网口；直接回车仍使用原自动检测逻辑
+- 无交互安装支持通过 `PVE_MAIN_INTERFACE=<iface>` 预设主桥接网口
+
 2026.06.04
 
 - 修复删除脚本对无 `ip=` 配置、仅 IPv6 或 cloud-init 缺失 IP 的 VM/CT 识别问题
@@ -38,7 +43,7 @@
 export noninteractive=true
 ```
 
-安装和批量创建流程仍可通过环境变量覆盖默认值，例如 `CN=true`、`PVE_HOSTNAME=mypve`、`USE_PRIVATE_IP=true`、`USE_MAX_IPV6_SUBNET=false`、`PVE_CREATE_COUNT=1`、`PVE_CREATE_CPU=1`、`PVE_CREATE_MEMORY=512`、`PVE_CREATE_DISK=5`、`PVE_CREATE_STORAGE=local`、`PVE_CREATE_SYSTEM=debian11`、`PVE_CREATE_IPV6=n`。
+安装和批量创建流程仍可通过环境变量覆盖默认值，例如 `CN=true`、`PVE_MAIN_INTERFACE=enp3s0`、`PVE_HOSTNAME=mypve`、`USE_PRIVATE_IP=true`、`USE_MAX_IPV6_SUBNET=false`、`PVE_CREATE_COUNT=1`、`PVE_CREATE_CPU=1`、`PVE_CREATE_MEMORY=512`、`PVE_CREATE_DISK=5`、`PVE_CREATE_STORAGE=local`、`PVE_CREATE_SYSTEM=debian11`、`PVE_CREATE_IPV6=n`。
 
 卸载脚本中 `noninteractive=true` 等同于 `AUTO_CONFIRM=yes`，会跳过卸载确认。
 
