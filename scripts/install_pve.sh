@@ -74,7 +74,7 @@ qm_status=$?
 if [ $pct_status -eq 0 ] && [ $qm_status -eq 0 ]; then
     _green "Proxmox VE is already installed and does not need to be reinstalled."
     _green "Proxmox VE已经安装，无需重复安装。"
-    exit 1
+    exit 0
 fi
 if [ ! -d /usr/local/bin ]; then
     mkdir -p /usr/local/bin
@@ -604,15 +604,15 @@ rebuild_interfaces() {
         echo "auto ${interface}" >>/etc/network/interfaces
         if [[ -z "${CN}" || "${CN}" != true ]]; then
             echo "iface ${interface} inet static" >>/etc/network/interfaces
-            echo "    address ${ipv4_address}" >>/etc/network/interfaces
+            echo "    address $(get_ipv4_address_plain)" >>/etc/network/interfaces
             echo "    netmask ${ipv4_subnet}" >>/etc/network/interfaces
-            echo "    gateway ${ipv4_gateway}" >>/etc/network/interfaces
+            format_ipv4_gateway_config "    " "${interface}" >>/etc/network/interfaces
             echo "    dns-nameservers 8.8.8.8 8.8.4.4" >>/etc/network/interfaces
         else
             echo "iface ${interface} inet static" >>/etc/network/interfaces
-            echo "    address ${ipv4_address}" >>/etc/network/interfaces
+            echo "    address $(get_ipv4_address_plain)" >>/etc/network/interfaces
             echo "    netmask ${ipv4_subnet}" >>/etc/network/interfaces
-            echo "    gateway ${ipv4_gateway}" >>/etc/network/interfaces
+            format_ipv4_gateway_config "    " "${interface}" >>/etc/network/interfaces
             echo "    dns-nameservers 8.8.8.8 223.5.5.5" >>/etc/network/interfaces
         fi
         chattr +i /etc/network/interfaces
@@ -696,19 +696,9 @@ rebuild_interfaces() {
             if grep -q "iface $interface inet auto" /etc/network/interfaces; then
                 chattr -i /etc/network/interfaces
                 if [[ -z "${CN}" || "${CN}" != true ]]; then
-                    sed -i "/iface $interface inet auto/c\
-                    iface $interface inet static\n\
-                    address $ipv4_address\n\
-                    netmask $ipv4_subnet\n\
-                    gateway $ipv4_gateway\n\
-                    dns-nameservers 8.8.8.8 8.8.4.4" /etc/network/interfaces
+                    replace_interface_mode_with_static "auto" "8.8.8.8 8.8.4.4"
                 else
-                    sed -i "/iface $interface inet auto/c\
-                    iface $interface inet static\n\
-                    address $ipv4_address\n\
-                    netmask $ipv4_subnet\n\
-                    gateway $ipv4_gateway\n\
-                    dns-nameservers 8.8.8.8 223.5.5.5" /etc/network/interfaces
+                    replace_interface_mode_with_static "auto" "8.8.8.8 223.5.5.5"
                 fi
             fi
             chattr +i /etc/network/interfaces
@@ -724,19 +714,9 @@ rebuild_interfaces() {
                 if grep -q "iface $interface inet dhcp" /etc/network/interfaces; then
                     chattr -i /etc/network/interfaces
                     if [[ -z "${CN}" || "${CN}" != true ]]; then
-                        sed -i "/iface $interface inet dhcp/c\
-                        iface $interface inet static\n\
-                        address $ipv4_address\n\
-                        netmask $ipv4_subnet\n\
-                        gateway $ipv4_gateway\n\
-                        dns-nameservers 8.8.8.8 8.8.4.4" /etc/network/interfaces
+                        replace_interface_mode_with_static "dhcp" "8.8.8.8 8.8.4.4"
                     else
-                        sed -i "/iface $interface inet dhcp/c\
-                        iface $interface inet static\n\
-                        address $ipv4_address\n\
-                        netmask $ipv4_subnet\n\
-                        gateway $ipv4_gateway\n\
-                        dns-nameservers 8.8.8.8 223.5.5.5" /etc/network/interfaces
+                        replace_interface_mode_with_static "dhcp" "8.8.8.8 223.5.5.5"
                     fi
                 fi
                 chattr +i /etc/network/interfaces
@@ -1530,6 +1510,74 @@ get_interface_gateway() {
     ip -4 route show default dev "$iface" 2>/dev/null | awk '/default/ {print $3; exit}'
 }
 
+get_ipv4_prefixlen() {
+    if [[ "$ipv4_address" == */* ]]; then
+        echo "${ipv4_address#*/}"
+        return
+    fi
+    ipcalc -p "${ipv4_address}" "${ipv4_subnet}" 2>/dev/null | awk -F= '/PREFIX/ {print $2; exit}'
+}
+
+get_ipv4_address_plain() {
+    echo "${ipv4_address%%/*}"
+}
+
+ipv4_gateway_needs_pointopoint() {
+    local prefix
+    local address_plain
+    local address_network
+    local gateway_network
+
+    [ -z "$ipv4_address" ] && return 1
+    [ -z "$ipv4_gateway" ] && return 1
+
+    prefix=$(get_ipv4_prefixlen)
+    [ -z "$prefix" ] && return 1
+
+    address_plain="$(get_ipv4_address_plain)"
+    address_network=$(ipcalc -n "${address_plain}/${prefix}" 2>/dev/null | awk '/Network:/ {print $2; exit}' | cut -d/ -f1)
+    gateway_network=$(ipcalc -n "${ipv4_gateway}/${prefix}" 2>/dev/null | awk '/Network:/ {print $2; exit}' | cut -d/ -f1)
+
+    [ -n "$address_network" ] && [ -n "$gateway_network" ] && [ "$address_network" != "$gateway_network" ]
+}
+
+format_ipv4_gateway_config() {
+    local indent="${1:-    }"
+    local route_dev="${2:-}"
+
+    [ -z "$ipv4_gateway" ] && return
+
+    if ipv4_gateway_needs_pointopoint; then
+        echo "${indent}pointopoint ${ipv4_gateway}"
+        if [ -n "$route_dev" ]; then
+            echo "${indent}pre-up ip route replace ${ipv4_gateway}/32 dev ${route_dev} scope link || true"
+            echo "${indent}post-up ip route replace ${ipv4_gateway}/32 dev ${route_dev} scope link || true"
+            echo "${indent}post-up ip route replace default via ${ipv4_gateway} dev ${route_dev} onlink || true"
+            echo "${indent}pre-down ip route del default via ${ipv4_gateway} dev ${route_dev} 2>/dev/null || true"
+            echo "${indent}pre-down ip route del ${ipv4_gateway}/32 dev ${route_dev} 2>/dev/null || true"
+        fi
+    fi
+    echo "${indent}gateway ${ipv4_gateway}"
+}
+
+replace_interface_mode_with_static() {
+    local mode="$1"
+    local dns_servers="$2"
+    local tmp_file
+
+    tmp_file=$(mktemp /tmp/pve-iface-static.XXXXXX)
+    {
+        echo "iface ${interface} inet static"
+        echo "    address $(get_ipv4_address_plain)"
+        echo "    netmask ${ipv4_subnet}"
+        format_ipv4_gateway_config "    " "${interface}"
+        echo "    dns-nameservers ${dns_servers}"
+    } >"$tmp_file"
+
+    sed -i -e "/iface ${interface} inet ${mode}/r ${tmp_file}" -e "/iface ${interface} inet ${mode}/d" /etc/network/interfaces
+    rm -f "$tmp_file"
+}
+
 interface_has_default_route() {
     local iface="$1"
     ip -4 route show default 2>/dev/null | awk -v iface="$iface" '{
@@ -1917,9 +1965,9 @@ create_network_interfaces() {
         echo "auto lo" >>/etc/network/interfaces
         echo "iface lo inet loopback" >>/etc/network/interfaces
         echo "iface $interface inet static" >>/etc/network/interfaces
-        echo "    address $ipv4_address" >>/etc/network/interfaces
+        echo "    address $(get_ipv4_address_plain)" >>/etc/network/interfaces
         echo "    netmask $ipv4_subnet" >>/etc/network/interfaces
-        echo "    gateway $ipv4_gateway" >>/etc/network/interfaces
+        format_ipv4_gateway_config "    " "${interface}" >>/etc/network/interfaces
         if [[ -z "${CN}" || "${CN}" != true ]]; then
             echo "    dns-nameservers 8.8.8.8 8.8.4.4" >>/etc/network/interfaces
         else
@@ -1996,7 +2044,7 @@ check_reboot_status() {
         _green "Please execute reboot to reboot the system and then execute this script again"
         _green "Please wait for at least 20 seconds without automatically rebooting the system before executing this script."
         _green "请执行 reboot 重启系统后再次执行本脚本，再次使用SSH登录后请等待至少20秒未自动重启系统再执行本脚本"
-        exit 1
+        exit 0
     fi
 }
 
@@ -2598,8 +2646,8 @@ configure_vmbr0_bridge() {
             cat <<EOF | sudo tee -a /etc/network/interfaces
 auto vmbr0
 iface vmbr0 inet static
-    address $ipv4_address
-    gateway $ipv4_gateway
+    address $(get_ipv4_address_plain)
+$(format_ipv4_gateway_config "    " "vmbr0")
     bridge_ports $interface
     bridge_stp off
     bridge_fd 0
@@ -2609,8 +2657,8 @@ EOF
             cat <<EOF | sudo tee -a /etc/network/interfaces
 auto vmbr0
 iface vmbr0 inet static
-    address $ipv4_address
-    gateway $ipv4_gateway
+    address $(get_ipv4_address_plain)
+$(format_ipv4_gateway_config "    " "vmbr0")
     bridge_ports $interface
     bridge_stp off
     bridge_fd 0
@@ -2624,8 +2672,8 @@ EOF
             cat <<EOF | sudo tee -a /etc/network/interfaces
 auto vmbr0
 iface vmbr0 inet static
-    address $ipv4_address
-    gateway $ipv4_gateway
+    address $(get_ipv4_address_plain)
+$(format_ipv4_gateway_config "    " "vmbr0")
     bridge_ports $interface
     bridge_stp off
     bridge_fd 0
@@ -2642,8 +2690,8 @@ EOF
             cat <<EOF | sudo tee -a /etc/network/interfaces
 auto vmbr0
 iface vmbr0 inet static
-    address $ipv4_address
-    gateway $ipv4_gateway
+    address $(get_ipv4_address_plain)
+$(format_ipv4_gateway_config "    " "vmbr0")
     bridge_ports $interface
     bridge_stp off
     bridge_fd 0
