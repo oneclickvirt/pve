@@ -200,10 +200,10 @@ create_vm() {
 }
 
 configure_network() {
-    user_ip="172.16.1.${vm_num}"
+    user_ip="${pve_nat_prefix}.${vm_num}"
     if [ "$independent_ipv6" == "y" ]; then
         if [ ! -z "$host_ipv6_address" ] && [ ! -z "$ipv6_prefixlen" ] && [ ! -z "$ipv6_gateway" ] && [ ! -z "$ipv6_address_without_last_segment" ]; then
-            qm set $vm_num --ipconfig0 ip=${user_ip}/24,gw=172.16.1.1
+            qm set $vm_num --ipconfig0 ip=${user_ip}/24,gw=${pve_nat_gateway}
             appended_file="/usr/local/bin/pve_appended_content.txt"
             if [ -s "$appended_file" ]; then
                 # 使用 vmbr1 网桥和 NAT 映射
@@ -240,7 +240,7 @@ configure_network() {
         independent_ipv6_status="N"
     fi
     if [ "$independent_ipv6_status" == "N" ]; then
-        qm set $vm_num --ipconfig0 ip=${user_ip}/24,gw=172.16.1.1
+        qm set $vm_num --ipconfig0 ip=${user_ip}/24,gw=${pve_nat_gateway}
         qm set $vm_num --nameserver 8.8.8.8
         # qm set $vm_num --nameserver 8.8.4.4
         qm set $vm_num --searchdomain local
@@ -250,7 +250,7 @@ configure_network() {
 }
 
 setup_port_forwarding() {
-    user_ip="172.16.1.${vm_num}"
+    user_ip="${pve_nat_prefix}.${vm_num}"
     _fw_add_dnat "vmbr0" "tcp" "${sshn}" "${user_ip}:22"
     if [ "${web1_port}" -ne 0 ]; then
         _fw_add_dnat "vmbr0" "tcp" "${web1_port}" "${user_ip}:80"
@@ -292,6 +292,7 @@ main() {
     cdn_urls=("https://cdn0.spiritlhl.top/" "http://cdn1.spiritlhl.net/" "http://cdn2.spiritlhl.net/" "http://cdn3.spiritlhl.net/" "http://cdn4.spiritlhl.net/")
     check_cdn_file
     load_default_config || exit 1
+    load_nat_ipv4_config || exit 1
     setup_locale
     init_params "$@"
     validate_vm_num || exit 1

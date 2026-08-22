@@ -278,7 +278,7 @@ create_vm() {
 }
 
 configure_network() {
-    user_ip="172.16.1.${vm_num}"
+    user_ip="${pve_nat_prefix}.${vm_num}"
     if [ "$independent_ipv6" == "y" ]; then
         if [ ! -z "$host_ipv6_address" ] && [ ! -z "$ipv6_prefixlen" ] && [ ! -z "$ipv6_gateway" ] && [ ! -z "$ipv6_address_without_last_segment" ]; then
             if grep -q "vmbr2" /etc/network/interfaces; then
@@ -296,7 +296,7 @@ configure_network() {
 }
 
 setup_port_forwarding() {
-    user_ip="172.16.1.${vm_num}"
+    user_ip="${pve_nat_prefix}.${vm_num}"
     _fw_add_dnat "vmbr0" "tcp" "${sshn}" "${user_ip}:22"
     _fw_add_dnat "vmbr0" "tcp" "${vnc_port}" "${user_ip}:5900"
     _fw_save
@@ -544,6 +544,7 @@ main() {
     cdn_urls=("https://cdn0.spiritlhl.top/" "http://cdn1.spiritlhl.net/" "http://cdn2.spiritlhl.net/" "http://cdn3.spiritlhl.net/" "http://cdn4.spiritlhl.net/")
     check_cdn_file
     load_default_config || exit 1
+    load_nat_ipv4_config || exit 1
     setup_locale
     get_system_arch
     init_params "$@"

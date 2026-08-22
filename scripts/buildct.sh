@@ -115,7 +115,7 @@ create_container() {
     local retry=0
     local max_retry=7
     local wait_interval=3
-    user_ip="172.16.1.${CTID}"
+    user_ip="${pve_nat_prefix}.${CTID}"
     if [ "$fixed_system" = true ]; then
         pct create $CTID /var/lib/vz/template/cache/${system_name} -cores $core -cpuunits 1024 -memory $memory -swap 128 -rootfs ${storage}:${disk} -onboot 1 -password $password -features nesting=1
     else
@@ -158,7 +158,7 @@ configure_networking() {
             if [ -s "$appended_file" ]; then
                 # 使用 vmbr1 网桥和 NAT 映射
                 ct_internal_ipv6="2001:db8:1::${CTID}"
-                pct set $CTID --net0 name=eth0,ip=${user_ip}/24,bridge=vmbr1,gw=172.16.1.1
+                pct set $CTID --net0 name=eth0,ip=${user_ip}/24,bridge=vmbr1,gw=${pve_nat_gateway}
                 pct set $CTID --net1 name=eth1,ip6="${ct_internal_ipv6}/64",bridge=vmbr1,gw6="2001:db8:1::1"
                 pct set $CTID --nameserver 1.1.1.1
                 pct set $CTID --searchdomain local
@@ -178,7 +178,7 @@ configure_networking() {
                 fi
             elif grep -q "vmbr2" /etc/network/interfaces; then
                 # 使用 vmbr2 网桥直接分配IPv6地址
-                pct set $CTID --net0 name=eth0,ip=${user_ip}/24,bridge=vmbr1,gw=172.16.1.1
+                pct set $CTID --net0 name=eth0,ip=${user_ip}/24,bridge=vmbr1,gw=${pve_nat_gateway}
                 pct set $CTID --net1 name=eth1,ip6="${ipv6_address_without_last_segment}${CTID}/128",bridge=vmbr2,gw6="${host_ipv6_address}"
                 pct set $CTID --nameserver 1.1.1.1
                 pct set $CTID --searchdomain local
@@ -190,7 +190,7 @@ configure_networking() {
         fi
     fi
     if [ "$independent_ipv6_status" == "N" ]; then
-        pct set $CTID --net0 name=eth0,ip=${user_ip}/24,bridge=vmbr1,gw=172.16.1.1
+        pct set $CTID --net0 name=eth0,ip=${user_ip}/24,bridge=vmbr1,gw=${pve_nat_gateway}
         pct set $CTID --nameserver 1.1.1.1
         pct set $CTID --searchdomain local
     fi
@@ -357,6 +357,7 @@ main() {
     cdn_urls=("https://cdn0.spiritlhl.top/" "http://cdn1.spiritlhl.net/" "http://cdn2.spiritlhl.net/" "http://cdn3.spiritlhl.net/" "http://cdn4.spiritlhl.net/")
     check_cdn_file
     load_default_config
+    load_nat_ipv4_config || exit 1
     set_locale
     get_system_arch || exit 1
     check_china

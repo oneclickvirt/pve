@@ -9,6 +9,16 @@ _red() { echo -e "\033[31m\033[01m$*\033[0m"; }
 _green() { echo -e "\033[32m\033[01m$*\033[0m"; }
 _yellow() { echo -e "\033[33m\033[01m$*\033[0m"; }
 _blue() { echo -e "\033[36m\033[01m$*\033[0m"; }
+load_nat_ipv4_config() {
+    pve_nat_gateway="172.16.1.1"
+    [ -s /usr/local/bin/pve_nat_gateway ] && pve_nat_gateway="$(cat /usr/local/bin/pve_nat_gateway)"
+    if [[ ! "$pve_nat_gateway" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]]; then
+        _red "Invalid persisted PVE NAT gateway: ${pve_nat_gateway}"
+        _red "持久化的 PVE NAT 网关无效：${pve_nat_gateway}"
+        return 1
+    fi
+    pve_nat_prefix="${pve_nat_gateway%.*}"
+}
 is_noninteractive() {
     case "${noninteractive:-}" in
     true | TRUE | True | 1 | yes | YES | Yes | y | Y)

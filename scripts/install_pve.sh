@@ -886,7 +886,16 @@ check_ipv6() {
             sleep 1
         done
     fi
-    echo $IPV6 >/usr/local/bin/pve_check_ipv6
+    if [ -n "$IPV6" ]; then
+        if ! write_network_state_atomic /usr/local/bin/pve_check_ipv6 "$IPV6" validate_ipv6_value; then
+            _yellow "Ignoring invalid IPv6 detection output: ${IPV6@Q}"
+            _yellow "忽略无效的 IPv6 检测输出：${IPV6@Q}"
+            IPV6=""
+            rm -f /usr/local/bin/pve_check_ipv6
+        fi
+    else
+        rm -f /usr/local/bin/pve_check_ipv6
+    fi
 }
 
 check_cdn() {
@@ -1358,6 +1367,117 @@ setup_interface_route_cache_cleaner() {
     fi
 }
 
+# Persistent network state must be exactly one validated scalar. This prevents
+# colored status messages or multiline command output from becoming part of a
+# later interface, address, gateway, or prefix value.
+is_single_network_value() {
+    local value="${1-}"
+    [[ -n "$value" && "$value" != *$'\n'* && "$value" != *$'\r'* && "$value" != *$'\033'* ]]
+}
+
+validate_prefixlen_value() {
+    local value="${1-}"
+    local maximum="${2:-128}"
+    is_single_network_value "$value" && [[ "$value" =~ ^[0-9]+$ ]] &&
+        [ "$value" -ge 0 ] && [ "$value" -le "$maximum" ]
+}
+
+validate_ipv6_prefixlen_value() {
+    validate_prefixlen_value "${1-}" 128
+}
+
+validate_interface_value() {
+    local value="${1-}"
+    is_single_network_value "$value" && [ "${#value}" -le 15 ] && [[ "$value" =~ ^[A-Za-z0-9_.-]+$ ]]
+}
+
+validate_ipv4_value() {
+    local value="${1-}"
+    local address="$value"
+    local prefix=""
+    local first second third fourth extra octet
+    is_single_network_value "$value" || return 1
+    if [[ "$value" == */* ]]; then
+        address="${value%%/*}"
+        prefix="${value#*/}"
+        [[ "$prefix" != */* ]] && validate_prefixlen_value "$prefix" 32 || return 1
+    fi
+    IFS=. read -r first second third fourth extra <<<"$address"
+    [ -z "$extra" ] && [ -n "$fourth" ] || return 1
+    for octet in "$first" "$second" "$third" "$fourth"; do
+        [[ "$octet" =~ ^[0-9]{1,3}$ ]] && [ "$((10#$octet))" -le 255 ] || return 1
+    done
+}
+
+validate_ipv4_network24_value() {
+    local value="${1-}"
+    validate_ipv4_value "$value" && [[ "$value" =~ ^([0-9]{1,3}\.){3}0/24$ ]]
+}
+
+validate_ipv6_value() {
+    local value="${1-}"
+    local address="$value"
+    local prefix=""
+    local remainder part
+    local count=0
+    local compressed=false
+    local -a ipv6_parts
+    is_single_network_value "$value" || return 1
+    if [[ "$value" == */* ]]; then
+        address="${value%%/*}"
+        prefix="${value#*/}"
+        [[ "$prefix" != */* ]] && validate_prefixlen_value "$prefix" 128 || return 1
+    fi
+    [[ "$address" == *:* && "$address" =~ ^[0-9A-Fa-f:]+$ && "$address" != *:::* ]] || return 1
+    if [[ "$address" == *::* ]]; then
+        compressed=true
+        remainder="${address#*::}"
+        [[ "$remainder" != *::* ]] || return 1
+    else
+        [[ "$address" != :* && "$address" != *: ]] || return 1
+    fi
+    IFS=: read -ra ipv6_parts <<<"$address"
+    for part in "${ipv6_parts[@]}"; do
+        [ -z "$part" ] && continue
+        [[ "$part" =~ ^[0-9A-Fa-f]{1,4}$ ]] || return 1
+        count=$((count + 1))
+    done
+    if [ "$compressed" = true ]; then
+        [ "$count" -lt 8 ]
+    else
+        [ "$count" -eq 8 ]
+    fi
+}
+
+write_network_state_atomic() {
+    local path="$1"
+    local value="$2"
+    local validator="$3"
+    local tmp_file
+    "$validator" "$value" || return 1
+    mkdir -p -- "$(dirname "$path")" || return 1
+    tmp_file=$(mktemp "${path}.tmp.XXXXXX") || return 1
+    if [ -e "$path" ]; then
+        chmod --reference="$path" "$tmp_file" 2>/dev/null || chmod 0644 "$tmp_file"
+    else
+        chmod 0644 "$tmp_file"
+    fi
+    if ! printf '%s\n' "$value" >"$tmp_file" || ! mv -f -- "$tmp_file" "$path"; then
+        rm -f -- "$tmp_file"
+        return 1
+    fi
+}
+
+read_network_state() {
+    local path="$1"
+    local validator="$2"
+    local value
+    [ -s "$path" ] || return 1
+    value=$(cat -- "$path")
+    "$validator" "$value" || return 1
+    printf '%s\n' "$value"
+}
+
 # 收集IP地址信息
 collect_ip_info() {
     # 收集主IPV4地址
@@ -1474,7 +1594,7 @@ EOF
 
 validate_interface_name() {
     local iface="$1"
-    [[ -n "$iface" && "$iface" =~ ^[A-Za-z0-9_.-]+$ && -d "/sys/class/net/$iface" ]]
+    validate_interface_value "$iface" && [ -d "/sys/class/net/$iface" ]
 }
 
 get_interface_mac() {
@@ -1520,6 +1640,135 @@ get_ipv4_prefixlen() {
 
 get_ipv4_address_plain() {
     echo "${ipv4_address%%/*}"
+}
+
+get_ipv4_address_cidr() {
+    local address_plain
+    local prefix
+
+    address_plain="$(get_ipv4_address_plain)"
+    prefix="$(get_ipv4_prefixlen)"
+    if [[ -z "$address_plain" || ! "$prefix" =~ ^[0-9]+$ || "$prefix" -lt 0 || "$prefix" -gt 32 ]]; then
+        _red "Unable to determine a valid IPv4 CIDR for the PVE bridge: address=${ipv4_address:-empty} netmask=${ipv4_subnet:-empty}"
+        _red "无法为 PVE 网桥确定有效的 IPv4 CIDR：地址=${ipv4_address:-空} 掩码=${ipv4_subnet:-空}"
+        return 1
+    fi
+
+    echo "${address_plain}/${prefix}"
+}
+
+ensure_selected_interface_ipv4_config() {
+    local address_plain
+    local config_file=""
+    local candidate
+    local interfaces_file="${PVE_NETWORK_INTERFACES_FILE:-/etc/network/interfaces}"
+    local interfaces_dir="${PVE_NETWORK_INTERFACES_DIR:-/etc/network/interfaces.d}"
+    local tmp_file
+    local immutable_before=false
+    local file_attributes=""
+
+    address_plain="$(get_ipv4_address_plain)"
+    if [[ -z "$interface" || -z "$address_plain" || -z "$ipv4_subnet" ]]; then
+        _red "Cannot persist the selected PVE interface IPv4 configuration"
+        _red "无法持久化所选 PVE 网口的 IPv4 配置"
+        return 1
+    fi
+
+    for candidate in "$interfaces_file" "$interfaces_dir"/*; do
+        [ -f "$candidate" ] || continue
+        if awk -v target="$interface" '$1 == "iface" && $2 == target && $3 == "inet" && $4 == "static" { found = 1; exit } END { exit found ? 0 : 1 }' "$candidate"; then
+            config_file="$candidate"
+            break
+        fi
+    done
+    # DHCP/auto interfaces are converted later by rebuild_interfaces().
+    [ -n "$config_file" ] || return 0
+
+    tmp_file=$(mktemp /tmp/pve-selected-interface.XXXXXX)
+    if ! awk -v target="$interface" -v address="$address_plain" -v netmask="$ipv4_subnet" '
+        function finish_target() {
+            if (!in_target) return
+            if (!saw_address) print "    address " address
+            if (!saw_netmask) print "    netmask " netmask
+            in_target = 0
+        }
+        /^[[:space:]]*(auto|allow-hotplug|iface)[[:space:]]+/ {
+            finish_target()
+        }
+        {
+            if ($1 == "iface" && $2 == target && $3 == "inet" && $4 == "static") {
+                in_target = 1
+                saw_address = 0
+                saw_netmask = 0
+                found_target = 1
+                print
+                next
+            }
+            if (in_target && $1 == "address") {
+                if (!saw_address) {
+                    print "    address " address
+                    print "    netmask " netmask
+                    saw_address = 1
+                    saw_netmask = 1
+                }
+                next
+            }
+            if (in_target && $1 == "netmask") {
+                # The normalized netmask is emitted immediately after address.
+                next
+            }
+            print
+        }
+        END {
+            finish_target()
+            if (!found_target) exit 42
+        }
+    ' "$config_file" >"$tmp_file"; then
+        rm -f "$tmp_file"
+        _red "Failed to normalize the selected interface ${interface} in ${config_file}"
+        _red "无法在 ${config_file} 中规范化所选网口 ${interface}"
+        return 1
+    fi
+
+    if command -v lsattr >/dev/null 2>&1; then
+        file_attributes=$(lsattr -d "$config_file" 2>/dev/null | awk '{print $1}')
+        [[ "$file_attributes" == *i* ]] && immutable_before=true
+    fi
+    if [ "$immutable_before" = true ]; then
+        chattr -i "$config_file" 2>/dev/null || true
+    fi
+    if ! cat "$tmp_file" >"$config_file"; then
+        rm -f "$tmp_file"
+        if [ "$immutable_before" = true ]; then
+            chattr +i "$config_file" 2>/dev/null || true
+        fi
+        _red "Failed to write normalized interface configuration to ${config_file}"
+        _red "无法将规范化网口配置写入 ${config_file}"
+        return 1
+    fi
+    rm -f "$tmp_file"
+    if [ "$immutable_before" = true ]; then
+        chattr +i "$config_file" 2>/dev/null || true
+    fi
+}
+
+choose_persisted_ipv4_address() {
+    local detected="$1"
+    local persisted="$2"
+    local persisted_prefix=""
+    local detected_prefix=""
+
+    if [[ -n "$detected" && "$persisted" == */* && "${persisted%%/*}" == "${detected%%/*}" ]]; then
+        persisted_prefix="${persisted#*/}"
+        detected_prefix="${detected#*/}"
+        if [[ "$persisted_prefix" =~ ^[0-9]+$ && "$persisted_prefix" -ge 0 && "$persisted_prefix" -le 32 &&
+              "$detected_prefix" =~ ^[0-9]+$ && "$detected_prefix" -ge 0 && "$detected_prefix" -le 32 &&
+              "$persisted_prefix" != "$detected_prefix" ]]; then
+            printf '%s\n' "$persisted"
+            return
+        fi
+    fi
+    printf '%s\n' "$detected"
 }
 
 ipv4_gateway_needs_pointopoint() {
@@ -1619,32 +1868,48 @@ build_interface_candidates() {
 }
 
 sync_selected_network_info() {
+    local detected_ipv4=""
+    local persisted_ipv4="${ipv4_address:-}"
     local selected_ipv4=""
     local selected_ipv4_plain=""
     local selected_gateway=""
     local selected_subnet=""
 
-    echo "$interface" >/usr/local/bin/pve_main_interface
+    if ! validate_interface_name "$interface" || ! write_network_state_atomic /usr/local/bin/pve_main_interface "$interface" validate_interface_value; then
+        _red "Refusing to persist invalid PVE main interface output"
+        _red "拒绝持久化无效的 PVE 主网口输出"
+        return 1
+    fi
 
     mac_address=$(get_interface_mac "$interface")
     if [ -n "$mac_address" ]; then
         echo "$mac_address" >/usr/local/bin/pve_mac_address
     fi
 
-    selected_ipv4=$(get_interface_primary_ipv4 "$interface")
+    detected_ipv4=$(get_interface_primary_ipv4 "$interface")
+    selected_ipv4=$(choose_persisted_ipv4_address "$detected_ipv4" "$persisted_ipv4")
+    if [[ -n "$detected_ipv4" && "$selected_ipv4" == "$persisted_ipv4" && "$selected_ipv4" != "$detected_ipv4" ]]; then
+        _yellow "Keeping previously captured IPv4 prefix ${persisted_ipv4}; live interface reported ${detected_ipv4} after reboot"
+        _yellow "保留先前捕获的 IPv4 前缀 ${persisted_ipv4}；重启后当前网口报告为 ${detected_ipv4}"
+    fi
     if [ -n "$selected_ipv4" ]; then
+        if ! validate_ipv4_value "$selected_ipv4"; then
+            _red "Detected IPv4 output is not a single valid address: ${selected_ipv4@Q}"
+            _red "检测到的 IPv4 输出不是单个有效地址：${selected_ipv4@Q}"
+            return 1
+        fi
         ipv4_address="$selected_ipv4"
-        echo "$ipv4_address" >/usr/local/bin/pve_ipv4_address
+        write_network_state_atomic /usr/local/bin/pve_ipv4_address "$ipv4_address" validate_ipv4_value || return 1
         selected_ipv4_plain="${selected_ipv4%%/*}"
         if ! is_private_ipv4 "$selected_ipv4_plain"; then
             main_ipv4="$selected_ipv4_plain"
             selected_ip_mode="public"
-            echo "$main_ipv4" >/usr/local/bin/pve_main_ipv4
+            write_network_state_atomic /usr/local/bin/pve_main_ipv4 "$main_ipv4" validate_ipv4_value || return 1
             echo "$selected_ip_mode" >/usr/local/bin/pve_main_ipv4_mode
         elif [ "${selected_ip_mode:-private}" = "private" ] || [ -z "$main_ipv4" ] || is_private_ipv4 "$main_ipv4"; then
             main_ipv4="$selected_ipv4_plain"
             selected_ip_mode="private"
-            echo "$main_ipv4" >/usr/local/bin/pve_main_ipv4
+            write_network_state_atomic /usr/local/bin/pve_main_ipv4 "$main_ipv4" validate_ipv4_value || return 1
             echo "$selected_ip_mode" >/usr/local/bin/pve_main_ipv4_mode
         else
             _yellow "Keeping public main PVE IP: ${main_ipv4}; bridge IPv4 uses ${ipv4_address}"
@@ -1657,8 +1922,13 @@ sync_selected_network_info() {
 
     selected_gateway=$(get_interface_gateway "$interface")
     if [ -n "$selected_gateway" ]; then
+        if ! validate_ipv4_value "$selected_gateway" || [[ "$selected_gateway" == */* ]]; then
+            _red "Detected IPv4 gateway output is invalid: ${selected_gateway@Q}"
+            _red "检测到的 IPv4 网关输出无效：${selected_gateway@Q}"
+            return 1
+        fi
         ipv4_gateway="$selected_gateway"
-        echo "$ipv4_gateway" >/usr/local/bin/pve_ipv4_gateway
+        write_network_state_atomic /usr/local/bin/pve_ipv4_gateway "$ipv4_gateway" validate_ipv4_value || return 1
     else
         _yellow "Selected interface ${interface} has no IPv4 default gateway, keeping detected gateway: ${ipv4_gateway}"
         _yellow "所选网口 ${interface} 未检测到 IPv4 默认网关，保留已检测网关：${ipv4_gateway}"
@@ -1667,8 +1937,13 @@ sync_selected_network_info() {
     if [ -n "$ipv4_address" ]; then
         selected_subnet=$(ipcalc -n "$ipv4_address" 2>/dev/null | grep -oP 'Netmask:\s+\K.*' | awk '{print $1}')
         if [ -n "$selected_subnet" ]; then
+            if ! validate_ipv4_value "$selected_subnet" || [[ "$selected_subnet" == */* ]]; then
+                _red "Detected IPv4 netmask output is invalid: ${selected_subnet@Q}"
+                _red "检测到的 IPv4 子网掩码输出无效：${selected_subnet@Q}"
+                return 1
+            fi
             ipv4_subnet="$selected_subnet"
-            echo "$ipv4_subnet" >/usr/local/bin/pve_ipv4_subnet
+            write_network_state_atomic /usr/local/bin/pve_ipv4_subnet "$ipv4_subnet" validate_ipv4_value || return 1
         fi
     fi
 }
@@ -1697,8 +1972,7 @@ confirm_main_network_interface() {
             _red "PVE_MAIN_INTERFACE=${PVE_MAIN_INTERFACE} 不是当前系统有效网口"
             exit 1
         fi
-    elif [ -s /usr/local/bin/pve_main_interface ]; then
-        saved_interface=$(sed -n '1p' /usr/local/bin/pve_main_interface)
+    elif saved_interface=$(read_network_state /usr/local/bin/pve_main_interface validate_interface_value 2>/dev/null); then
         if validate_interface_name "$saved_interface"; then
             interface="$saved_interface"
             selection_source="saved"
@@ -1750,9 +2024,15 @@ confirm_main_network_interface() {
         _yellow "noninteractive=true，使用自动检测主网口：${interface}"
     fi
 
-    if [ "${selection_source}" != "auto" ]; then
-        sync_selected_network_info
-    fi
+    sync_selected_network_info || exit 1
+
+    # Some cloud images (including LightNode multi-NIC images) assign the
+    # correct prefix to the live interface but omit the netmask from the
+    # generated ifupdown stanza.  Without persisting it, the first reboot falls
+    # back to classful addressing (/8, /16, ...), changing routes before PVE is
+    # installed.  Normalize the selected static stanza while the original live
+    # prefix is still authoritative.
+    ensure_selected_interface_ipv4_config || exit 1
 
     _green "Final PVE main interface: ${interface}"
     _green "最终 PVE 主网口：${interface}"
@@ -1793,25 +2073,33 @@ setup_persistent_network_interface() {
 
 # 获取IPV6网关信息
 get_ipv6_gateway() {
-    if [ ! -f /usr/local/bin/pve_ipv6_gateway ] || [ ! -s /usr/local/bin/pve_ipv6_gateway ] || [ "$(sed -e '/^[[:space:]]*$/d' /usr/local/bin/pve_ipv6_gateway)" = "" ]; then
-        ipv6_gateway=$(ip -6 route show | awk '/default via/{print $3}' | head -n1)
-        echo "$ipv6_gateway" >/usr/local/bin/pve_ipv6_gateway
+    if ! ipv6_gateway=$(read_network_state /usr/local/bin/pve_ipv6_gateway validate_ipv6_value 2>/dev/null) || [[ "$ipv6_gateway" == */* ]]; then
+        ipv6_gateway=$(ip -6 route show | awk '/default via/{print $3; exit}')
+        if [ -n "$ipv6_gateway" ] && validate_ipv6_value "$ipv6_gateway" && [[ "$ipv6_gateway" != */* ]]; then
+            write_network_state_atomic /usr/local/bin/pve_ipv6_gateway "$ipv6_gateway" validate_ipv6_value || return 1
+        else
+            ipv6_gateway=""
+            rm -f /usr/local/bin/pve_ipv6_gateway
+        fi
     fi
-    ipv6_gateway=$(cat /usr/local/bin/pve_ipv6_gateway)
 }
 
 # 获取fe80地址
 get_fe80_address() {
-    if [ ! -f /usr/local/bin/pve_fe80_address ] || [ ! -s /usr/local/bin/pve_fe80_address ] || [ "$(sed -e '/^[[:space:]]*$/d' /usr/local/bin/pve_fe80_address)" = "" ]; then
-        fe80_address=$(ip -6 addr show dev $interface | awk '/inet6 fe80/ {print $2}')
-        echo "$fe80_address" >/usr/local/bin/pve_fe80_address
+    if ! fe80_address=$(read_network_state /usr/local/bin/pve_fe80_address validate_ipv6_value 2>/dev/null); then
+        fe80_address=$(ip -6 addr show dev "$interface" | awk '/inet6 fe80/ {print $2; exit}')
+        if [ -n "$fe80_address" ] && validate_ipv6_value "$fe80_address"; then
+            write_network_state_atomic /usr/local/bin/pve_fe80_address "$fe80_address" validate_ipv6_value || return 1
+        else
+            fe80_address=""
+            rm -f /usr/local/bin/pve_fe80_address
+        fi
     fi
-    fe80_address=$(cat /usr/local/bin/pve_fe80_address)
 }
 
 # 获取IPV6前缀长度
 get_ipv6_prefixlen() {
-    if [ ! -f /usr/local/bin/pve_ipv6_prefixlen ] || [ ! -s /usr/local/bin/pve_ipv6_prefixlen ] || [ "$(sed -e '/^[[:space:]]*$/d' /usr/local/bin/pve_ipv6_prefixlen)" = "" ]; then
+    if ! ipv6_prefixlen=$(read_network_state /usr/local/bin/pve_ipv6_prefixlen validate_ipv6_prefixlen_value 2>/dev/null); then
         ipv6_prefixlen=""
         output=$(ifconfig ${interface} | grep -oP 'inet6 (?!fe80:).*prefixlen \K\d+')
         num_lines=$(echo "$output" | wc -l)
@@ -1840,7 +2128,7 @@ get_ipv6_prefixlen() {
                     elif [ -z "$ipv6_prefixlen" ]; then
                         ipv6_prefixlen="$real_prefixlen"
                     fi
-                    echo "$real_prefixlen" >/usr/local/bin/pve_ipv6_real_prefixlen
+                    write_network_state_atomic /usr/local/bin/pve_ipv6_real_prefixlen "$real_prefixlen" validate_ipv6_prefixlen_value || return 1
                 else
                     _yellow "Could not parse IPv6 prefix length on interface ${interface}"
                     _yellow "无法从接口 ${interface} 中解析 IPv6 前缀长度"
@@ -1851,16 +2139,20 @@ get_ipv6_prefixlen() {
             fi
         fi
         
-        echo "$ipv6_prefixlen" >/usr/local/bin/pve_ipv6_prefixlen
+        if validate_prefixlen_value "$ipv6_prefixlen" 128; then
+            write_network_state_atomic /usr/local/bin/pve_ipv6_prefixlen "$ipv6_prefixlen" validate_ipv6_prefixlen_value || return 1
+        else
+            ipv6_prefixlen=""
+            rm -f /usr/local/bin/pve_ipv6_prefixlen
+        fi
     fi
-    if [ -f /usr/local/bin/pve_ipv6_real_prefixlen ] && [ -s /usr/local/bin/pve_ipv6_real_prefixlen ]; then
-        real_prefixlen=$(cat /usr/local/bin/pve_ipv6_real_prefixlen)
+    if real_prefixlen=$(read_network_state /usr/local/bin/pve_ipv6_real_prefixlen validate_ipv6_prefixlen_value 2>/dev/null); then
         ipv6_prefixlen="$real_prefixlen"
         _blue "Using real IPv6 prefix length: /$ipv6_prefixlen"
         _green "检测到的真实 IPv6 前缀长度: /$ipv6_prefixlen"
-        echo "$ipv6_prefixlen" >/usr/local/bin/pve_ipv6_prefixlen
+        write_network_state_atomic /usr/local/bin/pve_ipv6_prefixlen "$ipv6_prefixlen" validate_ipv6_prefixlen_value || return 1
     else
-        ipv6_prefixlen=$(cat /usr/local/bin/pve_ipv6_prefixlen)
+        ipv6_prefixlen=$(read_network_state /usr/local/bin/pve_ipv6_prefixlen validate_ipv6_prefixlen_value 2>/dev/null || true)
     fi
 }
 
@@ -1932,15 +2224,14 @@ rebuild_ipv6_address() {
             ipv6_address_without_last_segment="${ipv6_address%:*}:"
             if ping -c 1 -6 -W 3 $ipv6_address >/dev/null 2>&1; then
                 check_ipv6
-                ipv6_address=$(cat /usr/local/bin/pve_check_ipv6)
-                echo "${ipv6_address}" >/usr/local/bin/pve_check_ipv6
+                ipv6_address=$(read_network_state /usr/local/bin/pve_check_ipv6 validate_ipv6_value 2>/dev/null || true)
             fi
         elif [[ $ipv6_address == *:: ]]; then
             ipv6_address="${ipv6_address}1"
             if [ "$ipv6_address" == "$ipv6_gateway" ]; then
                 ipv6_address="${ipv6_address%:*}:2"
             fi
-            echo "${ipv6_address}" >/usr/local/bin/pve_check_ipv6
+            write_network_state_atomic /usr/local/bin/pve_check_ipv6 "$ipv6_address" validate_ipv6_value || return 1
         fi
     fi
 }
@@ -2060,8 +2351,9 @@ check_system_requirements
 detect_system_info
 detect_network_interfaces
 get_ipv6_gateway
-if [ ! -f /usr/local/bin/pve_check_ipv6 ] || [ ! -s /usr/local/bin/pve_check_ipv6 ] || [ "$(sed -e '/^[[:space:]]*$/d' /usr/local/bin/pve_check_ipv6)" = "" ]; then
+if ! ipv6_address=$(read_network_state /usr/local/bin/pve_check_ipv6 validate_ipv6_value 2>/dev/null); then
     check_ipv6
+    ipv6_address=$(read_network_state /usr/local/bin/pve_check_ipv6 validate_ipv6_value 2>/dev/null || true)
 fi
 get_fe80_address
 if [[ $ipv6_gateway == fe80* ]]; then
@@ -2069,10 +2361,9 @@ if [[ $ipv6_gateway == fe80* ]]; then
 else
     ipv6_gateway_fe80="N"
 fi
-ipv6_address=$(cat /usr/local/bin/pve_check_ipv6)
 get_ipv6_prefixlen
-ipv6_address=$(cat /usr/local/bin/pve_check_ipv6)
-ipv6_gateway=$(cat /usr/local/bin/pve_ipv6_gateway)
+ipv6_address=$(read_network_state /usr/local/bin/pve_check_ipv6 validate_ipv6_value 2>/dev/null || true)
+ipv6_gateway=$(read_network_state /usr/local/bin/pve_ipv6_gateway validate_ipv6_value 2>/dev/null || true)
 if [ -z "$ipv6_address" ] || [ -z "$ipv6_prefixlen" ] || [ -z "$ipv6_gateway" ]; then
     echo "" >/usr/local/bin/pve_slaac_status
     echo "" >/usr/local/bin/fix_interfaces_ipv6_auto_type
@@ -2604,6 +2895,9 @@ fix_ipv6_configs() {
 # 安装必需包
 install_proxmox_packages() {
     local pve_packages=(proxmox-ve pve-manager qemu-server pve-cluster)
+    local install_mode_created=false
+    local install_mode_file="${PROXMOX_INSTALL_MODE_FILE:-/proxmox_install_mode}"
+    local install_exit=0
     # 部分机器中途service丢失了，尝试修复
     install_package service
     # esxi 开设的部分机器中含有冲突组件 firmware-ath9k-htc ，需要预先卸载
@@ -2619,7 +2913,31 @@ install_proxmox_packages() {
         exit 1
     fi
     # 按 PXVIRT 官方 Debian 安装文档显式安装核心组件，避免只装 meta 包后静默失败。
-    if ! install_dpkg_packages "${pve_packages[@]}"; then
+    # Proxmox's ifupdown2 package hot-reloads /etc/network/interfaces on its
+    # first installation.  On remote multi-NIC hosts that can replace the
+    # working public route before vmbr0 has been built and permanently cut the
+    # SSH session.  /proxmox_install_mode is the package's supported guard for
+    # suppressing that first-install reload; the completed bridge is applied by
+    # the network setup stage below.
+    if [ ! -e "$install_mode_file" ]; then
+        touch "$install_mode_file"
+        install_mode_created=true
+    fi
+    if [ "$install_mode_created" = true ]; then
+        # Run the package transaction in a subshell whose EXIT trap owns the
+        # marker. This also cleans it on HUP/INT/TERM, so an interrupted remote
+        # install cannot leave future package upgrades stuck in install mode.
+        (
+            trap 'rm -f -- "$install_mode_file"' EXIT
+            trap 'exit 129' HUP
+            trap 'exit 130' INT
+            trap 'exit 143' TERM
+            install_dpkg_packages "${pve_packages[@]}"
+        ) || install_exit=$?
+    else
+        install_dpkg_packages "${pve_packages[@]}" || install_exit=$?
+    fi
+    if [ "$install_exit" -ne 0 ]; then
         _red "PVE core package installation failed"
         _red "PVE 核心软件包安装失败"
         rollback_failed_pve_install
@@ -2636,6 +2954,8 @@ install_proxmox_packages() {
 
 # 配置vmbr0桥接接口
 configure_vmbr0_bridge() {
+    local bridge_ipv4
+    bridge_ipv4="$(get_ipv4_address_cidr)" || exit 1
     chattr -i /etc/network/interfaces
     if grep -q "vmbr0" "/etc/network/interfaces"; then
         _blue "vmbr0 already exists in /etc/network/interfaces"
@@ -2646,7 +2966,7 @@ configure_vmbr0_bridge() {
             cat <<EOF | sudo tee -a /etc/network/interfaces
 auto vmbr0
 iface vmbr0 inet static
-    address $(get_ipv4_address_plain)
+    address ${bridge_ipv4}
 $(format_ipv4_gateway_config "    " "vmbr0")
     bridge_ports $interface
     bridge_stp off
@@ -2657,7 +2977,7 @@ EOF
             cat <<EOF | sudo tee -a /etc/network/interfaces
 auto vmbr0
 iface vmbr0 inet static
-    address $(get_ipv4_address_plain)
+    address ${bridge_ipv4}
 $(format_ipv4_gateway_config "    " "vmbr0")
     bridge_ports $interface
     bridge_stp off
@@ -2672,7 +2992,7 @@ EOF
             cat <<EOF | sudo tee -a /etc/network/interfaces
 auto vmbr0
 iface vmbr0 inet static
-    address $(get_ipv4_address_plain)
+    address ${bridge_ipv4}
 $(format_ipv4_gateway_config "    " "vmbr0")
     bridge_ports $interface
     bridge_stp off
@@ -2690,7 +3010,7 @@ EOF
             cat <<EOF | sudo tee -a /etc/network/interfaces
 auto vmbr0
 iface vmbr0 inet static
-    address $(get_ipv4_address_plain)
+    address ${bridge_ipv4}
 $(format_ipv4_gateway_config "    " "vmbr0")
     bridge_ports $interface
     bridge_stp off
@@ -2864,9 +3184,49 @@ configure_firewall_and_proxy() {
     ensure_firewall_access
 }
 
+# /proxmox_install_mode deliberately suppresses pve-manager.postinst while the
+# core packages are installed so ifupdown2 cannot reload an incomplete bridge
+# and cut off a remote installation.  That also suppresses the postinst step
+# which creates the local pmxcfs node tree and certificates.  Complete those
+# steps explicitly after the final network and proxy configuration is ready.
+initialize_pve_runtime() {
+    local node_name
+    node_name="$(hostname -s)"
+
+    if ! systemctl enable --now pve-cluster >/dev/null 2>&1; then
+        _red "Unable to start the PVE cluster filesystem"
+        _red "无法启动 PVE 集群文件系统"
+        return 1
+    fi
+
+    if ! mountpoint -q /etc/pve; then
+        _red "The PVE cluster filesystem is not mounted at /etc/pve"
+        _red "PVE 集群文件系统未挂载到 /etc/pve"
+        return 1
+    fi
+
+    if ! pvecm updatecerts --force; then
+        _red "Unable to initialize the local PVE node and certificates"
+        _red "无法初始化本地 PVE 节点和证书"
+        return 1
+    fi
+
+    if [ ! -d "/etc/pve/nodes/${node_name}/lxc" ] || [ ! -d "/etc/pve/nodes/${node_name}/qemu-server" ]; then
+        _red "The local PVE node tree is incomplete: /etc/pve/nodes/${node_name}"
+        _red "本地 PVE 节点目录不完整：/etc/pve/nodes/${node_name}"
+        return 1
+    fi
+
+    if ! systemctl enable --now pvedaemon pveproxy pvestatd pvescheduler >/dev/null 2>&1; then
+        _red "Unable to start required PVE services"
+        _red "无法启动必需的 PVE 服务"
+        return 1
+    fi
+}
+
 is_8006_ready() {
     if ss -lnt 2>/dev/null | grep -q ':8006 '; then
-        if curl -kI --connect-timeout 3 --max-time 6 https://127.0.0.1:8006/ >/dev/null 2>&1; then
+        if curl -ksS --connect-timeout 3 --max-time 6 https://127.0.0.1:8006/api2/json/version >/dev/null 2>&1; then
             return 0
         fi
     fi
@@ -2930,6 +3290,9 @@ configure_pve_sources
 clean_network_interfaces
 install_additional_packages
 configure_firewall_and_proxy
+if ! initialize_pve_runtime; then
+    exit 1
+fi
 if ! verify_pve_installation; then
     rollback_failed_pve_install
     exit 1

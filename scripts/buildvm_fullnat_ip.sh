@@ -228,10 +228,10 @@ create_vm() {
 }
 
 configure_network() {
-    user_ip="172.16.1.${vm_num}"
+    user_ip="${pve_nat_prefix}.${vm_num}"
     if [ "$independent_ipv6" == "y" ]; then
         if [ ! -z "$host_ipv6_address" ] && [ ! -z "$ipv6_prefixlen" ] && [ ! -z "$ipv6_gateway" ] && [ ! -z "$ipv6_address_without_last_segment" ]; then
-            qm set $vm_num --ipconfig0 ip=${user_ip}/24,gw=172.16.1.1
+            qm set $vm_num --ipconfig0 ip=${user_ip}/24,gw=${pve_nat_gateway}
             appended_file="/usr/local/bin/pve_appended_content.txt"
             if [ -s "$appended_file" ]; then
                 # 使用 vmbr1 网桥和 NAT 映射
@@ -268,7 +268,7 @@ configure_network() {
     if [ "$independent_ipv6_status" == "N" ]; then
         _green "Use ${user_ip}/32 to set ipconfig0"
         _green "使用 ${user_ip}/32 配置 ipconfig0"
-        qm set $vm_num --ipconfig0 ip=${user_ip}/24,gw=172.16.1.1
+        qm set $vm_num --ipconfig0 ip=${user_ip}/24,gw=${pve_nat_gateway}
         qm set $vm_num --nameserver 8.8.8.8
         # qm set $vm_num --nameserver 8.8.4.4
         qm set $vm_num --searchdomain local
@@ -321,6 +321,7 @@ main() {
     cdn_urls=("https://cdn0.spiritlhl.top/" "http://cdn1.spiritlhl.net/" "http://cdn2.spiritlhl.net/" "http://cdn3.spiritlhl.net/" "http://cdn4.spiritlhl.net/")
     check_cdn_file
     load_default_config || exit 1
+    load_nat_ipv4_config || exit 1
     setup_locale
     get_system_arch || exit 1
     check_kvm_support

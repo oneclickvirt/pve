@@ -242,6 +242,115 @@ is_private_ipv6() {
     fi
 }
 
+# Keep machine-readable network state isolated from terminal status output.
+is_single_network_value() {
+    local value="${1-}"
+    [[ -n "$value" && "$value" != *$'\n'* && "$value" != *$'\r'* && "$value" != *$'\033'* ]]
+}
+
+validate_prefixlen_value() {
+    local value="${1-}"
+    local maximum="${2:-128}"
+    is_single_network_value "$value" && [[ "$value" =~ ^[0-9]+$ ]] &&
+        [ "$value" -ge 0 ] && [ "$value" -le "$maximum" ]
+}
+
+validate_ipv6_prefixlen_value() {
+    validate_prefixlen_value "${1-}" 128
+}
+
+validate_interface_value() {
+    local value="${1-}"
+    is_single_network_value "$value" && [ "${#value}" -le 15 ] && [[ "$value" =~ ^[A-Za-z0-9_.-]+$ ]]
+}
+
+validate_ipv4_value() {
+    local value="${1-}"
+    local address="$value"
+    local prefix=""
+    local first second third fourth extra octet
+    is_single_network_value "$value" || return 1
+    if [[ "$value" == */* ]]; then
+        address="${value%%/*}"
+        prefix="${value#*/}"
+        [[ "$prefix" != */* ]] && validate_prefixlen_value "$prefix" 32 || return 1
+    fi
+    IFS=. read -r first second third fourth extra <<<"$address"
+    [ -z "$extra" ] && [ -n "$fourth" ] || return 1
+    for octet in "$first" "$second" "$third" "$fourth"; do
+        [[ "$octet" =~ ^[0-9]{1,3}$ ]] && [ "$((10#$octet))" -le 255 ] || return 1
+    done
+}
+
+validate_ipv4_network24_value() {
+    local value="${1-}"
+    validate_ipv4_value "$value" && [[ "$value" =~ ^([0-9]{1,3}\.){3}0/24$ ]]
+}
+
+validate_ipv6_value() {
+    local value="${1-}"
+    local address="$value"
+    local prefix=""
+    local remainder part
+    local count=0
+    local compressed=false
+    local -a ipv6_parts
+    is_single_network_value "$value" || return 1
+    if [[ "$value" == */* ]]; then
+        address="${value%%/*}"
+        prefix="${value#*/}"
+        [[ "$prefix" != */* ]] && validate_prefixlen_value "$prefix" 128 || return 1
+    fi
+    [[ "$address" == *:* && "$address" =~ ^[0-9A-Fa-f:]+$ && "$address" != *:::* ]] || return 1
+    if [[ "$address" == *::* ]]; then
+        compressed=true
+        remainder="${address#*::}"
+        [[ "$remainder" != *::* ]] || return 1
+    else
+        [[ "$address" != :* && "$address" != *: ]] || return 1
+    fi
+    IFS=: read -ra ipv6_parts <<<"$address"
+    for part in "${ipv6_parts[@]}"; do
+        [ -z "$part" ] && continue
+        [[ "$part" =~ ^[0-9A-Fa-f]{1,4}$ ]] || return 1
+        count=$((count + 1))
+    done
+    if [ "$compressed" = true ]; then
+        [ "$count" -lt 8 ]
+    else
+        [ "$count" -eq 8 ]
+    fi
+}
+
+write_network_state_atomic() {
+    local path="$1"
+    local value="$2"
+    local validator="$3"
+    local tmp_file
+    "$validator" "$value" || return 1
+    mkdir -p -- "$(dirname "$path")" || return 1
+    tmp_file=$(mktemp "${path}.tmp.XXXXXX") || return 1
+    if [ -e "$path" ]; then
+        chmod --reference="$path" "$tmp_file" 2>/dev/null || chmod 0644 "$tmp_file"
+    else
+        chmod 0644 "$tmp_file"
+    fi
+    if ! printf '%s\n' "$value" >"$tmp_file" || ! mv -f -- "$tmp_file" "$path"; then
+        rm -f -- "$tmp_file"
+        return 1
+    fi
+}
+
+read_network_state() {
+    local path="$1"
+    local validator="$2"
+    local value
+    [ -s "$path" ] || return 1
+    value=$(cat -- "$path")
+    "$validator" "$value" || return 1
+    printf '%s\n' "$value"
+}
+
 check_ipv6() {
     IPV6=$(ip -6 addr show | grep global | awk '{print length, $2}' | sort -nr | head -n 1 | awk '{print $2}' | cut -d '/' -f1)
     if [ ! -f /usr/local/bin/pve_last_ipv6 ] || [ ! -s /usr/local/bin/pve_last_ipv6 ] || [ "$(sed -e '/^[[:space:]]*$/d' /usr/local/bin/pve_last_ipv6)" = "" ]; then
@@ -273,7 +382,16 @@ check_ipv6() {
             sleep 1
         done
     fi
-    echo $IPV6 >/usr/local/bin/pve_check_ipv6
+    if [ -n "$IPV6" ]; then
+        if ! write_network_state_atomic /usr/local/bin/pve_check_ipv6 "$IPV6" validate_ipv6_value; then
+            _yellow "Ignoring invalid IPv6 detection output: ${IPV6@Q}"
+            _yellow "忽略无效的 IPv6 检测输出：${IPV6@Q}"
+            IPV6=""
+            rm -f /usr/local/bin/pve_check_ipv6
+        fi
+    else
+        rm -f /usr/local/bin/pve_check_ipv6
+    fi
 }
 
 ########## 查询信息
@@ -303,6 +421,13 @@ detect_network_interfaces() {
     interface_1=$(lshw -C network | awk '/logical name:/{print $3}' | sed -n '1p')
     interface_2=$(lshw -C network | awk '/logical name:/{print $3}' | sed -n '2p')
     check_interface
+
+    if ! validate_interface_value "$interface" || [ ! -d "/sys/class/net/$interface" ]; then
+        _red "Detected network interface output is invalid: ${interface@Q}"
+        _red "检测到的网口输出无效：${interface@Q}"
+        return 1
+    fi
+    write_network_state_atomic /usr/local/bin/pve_main_interface "$interface" validate_interface_value || return 1
 
     if [ ! -f /usr/local/bin/pve_mac_address ] || [ ! -s /usr/local/bin/pve_mac_address ] || [ "$(sed -e '/^[[:space:]]*$/d' /usr/local/bin/pve_mac_address)" = "" ]; then
         mac_address=$(ip -o link show dev ${interface} | awk '{print $17}')
@@ -341,16 +466,20 @@ detect_he_tunnel() {
         ipv6_address=$(echo "$temp_config" | awk '/address/ {print $2}')
         ipv6_gateway=$(echo "$temp_config" | awk '/gateway/ {print $2}')
         ipv6_prefixlen=$(ifconfig he-ipv6 | grep -oP 'prefixlen \K\d+' | head -n 1)
+        validate_ipv6_value "$ipv6_address" || return 1
+        validate_ipv6_value "$ipv6_gateway" && [[ "$ipv6_gateway" != */* ]] || return 1
+        validate_ipv6_prefixlen_value "$ipv6_prefixlen" || return 1
         target_mask=${ipv6_prefixlen}
         remainder=$((target_mask % 8))
         [ "$remainder" -ne 0 ] && ((target_mask += 8 - remainder))
         [ "$target_mask" -gt 128 ] && target_mask=128
-        echo "$target_mask" >/usr/local/bin/pve_ipv6_prefixlen
+        write_network_state_atomic /usr/local/bin/pve_ipv6_prefixlen "$target_mask" validate_ipv6_prefixlen_value || return 1
         ipv6_subnet_2=$(sipcalc --v6split=${target_mask} ${ipv6_gateway}/${ipv6_prefixlen} | awk '/Network/{n++} n==2' | awk '{print $3}' | grep -v '^$')
         ipv6_subnet_2_without_last_segment="${ipv6_subnet_2%:*}:"
         new_subnet="${ipv6_subnet_2_without_last_segment}1/${target_mask}"
-        echo ${ipv6_subnet_2_without_last_segment}1 >/usr/local/bin/pve_check_ipv6
-        echo $ipv6_gateway >/usr/local/bin/pve_ipv6_gateway
+        ipv6_address="${ipv6_subnet_2_without_last_segment}1"
+        write_network_state_atomic /usr/local/bin/pve_check_ipv6 "$ipv6_address" validate_ipv6_value || return 1
+        write_network_state_atomic /usr/local/bin/pve_ipv6_gateway "$ipv6_gateway" validate_ipv6_value || return 1
     else
         detect_existing_ipv6_config
     fi
@@ -371,7 +500,7 @@ detect_existing_ipv6_config() {
             if [ -n "$real_prefixlen" ] && [ "$real_prefixlen" -gt 0 ] && [ "$real_prefixlen" -le 128 ]; then
                 _green "Found real IPv6 prefix length from router advertisement: /$real_prefixlen"
                 _green "从路由器通告中发现真实的 IPv6 前缀长度: /$real_prefixlen"
-                echo "$real_prefixlen" >/usr/local/bin/pve_ipv6_real_prefixlen
+                write_network_state_atomic /usr/local/bin/pve_ipv6_real_prefixlen "$real_prefixlen" validate_ipv6_prefixlen_value || return 1
             else
                 _yellow "Could not parse IPv6 prefix length on interface ${interface}"
                 _yellow "无法从接口 ${interface} 中解析 IPv6 前缀长度"
@@ -381,20 +510,16 @@ detect_existing_ipv6_config() {
             _yellow "无法在接口 ${interface} 上获取路由器通告响应(超时或无响应)"
         fi
     fi
-    if [ -f /usr/local/bin/pve_ipv6_real_prefixlen ] && [ -s /usr/local/bin/pve_ipv6_real_prefixlen ]; then
-        real_prefixlen=$(cat /usr/local/bin/pve_ipv6_real_prefixlen)
+    if real_prefixlen=$(read_network_state /usr/local/bin/pve_ipv6_real_prefixlen validate_ipv6_prefixlen_value 2>/dev/null); then
         ipv6_prefixlen="$real_prefixlen"
         _blue "Using real IPv6 prefix length: /$ipv6_prefixlen"
         _green "检测到的真实 IPv6 前缀长度: /$ipv6_prefixlen"
-    elif [ -f /usr/local/bin/pve_ipv6_prefixlen ]; then
-        ipv6_prefixlen=$(cat /usr/local/bin/pve_ipv6_prefixlen)
-        [ "$ipv6_prefixlen" -gt 128 ] 2>/dev/null && ipv6_prefixlen=128
+    else
+        ipv6_prefixlen=$(read_network_state /usr/local/bin/pve_ipv6_prefixlen validate_ipv6_prefixlen_value 2>/dev/null || true)
     fi
-    if [ -f /usr/local/bin/pve_ipv6_gateway ]; then
-        ipv6_gateway=$(cat /usr/local/bin/pve_ipv6_gateway)
-    fi
-    if [ -f /usr/local/bin/pve_check_ipv6 ]; then
-        ipv6_address=$(cat /usr/local/bin/pve_check_ipv6)
+    ipv6_gateway=$(read_network_state /usr/local/bin/pve_ipv6_gateway validate_ipv6_value 2>/dev/null || true)
+    ipv6_address=$(read_network_state /usr/local/bin/pve_check_ipv6 validate_ipv6_value 2>/dev/null || true)
+    if [ -n "$ipv6_address" ] && [ -n "$ipv6_prefixlen" ]; then
         ipv6_address_without_last_segment="${ipv6_address%:*}:"
         reconfigure_ipv6_address
     fi
@@ -411,8 +536,7 @@ reconfigure_ipv6_address() {
         ipv6_address_without_last_segment="${ipv6_address%:*}:"
         if ping -c 1 -6 -W 3 $ipv6_address >/dev/null 2>&1; then
             check_ipv6
-            ipv6_address=$(cat /usr/local/bin/pve_check_ipv6)
-            echo "${ipv6_address}" >/usr/local/bin/pve_check_ipv6
+            ipv6_address=$(read_network_state /usr/local/bin/pve_check_ipv6 validate_ipv6_value 2>/dev/null || true)
             ipv6_address_without_last_segment="${ipv6_address%:*}:"
         fi
     elif [[ $ipv6_address == *:: ]]; then
@@ -421,7 +545,7 @@ reconfigure_ipv6_address() {
             ipv6_address="${ipv6_address%:*}:2"
         fi
         ipv6_address_without_last_segment="${ipv6_address%:*}:"
-        echo "${ipv6_address}" >/usr/local/bin/pve_check_ipv6
+        write_network_state_atomic /usr/local/bin/pve_check_ipv6 "$ipv6_address" validate_ipv6_value || return 1
     fi
 }
 
@@ -432,7 +556,7 @@ check_fe80_gateway() {
     else
         ipv6_gateway_fe80="N"
     fi
-    fe80_address=$(cat /usr/local/bin/pve_fe80_address)
+    fe80_address=$(read_network_state /usr/local/bin/pve_fe80_address validate_ipv6_value 2>/dev/null || true)
 }
 
 # 配置文件重试下载，优先使用CDN，CDN全部失败后降级使用原始链接
@@ -528,25 +652,22 @@ install_ndpresponder() {
 
 # 检测IPV4相关信息
 detect_ipv4_info() {
-    if [ -f /usr/local/bin/pve_ipv4_address ]; then
-        ipv4_address=$(cat /usr/local/bin/pve_ipv4_address)
-    else
+    if ! ipv4_address=$(read_network_state /usr/local/bin/pve_ipv4_address validate_ipv4_value 2>/dev/null); then
         ipv4_address=$(ip addr show | awk '/inet .*global/ && !/inet6/ {print $2}' | sed -n '1p')
-        echo "$ipv4_address" >/usr/local/bin/pve_ipv4_address
+        validate_ipv4_value "$ipv4_address" || return 1
+        write_network_state_atomic /usr/local/bin/pve_ipv4_address "$ipv4_address" validate_ipv4_value || return 1
     fi
 
-    if [ -f /usr/local/bin/pve_ipv4_gateway ]; then
-        ipv4_gateway=$(cat /usr/local/bin/pve_ipv4_gateway)
-    else
+    if ! ipv4_gateway=$(read_network_state /usr/local/bin/pve_ipv4_gateway validate_ipv4_value 2>/dev/null) || [[ "$ipv4_gateway" == */* ]]; then
         ipv4_gateway=$(ip route | awk '/default/ {print $3}' | sed -n '1p')
-        echo "$ipv4_gateway" >/usr/local/bin/pve_ipv4_gateway
+        validate_ipv4_value "$ipv4_gateway" && [[ "$ipv4_gateway" != */* ]] || return 1
+        write_network_state_atomic /usr/local/bin/pve_ipv4_gateway "$ipv4_gateway" validate_ipv4_value || return 1
     fi
 
-    if [ -f /usr/local/bin/pve_ipv4_subnet ]; then
-        ipv4_subnet=$(cat /usr/local/bin/pve_ipv4_subnet)
-    else
+    if ! ipv4_subnet=$(read_network_state /usr/local/bin/pve_ipv4_subnet validate_ipv4_value 2>/dev/null) || [[ "$ipv4_subnet" == */* ]]; then
         ipv4_subnet=$(ipcalc -n "$ipv4_address" | grep -oP 'Netmask:\s+\K.*' | awk '{print $1}')
-        echo "$ipv4_subnet" >/usr/local/bin/pve_ipv4_subnet
+        validate_ipv4_value "$ipv4_subnet" && [[ "$ipv4_subnet" != */* ]] || return 1
+        write_network_state_atomic /usr/local/bin/pve_ipv4_subnet "$ipv4_subnet" validate_ipv4_value || return 1
     fi
 }
 
@@ -691,6 +812,73 @@ iface vmbr0 inet6 static
 EOF
 }
 
+# Select a /24 which is not already attached to or routed by the host.  Cloud
+# providers commonly attach an RFC1918 management NIC, and using the same
+# subnet for vmbr1 makes guest traffic leave through that physical NIC.
+select_nat_ipv4_subnet() {
+    local requested="${PVE_NAT_SUBNET:-}"
+    local candidate gateway route
+    local candidates=()
+    local state_dir="${PVE_STATE_DIR:-/usr/local/bin}"
+    local subnet_state="${state_dir}/pve_nat_subnet"
+    local gateway_state="${state_dir}/pve_nat_gateway"
+
+    if [ -z "$requested" ]; then
+        requested="$(read_network_state "$subnet_state" validate_ipv4_network24_value 2>/dev/null || true)"
+    fi
+    [ -n "$requested" ] && candidates+=("$requested")
+    candidates+=("172.16.1.0/24" "10.250.0.0/24" "192.168.250.0/24" "10.251.0.0/24")
+
+    for candidate in "${candidates[@]}"; do
+        if ! validate_ipv4_network24_value "$candidate"; then
+            [ "$candidate" = "$requested" ] && {
+                _red "PVE_NAT_SUBNET must be an IPv4 /24 network ending in .0: ${candidate}"
+                _red "PVE_NAT_SUBNET 必须是以 .0 结尾的 IPv4 /24 网段：${candidate}"
+                return 1
+            }
+            continue
+        fi
+        if ! ipcalc -c "$candidate" >/dev/null 2>&1; then
+            [ "$candidate" = "$requested" ] && {
+                _red "PVE_NAT_SUBNET is not a valid IPv4 network: ${candidate}"
+                _red "PVE_NAT_SUBNET 不是有效的 IPv4 网段：${candidate}"
+                return 1
+            }
+            continue
+        fi
+        gateway="${candidate%0/24}1"
+        if ip -o -4 addr show dev vmbr1 2>/dev/null | grep -Fq " ${gateway}/24 "; then
+            nat_ipv4_subnet="$candidate"
+            nat_ipv4_gateway="$gateway"
+            nat_ipv4_prefix="${gateway%.*}"
+            write_network_state_atomic "$subnet_state" "$nat_ipv4_subnet" validate_ipv4_network24_value || return 1
+            write_network_state_atomic "$gateway_state" "$nat_ipv4_gateway" validate_ipv4_value || return 1
+            return 0
+        fi
+        route="$(ip -4 route get "$gateway" 2>/dev/null || true)"
+        if [ -n "$route" ] && ! grep -q ' via ' <<<"$route" && ! grep -q ' dev vmbr1 ' <<<" $route "; then
+            [ "$candidate" = "$requested" ] && {
+                _red "Requested PVE NAT subnet conflicts with an existing host route: ${candidate} (${route})"
+                _red "请求的 PVE NAT 网段与宿主机现有路由冲突：${candidate}（${route}）"
+                return 1
+            }
+            continue
+        fi
+        nat_ipv4_subnet="$candidate"
+        nat_ipv4_gateway="$gateway"
+        nat_ipv4_prefix="${gateway%.*}"
+        write_network_state_atomic "$subnet_state" "$nat_ipv4_subnet" validate_ipv4_network24_value || return 1
+        write_network_state_atomic "$gateway_state" "$nat_ipv4_gateway" validate_ipv4_value || return 1
+        _green "Selected PVE NAT subnet: ${nat_ipv4_subnet} (gateway ${nat_ipv4_gateway})"
+        _green "已选择 PVE NAT 网段：${nat_ipv4_subnet}（网关 ${nat_ipv4_gateway}）"
+        return 0
+    done
+
+    _red "Unable to find a non-conflicting PVE NAT subnet"
+    _red "无法找到与宿主机网络不冲突的 PVE NAT 网段"
+    return 1
+}
+
 # 配置vmbr1网桥
 configure_vmbr1() {
     chattr -i /etc/network/interfaces
@@ -712,7 +900,7 @@ add_vmbr1_with_accept_ra() {
         cat <<EOF | sudo tee -a /etc/network/interfaces
 auto vmbr1
 iface vmbr1 inet static
-    address 172.16.1.1
+    address ${nat_ipv4_gateway}
     netmask 255.255.255.0
     bridge_ports none
     bridge_stp off
@@ -727,15 +915,15 @@ EOF
         cat <<EOF | sudo tee -a /etc/network/interfaces
 auto vmbr1
 iface vmbr1 inet static
-    address 172.16.1.1
+    address ${nat_ipv4_gateway}
     netmask 255.255.255.0
     bridge_ports none
     bridge_stp off
     bridge_fd 0
     post-up echo 1 > /proc/sys/net/ipv4/ip_forward
     post-up echo 1 > /proc/sys/net/ipv4/conf/vmbr1/proxy_arp
-    post-up iptables -t nat -A POSTROUTING -s '172.16.1.0/24' -o vmbr0 -j MASQUERADE
-    post-down iptables -t nat -D POSTROUTING -s '172.16.1.0/24' -o vmbr0 -j MASQUERADE
+    post-up iptables -t nat -A POSTROUTING -s '${nat_ipv4_subnet}' -o vmbr0 -j MASQUERADE
+    post-down iptables -t nat -D POSTROUTING -s '${nat_ipv4_subnet}' -o vmbr0 -j MASQUERADE
 
 pre-up echo 2 > /proc/sys/net/ipv6/conf/vmbr0/accept_ra
 EOF
@@ -748,7 +936,7 @@ add_vmbr1_ipv4_only() {
         cat <<EOF | sudo tee -a /etc/network/interfaces
 auto vmbr1
 iface vmbr1 inet static
-    address 172.16.1.1
+    address ${nat_ipv4_gateway}
     netmask 255.255.255.0
     bridge_ports none
     bridge_stp off
@@ -761,15 +949,15 @@ EOF
         cat <<EOF | sudo tee -a /etc/network/interfaces
 auto vmbr1
 iface vmbr1 inet static
-    address 172.16.1.1
+    address ${nat_ipv4_gateway}
     netmask 255.255.255.0
     bridge_ports none
     bridge_stp off
     bridge_fd 0
     post-up echo 1 > /proc/sys/net/ipv4/ip_forward
     post-up echo 1 > /proc/sys/net/ipv4/conf/vmbr1/proxy_arp
-    post-up iptables -t nat -A POSTROUTING -s '172.16.1.0/24' -o vmbr0 -j MASQUERADE
-    post-down iptables -t nat -D POSTROUTING -s '172.16.1.0/24' -o vmbr0 -j MASQUERADE
+    post-up iptables -t nat -A POSTROUTING -s '${nat_ipv4_subnet}' -o vmbr0 -j MASQUERADE
+    post-down iptables -t nat -D POSTROUTING -s '${nat_ipv4_subnet}' -o vmbr0 -j MASQUERADE
 EOF
     fi
 }
@@ -784,7 +972,7 @@ add_vmbr1_with_ipv6() {
         cat <<EOF | sudo tee -a /etc/network/interfaces
 auto vmbr1
 iface vmbr1 inet static
-    address 172.16.1.1
+    address ${nat_ipv4_gateway}
     netmask 255.255.255.0
     bridge_ports none
     bridge_stp off
@@ -802,15 +990,15 @@ EOF
         cat <<EOF | sudo tee -a /etc/network/interfaces
 auto vmbr1
 iface vmbr1 inet static
-    address 172.16.1.1
+    address ${nat_ipv4_gateway}
     netmask 255.255.255.0
     bridge_ports none
     bridge_stp off
     bridge_fd 0
     post-up echo 1 > /proc/sys/net/ipv4/ip_forward
     post-up echo 1 > /proc/sys/net/ipv4/conf/vmbr1/proxy_arp
-    post-up iptables -t nat -A POSTROUTING -s '172.16.1.0/24' -o vmbr0 -j MASQUERADE
-    post-down iptables -t nat -D POSTROUTING -s '172.16.1.0/24' -o vmbr0 -j MASQUERADE
+    post-up iptables -t nat -A POSTROUTING -s '${nat_ipv4_subnet}' -o vmbr0 -j MASQUERADE
+    post-down iptables -t nat -D POSTROUTING -s '${nat_ipv4_subnet}' -o vmbr0 -j MASQUERADE
 
 iface vmbr1 inet6 static
     address 2001:db8:1::1/64
@@ -934,8 +1122,8 @@ setup_firewall() {
         nft add table ip nat 2>/dev/null || true
         nft 'add chain ip nat prerouting { type nat hook prerouting priority dstnat; policy accept; }' 2>/dev/null || true
         nft 'add chain ip nat postrouting { type nat hook postrouting priority srcnat; policy accept; }' 2>/dev/null || true
-        if ! nft list chain ip nat postrouting 2>/dev/null | grep -Fq 'ip saddr 172.16.1.0/24 oifname "vmbr0" masquerade'; then
-            nft add rule ip nat postrouting ip saddr 172.16.1.0/24 oifname "vmbr0" masquerade
+        if ! nft list chain ip nat postrouting 2>/dev/null | grep -Fq "ip saddr ${nat_ipv4_subnet} oifname \"vmbr0\" masquerade"; then
+            nft add rule ip nat postrouting ip saddr "$nat_ipv4_subnet" oifname "vmbr0" masquerade
         fi
         nft add table ip6 nat 2>/dev/null || true
         nft 'add chain ip6 nat prerouting { type nat hook prerouting priority dstnat; policy accept; }' 2>/dev/null || true
@@ -950,8 +1138,8 @@ setup_firewall() {
         modprobe ip6table_nat 2>/dev/null || true
         modprobe ip6table_raw 2>/dev/null || true
         modprobe nf_nat 2>/dev/null || true
-        if ! iptables -t nat -C POSTROUTING -s '172.16.1.0/24' -o vmbr0 -j MASQUERADE 2>/dev/null; then
-            iptables -t nat -A POSTROUTING -s '172.16.1.0/24' -o vmbr0 -j MASQUERADE
+        if ! iptables -t nat -C POSTROUTING -s "$nat_ipv4_subnet" -o vmbr0 -j MASQUERADE 2>/dev/null; then
+            iptables -t nat -A POSTROUTING -s "$nat_ipv4_subnet" -o vmbr0 -j MASQUERADE
         fi
     fi
     update_sysctl "net.ipv4.ip_forward=1"
@@ -1047,12 +1235,13 @@ cdn_urls=("https://cdn0.spiritlhl.top/" "http://cdn3.spiritlhl.net/" "http://cdn
 check_cdn_file
 get_system_arch
 sysctl_path=$(which sysctl)
-detect_network_interfaces
-detect_he_tunnel
+detect_network_interfaces || exit 1
+detect_he_tunnel || exit 1
 install_ndpresponder
-detect_ipv4_info
+detect_ipv4_info || exit 1
 prepare_network_interfaces
 configure_vmbr0
+select_nat_ipv4_subnet || exit 1
 configure_vmbr1
 configure_vmbr2
 chattr +i /etc/network/interfaces

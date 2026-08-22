@@ -218,8 +218,8 @@ configure_vm() {
     fi
     qm set $vm_num --nameserver "1.1.1.1 2606:4700:4700::1111" || qm set $vm_num --nameserver 1.1.1.1
     qm set $vm_num --searchdomain local
-    user_ip="172.16.1.${vm_num}"
-    qm set $vm_num --ipconfig0 ip=${user_ip}/24,gw=172.16.1.1
+    user_ip="${pve_nat_prefix}.${vm_num}"
+    qm set $vm_num --ipconfig0 ip=${user_ip}/24,gw=${pve_nat_gateway}
     appended_file="/usr/local/bin/pve_appended_content.txt"
     if [ -s "$appended_file" ]; then
         vm_internal_ipv6="2001:db8:1::${vm_num}"
@@ -279,6 +279,7 @@ main() {
     cdn_urls=("https://cdn0.spiritlhl.top/" "http://cdn1.spiritlhl.net/" "http://cdn2.spiritlhl.net/" "http://cdn3.spiritlhl.net/" "http://cdn4.spiritlhl.net/")
     check_cdn_file
     load_default_config || exit 1
+    load_nat_ipv4_config || exit 1
     setup_locale
     init_params "$@"
     validate_vm_num || exit 1
