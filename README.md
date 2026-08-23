@@ -8,10 +8,11 @@
 
 ## 更新
 
-2026.06.30
+2026.08.22
 
-- 安装脚本在检测到主网口后会显示候选网口、IPv4、网关和 MAC，可输入序号选择 PVE 主桥接网口；直接回车仍使用原自动检测逻辑
-- 无交互安装支持通过 `PVE_MAIN_INTERFACE=<iface>` 预设主桥接网口
+- 修复 oneclickvirt 远程集成测试在 `ifupdown2-install.service` 二次重启期间过早启动 PVE 第二阶段的问题；测试会等待引导服务完成并确认 SSH 稳定
+- `tests/` 中的安装网络回归测试覆盖新版 ShellCheck，并模拟安装成功、失败及预先存在的安装模式标记
+
 
 [更新日志](CHANGELOG.md)
 
@@ -62,6 +63,14 @@ English Docs:
 [https://www.spiritlhl.net/en/](https://www.spiritlhl.net/en/)
 
 Description of the **Proxmox VE** partition contents in the documentation
+
+The installer preserves the selected interface IPv4 prefix across reboots and
+uses an installation-mode marker while core packages are configured so a
+remote bridge is not reloaded before it is complete. The OneClickVirt
+integration harness waits for the optional `ifupdown2-install.service`
+bootstrap reboot before starting the post-reboot pass. The repository's
+`tests/` directory covers syntax, ShellCheck, network state, and install-mode
+regressions.
 
 Self-patching VM image sources:
 

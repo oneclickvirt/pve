@@ -1,12 +1,14 @@
 [Unit]
 Description=Install ifupdown2 on next reboot
-After=network.target
+After=network-online.target
+Wants=network-online.target
 
 [Service]
 Type=oneshot
 ExecStartPre=/usr/bin/env sleep 5
 ExecStart=/usr/local/bin/install_ifupdown2.sh
 ExecStartPost=/usr/bin/env reboot
+TimeoutStartSec=30min
 RemainAfterExit=yes
 
 [Install]

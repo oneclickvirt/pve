@@ -160,14 +160,18 @@ rollback_failed_pve_install() { :; }
 
 marker="${tmp_dir}/proxmox_install_mode"
 PROXMOX_INSTALL_MODE_FILE="$marker"
-install_dpkg_packages() { [[ -e "$PROXMOX_INSTALL_MODE_FILE" ]]; }
+TEST_INSTALL_DPKG_FAILURE=false
+# install_proxmox_packages is loaded above through eval, so ShellCheck cannot
+# see this intentionally injected test double as a direct call site.
+# shellcheck disable=SC2317
+install_dpkg_packages() {
+    [[ -e "$PROXMOX_INSTALL_MODE_FILE" ]] || return 1
+    [[ "$TEST_INSTALL_DPKG_FAILURE" != true ]]
+}
 install_proxmox_packages
 assert_file_absent "$marker" "owned install marker after success"
 
-install_dpkg_packages() {
-    [[ -e "$PROXMOX_INSTALL_MODE_FILE" ]]
-    return 1
-}
+TEST_INSTALL_DPKG_FAILURE=true
 set +e
 (install_proxmox_packages >/dev/null 2>&1)
 failure_status=$?
@@ -179,7 +183,7 @@ fi
 assert_file_absent "$marker" "owned install marker after failure"
 
 touch "$marker"
-install_dpkg_packages() { [[ -e "$PROXMOX_INSTALL_MODE_FILE" ]]; }
+TEST_INSTALL_DPKG_FAILURE=false
 install_proxmox_packages
 if [[ ! -e "$marker" ]]; then
     printf 'FAIL: pre-existing Proxmox install marker was removed\n' >&2
