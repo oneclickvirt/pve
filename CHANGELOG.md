@@ -1,5 +1,10 @@
 # 更新日志
 
+2026.08.23
+
+- 修复 `ssh_sh.sh` 在 POSIX `/bin/sh` 下使用 Bash 专有比较运算符导致 Alpine、OpenWrt 和 Arch 分支识别异常的问题；补充 x86 镜像数组选择的边界处理
+- 扩展 shell 回归工作流覆盖仓库内全部 `.sh`/`.service` 变更，并新增 ifupdown2 安装生命周期、默认 VM 镜像选择和 POSIX shell 识别的隔离测试
+
 2026.08.22
 
 - 修复 oneclickvirt 远程集成测试在 `ifupdown2-install.service` 二次重启期间过早启动 PVE 第二阶段的问题；测试现在等待引导服务完成并确认 SSH 稳定

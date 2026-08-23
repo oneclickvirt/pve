@@ -3,6 +3,20 @@
 # https://github.com/oneclickvirt/pve
 # 2024.03.12
 
+os_release_file="${SSH_OS_RELEASE_FILE:-/etc/os-release}"
+issue_file="${SSH_ISSUE_FILE:-/etc/issue}"
+
+get_os_id() {
+    grep -E '^ID=' "$os_release_file" 2>/dev/null | cut -d '=' -f 2 | tr -d '"'
+}
+
+is_arch_linux() {
+    case "$(sed 's/\\.*//' "$issue_file" 2>/dev/null | sed '/^[ ]*$/d')" in
+    *Arch*) return 0 ;;
+    *) return 1 ;;
+    esac
+}
+
 if [ -f "/etc/resolv.conf" ]; then
     cp /etc/resolv.conf /etc/resolv.conf.bak
     echo "nameserver 8.8.8.8" | tee -a /etc/resolv.conf >/dev/null
@@ -18,7 +32,7 @@ do
         fi
     fi
 done
-if [ "$(cat /etc/os-release | grep -E '^ID=' | cut -d '=' -f 2 | tr -d '"')" == "alpine" ]; then
+if [ "$(get_os_id)" = "alpine" ]; then
     apk update
     apk add --no-cache openssh-server
     apk add --no-cache sshpass
@@ -27,7 +41,7 @@ if [ "$(cat /etc/os-release | grep -E '^ID=' | cut -d '=' -f 2 | tr -d '"')" == 
     apk add --no-cache curl
     apk add --no-cache wget
     apk add --no-cache lsof
-    cd /etc/ssh
+    cd /etc/ssh || exit 1
     ssh-keygen -A
     chattr -i /etc/ssh/sshd_config
     sed -i '/^#PermitRootLogin\|PermitRootLogin/c PermitRootLogin yes' /etc/ssh/sshd_config
@@ -44,7 +58,7 @@ if [ "$(cat /etc/os-release | grep -E '^ID=' | cut -d '=' -f 2 | tr -d '"')" == 
     /usr/sbin/sshd
     rc-update add sshd default
     chattr +i /etc/ssh/sshd_config
-elif [ "$(cat /etc/os-release | grep -E '^ID=' | cut -d '=' -f 2 | tr -d '"')" == "openwrt" ]; then
+elif [ "$(get_os_id)" = "openwrt" ]; then
     opkg update
     opkg install openssh-server
     opkg install bash
@@ -55,7 +69,7 @@ elif [ "$(cat /etc/os-release | grep -E '^ID=' | cut -d '=' -f 2 | tr -d '"')" =
     opkg install cron
     /etc/init.d/sshd enable
     /etc/init.d/sshd start
-    cd /etc/ssh
+    cd /etc/ssh || exit 1
     ssh-keygen -A
     chattr -i /etc/ssh/sshd_config
     sed -i "s/^#\?Port.*/Port 22/g" /etc/ssh/sshd_config
@@ -68,7 +82,7 @@ elif [ "$(cat /etc/os-release | grep -E '^ID=' | cut -d '=' -f 2 | tr -d '"')" =
     sed -i '/^AuthorizedKeysFile/s/^/#/' /etc/ssh/sshd_config
     chattr +i /etc/ssh/sshd_config
     /etc/init.d/sshd restart
-elif [ "$(grep . /etc/issue 2>/dev/null | cut -d \\ -f1 | sed '/^[ ]*$/d')" =~ *"Arch"* ]; then
+elif is_arch_linux; then
     curl -slk https://raw.githubusercontent.com/SuperManito/LinuxMirrors/main/ChangeMirrors.sh -o ChangeMirrors.sh
     chmod 755 ChangeMirrors.sh
     ./ChangeMirrors.sh --use-official-source --web-protocol http --intranet false --close-firewall true --backup true --updata-software false --clean-cache false --ignore-backup-tips > /dev/null

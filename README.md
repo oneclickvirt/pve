@@ -8,6 +8,10 @@
 
 ## 更新
 
+2026.08.23
+
+- 修复 `ssh_sh.sh` 在 POSIX `/bin/sh` 下的 Alpine、OpenWrt 和 Arch 系统识别，并补充镜像选择与 ifupdown2 安装生命周期的隔离回归测试
+
 2026.08.22
 
 - 修复 oneclickvirt 远程集成测试在 `ifupdown2-install.service` 二次重启期间过早启动 PVE 第二阶段的问题；测试会等待引导服务完成并确认 SSH 稳定
@@ -70,7 +74,8 @@ remote bridge is not reloaded before it is complete. The OneClickVirt
 integration harness waits for the optional `ifupdown2-install.service`
 bootstrap reboot before starting the post-reboot pass. The repository's
 `tests/` directory covers syntax, ShellCheck, network state, and install-mode
-regressions.
+regressions, including isolated ifupdown2 lifecycle, image selection, and
+POSIX `ssh_sh.sh` detection checks.
 
 Self-patching VM image sources:
 

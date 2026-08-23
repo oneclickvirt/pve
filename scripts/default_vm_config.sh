@@ -502,8 +502,10 @@ _download_with_retry() {
 
 download_x86_image() {
     ver=""
+    selected_image=""
+    selected_tag_image=""
     # 尝试使用新镜像
-    if [[ -n "$new_images" ]]; then
+    if [[ ${#new_images[@]} -gt 0 ]]; then
         matched_images=()
         for image in "${new_images[@]}"; do
             if [[ "$image" == $system* ]]; then
@@ -597,8 +599,12 @@ download_x86_image() {
             array_name="${ver}[@]"
             array=("${!array_name}")
             if [[ " ${array[*]} " == *" $system "* ]]; then
-                index=$(echo ${ver_list[*]} | tr -s ' ' '\n' | grep -n "$ver" | cut -d':' -f1)
-                ver="${ver_name_list[$((index - 1))]}"
+                for index in "${!ver_list[@]}"; do
+                    if [[ "${ver_list[$index]}" == "$ver" ]]; then
+                        ver="${ver_name_list[$index]}"
+                        break
+                    fi
+                done
                 break
             fi
         done
