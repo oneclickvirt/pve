@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/oneclickvirt/pve
-# 2026.02.28
+# 2026.08.26
 # ./buildct_onlyv6.sh CTID 密码 CPU核数 内存 硬盘 系统 存储盘
 # ./buildct_onlyv6.sh 102 1234567 1 512 5 debian11 local
 
@@ -281,8 +281,8 @@ create_container() {
     appended_file="/usr/local/bin/pve_appended_content.txt"
     if [ -s "$appended_file" ]; then
         # 使用 vmbr1 网桥和 NAT 映射
-        ct_internal_ipv6="2001:db8:1::${CTID}"
-        pct set $CTID --net0 name=eth0,ip6="${ct_internal_ipv6}/64",bridge=vmbr1,gw6="2001:db8:1::1"
+        ct_internal_ipv6="$(pve_nat_ipv6_for_id "$CTID")"
+        pct set $CTID --net0 name=eth0,ip6="${ct_internal_ipv6}/64",bridge=vmbr1,gw6="${pve_nat_ipv6_gateway}"
         pct set $CTID --net1 name=eth1,ip=${user_ip}/24,bridge=vmbr1,gw=${pve_nat_gateway}
         pct set $CTID --nameserver "8.8.8.8 8.8.4.4 2001:4860:4860::8888 2001:4860:4860::8844"
         # 获取可用的外部 IPv6 地址

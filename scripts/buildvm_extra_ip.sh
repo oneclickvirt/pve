@@ -272,8 +272,8 @@ configure_vm() {
             appended_file="/usr/local/bin/pve_appended_content.txt"
             if [ -s "$appended_file" ]; then
                 # 使用 vmbr1 网桥和 NAT 映射
-                vm_internal_ipv6="2001:db8:1::${vm_num}"
-                qm set $vm_num --ipconfig1 ip6="${vm_internal_ipv6}/64",gw6="2001:db8:1::1"
+                vm_internal_ipv6="$(pve_nat_ipv6_for_id "$vm_num")"
+                qm set $vm_num --ipconfig1 ip6="${vm_internal_ipv6}/64",gw6="${pve_nat_ipv6_gateway}"
                 host_external_ipv6=$(get_available_vmbr1_ipv6)
                 if [ -z "$host_external_ipv6" ]; then
                     echo -e "\e[31mNo available IPv6 address found for NAT mapping\e[0m"
@@ -347,6 +347,7 @@ main() {
     cdn_urls=("https://cdn0.spiritlhl.top/" "http://cdn1.spiritlhl.net/" "http://cdn2.spiritlhl.net/" "http://cdn3.spiritlhl.net/" "http://cdn4.spiritlhl.net/")
     check_cdn_file
     load_default_config || exit 1
+    load_nat_ipv6_config || exit 1
     setup_locale
     get_system_arch || exit 1
     check_kvm_support

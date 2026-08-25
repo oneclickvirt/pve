@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/oneclickvirt/pve
-# 2026.02.28
+# 2026.08.26
 # ./pve_delete.sh arg1 arg2
 # arg 可填入虚拟机/容器的序号，可以有任意多个；或使用 all 删除全部
 # 日志 /var/log/pve_delete.log
@@ -220,9 +220,27 @@ cleanup_ipv6_nat_rules() {
     local appended_file="/usr/local/bin/pve_appended_content.txt"
     local rules_file="/usr/local/bin/ipv6_nat_rules.sh"
     local used_ips_file="/usr/local/bin/pve_used_vmbr1_ips.txt"
+    local state_dir="${PVE_STATE_DIR:-/usr/local/bin}"
     if [ -s "$appended_file" ]; then
         log "Cleaning up IPv6 NAT rules for VM $vmctid"
-        local vm_internal_ipv6="2001:db8:1::${vmctid}"
+        local vm_internal_ipv6=""
+        if [ -s "${state_dir%/}/pve_nat_ipv6_subnet" ] && command -v python3 >/dev/null 2>&1; then
+            vm_internal_ipv6=$(python3 - "$(cat "${state_dir%/}/pve_nat_ipv6_subnet")" "$vmctid" <<'PY'
+import ipaddress
+import sys
+try:
+    network = ipaddress.IPv6Network(sys.argv[1], strict=False)
+    value = ipaddress.IPv6Address(int(network.network_address) + int(sys.argv[2]))
+    print(value if value in network else "")
+except ValueError:
+    print("")
+PY
+)
+        fi
+        if [ -z "$vm_internal_ipv6" ]; then
+            log "No persisted PVE IPv6 NAT subnet for ${vmctid}; skipping IPv6 NAT cleanup"
+            return 0
+        fi
         local host_external_ipv6=""
         if use_nft_backend; then
             # nftables: find and remove matching rules

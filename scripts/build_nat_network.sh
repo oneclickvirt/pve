@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/oneclickvirt/pve
-# 2026.02.28
+# 2026.08.26
 
 ########## 预设部分输出和部分中间变量
 
@@ -309,6 +309,20 @@ validate_ipv6_value() {
     else
         [ "$count" -eq 8 ]
     fi
+}
+
+validate_ipv6_network_value() {
+    local value="${1-}"
+    command -v python3 >/dev/null 2>&1 || return 1
+    python3 - "$value" <<'PY' >/dev/null 2>&1
+import ipaddress
+import sys
+try:
+    network = ipaddress.IPv6Network(sys.argv[1], strict=False)
+except ValueError:
+    raise SystemExit(1)
+raise SystemExit(0 if network.prefixlen == 64 and network.subnet_of(ipaddress.IPv6Network("fc00::/7")) else 1)
+PY
 }
 
 write_network_state_atomic() {
@@ -866,6 +880,123 @@ select_nat_ipv4_subnet() {
     return 1
 }
 
+pve_nat_ipv6_candidate_is_safe() {
+    local candidate="${1:-}" host_state
+    command -v python3 >/dev/null 2>&1 || return 1
+    host_state="$(
+        {
+            ip -o -6 addr show 2>/dev/null || true
+            ip -6 route show table all 2>/dev/null || true
+        }
+    )"
+    python3 - "$candidate" "$host_state" <<'PY' >/dev/null 2>&1
+import ipaddress
+import sys
+
+try:
+    candidate = ipaddress.IPv6Network(sys.argv[1], strict=False)
+except ValueError:
+    raise SystemExit(1)
+if candidate.prefixlen != 64 or not candidate.subnet_of(ipaddress.IPv6Network("fc00::/7")):
+    raise SystemExit(1)
+
+def vmbr1_owns(network, device):
+    # The bridge's connected /64 and its local gateway /128 are expected after
+    # installation.  They are not a conflict with the persisted NAT subnet.
+    return device == "vmbr1" and network.subnet_of(candidate)
+
+route_types = {"unreachable", "prohibit", "blackhole", "throw", "local", "broadcast", "anycast", "multicast"}
+for line in sys.argv[2].splitlines():
+    fields = line.split()
+    if not fields:
+        continue
+    if "inet6" in fields:
+        address_index = fields.index("inet6") + 1
+        if address_index >= len(fields):
+            continue
+        device = fields[1].split("@", 1)[0] if len(fields) > 1 else ""
+        token = fields[address_index]
+    else:
+        destination_index = 1 if fields[0] in route_types else 0
+        if destination_index >= len(fields):
+            continue
+        token = fields[destination_index]
+        if token == "default":
+            continue
+        device = ""
+        if "dev" in fields:
+            device_index = fields.index("dev") + 1
+            if device_index < len(fields):
+                device = fields[device_index].split("@", 1)[0]
+    try:
+        existing = ipaddress.IPv6Network(token, strict=False)
+    except ValueError:
+        continue
+    if existing.prefixlen == 0:
+        continue
+    if candidate.overlaps(existing) and not vmbr1_owns(existing, device):
+        raise SystemExit(1)
+raise SystemExit(0)
+PY
+}
+
+# Select an RFC4193 /64 for the NAT bridge. A child of the uplink's SLAAC /64
+# is still covered by its connected route, even when no address in that child
+# prefix is currently assigned on the host.
+select_nat_ipv6_subnet() {
+    local candidate index requested
+    local state_dir="${PVE_STATE_DIR:-/usr/local/bin}"
+    local subnet_state="${state_dir}/pve_nat_ipv6_subnet"
+    local requested_explicit=false
+    if [[ -n "${PVE_NAT_IPV6_SUBNET:-}" ]]; then
+        requested="${PVE_NAT_IPV6_SUBNET}"
+        requested_explicit=true
+    elif [ -s "$subnet_state" ]; then
+        requested="$(cat "$subnet_state" 2>/dev/null || true)"
+    else
+        requested=""
+    fi
+    candidate="$requested"
+    if [ -n "$candidate" ] && ! pve_nat_ipv6_candidate_is_safe "$candidate"; then
+        if [[ "$requested_explicit" == true ]]; then
+            _red "Requested PVE NAT IPv6 subnet is invalid or overlaps a host route: ${candidate}"
+            _red "请求的 PVE NAT IPv6 子网无效或与宿主机路由重叠：${candidate}"
+            return 1
+        fi
+        candidate=""
+    fi
+    for index in $(seq 0 255); do
+        [ -n "$candidate" ] || candidate="$(python3 - "$index" <<'PY'
+import ipaddress
+import sys
+base = ipaddress.IPv6Network("fd42:5339:296f:1f00::/56")
+print(ipaddress.IPv6Network((int(base.network_address) + (int(sys.argv[1]) << 64), 64)))
+PY
+)"
+        if pve_nat_ipv6_candidate_is_safe "$candidate"; then
+            break
+        fi
+        candidate=""
+    done
+    if [ -z "$candidate" ] || ! pve_nat_ipv6_candidate_is_safe "$candidate"; then
+        _red "Unable to find a host-disjoint private IPv6 NAT subnet"
+        _red "无法找到与宿主机网络不冲突的私有 IPv6 NAT 网段"
+        return 1
+    fi
+    nat_ipv6_subnet="$candidate"
+    nat_ipv6_gateway="$(python3 - "$candidate" <<'PY'
+import ipaddress
+import sys
+network = ipaddress.IPv6Network(sys.argv[1], strict=False)
+print(ipaddress.IPv6Address(int(network.network_address) + 1))
+PY
+)"
+    write_network_state_atomic "$subnet_state" "$nat_ipv6_subnet" validate_ipv6_network_value || return 1
+    write_network_state_atomic "${state_dir}/pve_nat_ipv6_gateway" "$nat_ipv6_gateway" validate_ipv6_value || return 1
+    _green "Selected PVE IPv6 NAT subnet: ${nat_ipv6_subnet} (gateway ${nat_ipv6_gateway})"
+    _green "已选择 PVE IPv6 NAT 网段：${nat_ipv6_subnet}（网关 ${nat_ipv6_gateway}）"
+}
+
 # 配置vmbr1网桥
 configure_vmbr1() {
     chattr -i /etc/network/interfaces
@@ -953,7 +1084,7 @@ EOF
 add_vmbr1_with_ipv6() {
     if command -v nft >/dev/null 2>&1 && nft list tables >/dev/null 2>&1; then
         # nftables: masquerade rules managed by nftables.service, add IPv6 masquerade to nft
-        nft add rule ip6 nat postrouting ip6 saddr 2001:db8:1::/64 oifname "vmbr0" masquerade 2>/dev/null || true
+        nft add rule ip6 nat postrouting ip6 saddr "${nat_ipv6_subnet}" oifname "vmbr0" masquerade 2>/dev/null || true
         printf '#!/usr/sbin/nft -f\nflush ruleset\n' > /etc/nftables.conf
         nft list ruleset >> /etc/nftables.conf
         cat <<EOF | sudo tee -a /etc/network/interfaces
@@ -969,7 +1100,7 @@ iface vmbr1 inet static
     post-up nft -f /etc/nftables.conf 2>/dev/null || true
 
 iface vmbr1 inet6 static
-    address 2001:db8:1::1/64
+    address ${nat_ipv6_gateway}/64
     post-up sysctl -w net.ipv6.conf.all.forwarding=1
     post-down sysctl -w net.ipv6.conf.all.forwarding=0
 EOF
@@ -988,11 +1119,11 @@ iface vmbr1 inet static
     post-down iptables -t nat -D POSTROUTING -s '${nat_ipv4_subnet}' -o vmbr0 -j MASQUERADE
 
 iface vmbr1 inet6 static
-    address 2001:db8:1::1/64
+    address ${nat_ipv6_gateway}/64
     post-up sysctl -w net.ipv6.conf.all.forwarding=1
-    post-up ip6tables -t nat -A POSTROUTING -s 2001:db8:1::/64 -o vmbr0 -j MASQUERADE
+    post-up ip6tables -t nat -A POSTROUTING -s ${nat_ipv6_subnet} -o vmbr0 -j MASQUERADE
     post-down sysctl -w net.ipv6.conf.all.forwarding=0
-    post-down ip6tables -t nat -D POSTROUTING -s 2001:db8:1::/64 -o vmbr0 -j MASQUERADE
+    post-down ip6tables -t nat -D POSTROUTING -s ${nat_ipv6_subnet} -o vmbr0 -j MASQUERADE
 EOF
     fi
 }
@@ -1232,6 +1363,7 @@ detect_ipv4_info || exit 1
 prepare_network_interfaces
 configure_vmbr0
 select_nat_ipv4_subnet || exit 1
+select_nat_ipv6_subnet || exit 1
 configure_vmbr1
 configure_vmbr2
 chattr +i /etc/network/interfaces

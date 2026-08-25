@@ -16,6 +16,124 @@ load_nat_ipv4_config() {
         return 1
     fi
     pve_nat_prefix="${pve_nat_gateway%.*}"
+    load_nat_ipv6_config || return 1
+}
+pve_nat_ipv6_candidate_is_safe() {
+    local candidate="${1:-}" host_state
+    command -v python3 >/dev/null 2>&1 || return 1
+    host_state="$(
+        {
+            ip -o -6 addr show 2>/dev/null || true
+            ip -6 route show table all 2>/dev/null || true
+        }
+    )"
+    python3 - "$candidate" "$host_state" <<'PY' >/dev/null 2>&1
+import ipaddress
+import sys
+
+try:
+    candidate = ipaddress.IPv6Network(sys.argv[1], strict=False)
+except ValueError:
+    raise SystemExit(1)
+if candidate.prefixlen != 64 or not candidate.subnet_of(ipaddress.IPv6Network("fc00::/7")):
+    raise SystemExit(1)
+
+def vmbr1_owns(network, device):
+    # The bridge's connected /64 and its local gateway /128 are expected after
+    # installation.  They are not a conflict with the persisted NAT subnet.
+    return device == "vmbr1" and network.subnet_of(candidate)
+
+route_types = {"unreachable", "prohibit", "blackhole", "throw", "local", "broadcast", "anycast", "multicast"}
+for line in sys.argv[2].splitlines():
+    fields = line.split()
+    if not fields:
+        continue
+    if "inet6" in fields:
+        address_index = fields.index("inet6") + 1
+        if address_index >= len(fields):
+            continue
+        device = fields[1].split("@", 1)[0] if len(fields) > 1 else ""
+        token = fields[address_index]
+    else:
+        destination_index = 1 if fields[0] in route_types else 0
+        if destination_index >= len(fields):
+            continue
+        token = fields[destination_index]
+        if token == "default":
+            continue
+        device = ""
+        if "dev" in fields:
+            device_index = fields.index("dev") + 1
+            if device_index < len(fields):
+                device = fields[device_index].split("@", 1)[0]
+    try:
+        existing = ipaddress.IPv6Network(token, strict=False)
+    except ValueError:
+        continue
+    if existing.prefixlen == 0:
+        continue
+    if candidate.overlaps(existing) and not vmbr1_owns(existing, device):
+        raise SystemExit(1)
+raise SystemExit(0)
+PY
+}
+load_nat_ipv6_config() {
+    local state_dir="${PVE_STATE_DIR:-/usr/local/bin}" state_file gateway_file candidate requested index
+    local requested_explicit=false
+    state_file="${state_dir%/}/pve_nat_ipv6_subnet"
+    gateway_file="${state_dir%/}/pve_nat_ipv6_gateway"
+    if [[ -n "${PVE_NAT_IPV6_SUBNET:-}" ]]; then
+        requested="${PVE_NAT_IPV6_SUBNET}"
+        requested_explicit=true
+    else
+        requested="$(cat "$state_file" 2>/dev/null || true)"
+    fi
+    candidate="$requested"
+    if [ -n "$candidate" ] && ! pve_nat_ipv6_candidate_is_safe "$candidate"; then
+        if [[ "$requested_explicit" == true ]]; then
+            _red "Requested PVE NAT IPv6 subnet is invalid or overlaps a host route: ${candidate}"
+            _red "请求的 PVE NAT IPv6 子网无效或与宿主机路由重叠：${candidate}"
+            return 1
+        fi
+        candidate=""
+    fi
+    for index in $(seq 0 255); do
+        [ -n "$candidate" ] || candidate="$(python3 - "$index" <<'PY'
+import ipaddress
+import sys
+base = ipaddress.IPv6Network("fd42:5339:296f:1f00::/56")
+print(ipaddress.IPv6Network((int(base.network_address) + (int(sys.argv[1]) << 64), 64)))
+PY
+)"
+        if pve_nat_ipv6_candidate_is_safe "$candidate"; then
+            break
+        fi
+        candidate=""
+    done
+    [ -n "$candidate" ] && pve_nat_ipv6_candidate_is_safe "$candidate" || return 1
+    pve_nat_ipv6_subnet="$candidate"
+    pve_nat_ipv6_gateway="$(python3 - "$candidate" <<'PY'
+import ipaddress
+import sys
+network = ipaddress.IPv6Network(sys.argv[1], strict=False)
+print(ipaddress.IPv6Address(int(network.network_address) + 1))
+PY
+)"
+    mkdir -p "$state_dir" || return 1
+    printf '%s\n' "$pve_nat_ipv6_subnet" >"$state_file"
+    printf '%s\n' "$pve_nat_ipv6_gateway" >"$gateway_file"
+}
+pve_nat_ipv6_for_id() {
+    python3 - "${pve_nat_ipv6_subnet:-}" "$1" <<'PY'
+import ipaddress
+import sys
+network = ipaddress.IPv6Network(sys.argv[1], strict=False)
+value = int(sys.argv[2])
+candidate = ipaddress.IPv6Address(int(network.network_address) + value)
+if candidate not in network or candidate == network.network_address:
+    raise SystemExit(1)
+print(candidate)
+PY
 }
 is_noninteractive() {
     case "${noninteractive:-}" in

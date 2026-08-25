@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/oneclickvirt/pve
-# 2026.03.04
+# 2026.08.26
 
 ########## 支持的环境变量（用于无交互一键卸载）
 #
@@ -422,6 +422,10 @@ pve_local_files=(
     /usr/local/bin/pve_ipv4_address
     /usr/local/bin/pve_ipv4_gateway
     /usr/local/bin/pve_ipv4_subnet
+    /usr/local/bin/pve_nat_subnet
+    /usr/local/bin/pve_nat_gateway
+    /usr/local/bin/pve_nat_ipv6_subnet
+    /usr/local/bin/pve_nat_ipv6_gateway
     /usr/local/bin/pve_mac_address
     /usr/local/bin/pve_ipv6_gateway
     /usr/local/bin/pve_ipv6_prefixlen
