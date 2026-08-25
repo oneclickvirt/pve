@@ -8,14 +8,9 @@
 
 ## 更新
 
-2026.08.23
+2026.08.25
 
-- 修复 `ssh_sh.sh` 在 POSIX `/bin/sh` 下的 Alpine、OpenWrt 和 Arch 系统识别，并补充镜像选择与 ifupdown2 安装生命周期的隔离回归测试
-
-2026.08.22
-
-- 修复 oneclickvirt 远程集成测试在 `ifupdown2-install.service` 二次重启期间过早启动 PVE 第二阶段的问题；测试会等待引导服务完成并确认 SSH 稳定
-- `tests/` 中的安装网络回归测试覆盖新版 ShellCheck，并模拟安装成功、失败及预先存在的安装模式标记
+- IPv6 NAT 只使用宿主机本地绑定的公网地址；启用转发时保留上联网卡的 RA 默认路由，避免错误前缀或 SLAAC 路由丢失
 
 
 [更新日志](CHANGELOG.md)

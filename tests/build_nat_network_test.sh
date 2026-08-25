@@ -11,6 +11,11 @@ extract_function() {
     sed -n "/^${name}() {/,/^}/p" "$network_script"
 }
 
+extract_function_from() {
+    local script="$1" name="$2"
+    sed -n "/^${name}() {/,/^}/p" "$script"
+}
+
 eval "$(extract_function is_single_network_value)"
 eval "$(extract_function validate_prefixlen_value)"
 eval "$(extract_function validate_ipv6_prefixlen_value)"
@@ -20,6 +25,9 @@ eval "$(extract_function validate_ipv4_network24_value)"
 eval "$(extract_function validate_ipv6_value)"
 eval "$(extract_function write_network_state_atomic)"
 eval "$(extract_function read_network_state)"
+eval "$(extract_function is_public_ipv6)"
+eval "$(extract_function is_private_ipv6)"
+eval "$(extract_function check_ipv6)"
 eval "$(extract_function select_nat_ipv4_subnet)"
 
 _green() { :; }
@@ -38,6 +46,11 @@ ipcalc() {
     [ "${1:-}" = "-c" ] && validate_ipv4_network24_value "${2:-}"
 }
 ip() {
+    if [[ "$*" == *"addr show scope global"* ]]; then
+        printf '%s\n' '2: eth0    inet6 fd42::1/64 scope global'
+        printf '%s\n' '2: eth0    inet6 2606:4700::1111/64 scope global'
+        return 0
+    fi
     if [[ "$*" == "-4 route get "* ]]; then
         printf '%s via 198.51.100.1 dev eth0\n' "${*: -1}"
     fi
@@ -64,5 +77,68 @@ printf 'Attempting to select network...\n172.16.1.0/24\n' >"$PVE_STATE_DIR/pve_n
 select_nat_ipv4_subnet
 assert_eq "172.16.1.0/24" "$(cat "$PVE_STATE_DIR/pve_nat_subnet")" "polluted state rotates to default"
 assert_eq "172.16.1.1" "$(cat "$PVE_STATE_DIR/pve_nat_gateway")" "rotated NAT gateway"
+
+for ipv6_script in "$repo_root/scripts/build_nat_network.sh" "$repo_root/scripts/check_kernal.sh" "$repo_root/scripts/install_pve.sh"; do
+    ipv6_check=$(sed -n '/^check_ipv6() {/,/^}/p' "$ipv6_script")
+    if grep -Eq 'API_NET|curl[[:space:]]' <<<"$ipv6_check"; then
+        printf 'FAIL: %s check_ipv6 must not use an external address service\n' "$ipv6_script" >&2
+        exit 1
+    fi
+    if ! grep -Fq 'ip -o -6 addr show scope global' <<<"$ipv6_check"; then
+        printf 'FAIL: %s check_ipv6 must inspect locally bound global IPv6 addresses\n' "$ipv6_script" >&2
+        exit 1
+    fi
+done
+if ! extract_function install_required_tools | grep -Fq '"python3"'; then
+    printf 'FAIL: build_nat_network.sh must install Python 3 for IPv6 validation\n' >&2
+    exit 1
+fi
+if ! grep -Fq 'apt-get install python3 -y' "$repo_root/scripts/check_kernal.sh"; then
+    printf 'FAIL: check_kernal.sh must install Python 3 for IPv6 validation\n' >&2
+    exit 1
+fi
+if ! grep -Fq 'apt-get install -y python3' "$repo_root/scripts/install_pve.sh"; then
+    printf 'FAIL: install_pve.sh must install Python 3 for IPv6 validation\n' >&2
+    exit 1
+fi
+for classifier_script in "$repo_root/scripts/build_nat_network.sh" "$repo_root/scripts/check_kernal.sh" "$repo_root/scripts/install_pve.sh"; do
+    eval "$(extract_function_from "$classifier_script" is_public_ipv6)"
+    eval "$(extract_function_from "$classifier_script" is_private_ipv6)"
+    if is_private_ipv6 "2606:4700::1111"; then
+        printf 'FAIL: %s classified public IPv6 as private\n' "$classifier_script" >&2
+        exit 1
+    fi
+    if ! is_private_ipv6 "2001::" || ! is_private_ipv6 "2001:0000::1" || ! is_private_ipv6 "2001:0010::1"; then
+        printf 'FAIL: %s accepted a reserved IPv6 allocation source\n' "$classifier_script" >&2
+        exit 1
+    fi
+    if ! is_private_ipv6 "fc12::1" || ! is_private_ipv6 "fe90::1" || ! is_private_ipv6 "fec0::1" || ! is_private_ipv6 "ff02::1"; then
+        printf 'FAIL: %s classified local, site-local, or multicast IPv6 as public\n' "$classifier_script" >&2
+        exit 1
+    fi
+done
+if ! extract_function configure_ipv6_forwarding | grep -Fq 'net.ipv6.conf.vmbr0.accept_ra=2'; then
+    printf 'FAIL: PVE IPv6 forwarding must preserve router advertisements on vmbr0\n' >&2
+    exit 1
+fi
+captured_ipv6_path=""
+captured_ipv6_value=""
+write_network_state_atomic() {
+    captured_ipv6_path="$1"
+    captured_ipv6_value="$2"
+    "$3" "$2"
+}
+curl() {
+    : >"$tmp_dir/external-ipv6-lookup"
+    return 1
+}
+check_ipv6
+assert_eq "2606:4700::1111" "$IPV6" "locally bound IPv6 selection"
+assert_eq "/usr/local/bin/pve_check_ipv6" "$captured_ipv6_path" "IPv6 state path"
+assert_eq "2606:4700::1111" "$captured_ipv6_value" "IPv6 state value"
+[ ! -e "$tmp_dir/external-ipv6-lookup" ] || {
+    printf 'FAIL: PVE check_ipv6 used an external address service\n' >&2
+    exit 1
+}
 
 printf 'PVE NAT network state tests passed\n'

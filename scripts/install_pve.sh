@@ -79,6 +79,11 @@ fi
 if [ ! -d /usr/local/bin ]; then
     mkdir -p /usr/local/bin
 fi
+if ! command -v python3 >/dev/null 2>&1; then
+    _yellow "Installing Python 3 for safe IPv6 address validation..."
+    _yellow "正在安装 Python 3 以安全校验 IPv6 地址..."
+    apt-get install -y python3 || _yellow "Python 3 installation failed; independent IPv6 allocation will remain disabled"
+fi
 
 ########## 备份配置文件
 
@@ -808,58 +813,55 @@ clean_control_alias_blocks() {
     chmod 644 "$output_file"
 }
 
+is_public_ipv6() {
+    local address="${1:-}"
+    command -v python3 >/dev/null 2>&1 || return 1
+    python3 - "$address" <<'PY'
+import ipaddress
+import sys
+
+try:
+    address = ipaddress.IPv6Address(sys.argv[1])
+except ValueError:
+    raise SystemExit(1)
+
+global_unicast = ipaddress.IPv6Network("2000::/3")
+non_public = (
+    ipaddress.IPv6Network("2001::/32"),       # Teredo
+    ipaddress.IPv6Network("2001:2::/48"),     # benchmarking
+    ipaddress.IPv6Network("2001:10::/28"),    # ORCHID
+    ipaddress.IPv6Network("2001:20::/28"),    # ORCHIDv2
+    ipaddress.IPv6Network("2001:db8::/32"),   # documentation
+    ipaddress.IPv6Network("2002::/16"),       # 6to4
+    ipaddress.IPv6Network("3fff::/20"),       # documentation
+)
+usable = (
+    address in global_unicast
+    and address.is_global
+    and not address.is_private
+    and not address.is_multicast
+    and not any(address in prefix for prefix in non_public)
+)
+raise SystemExit(0 if usable else 1)
+PY
+}
+
 is_private_ipv6() {
-    local address=$1
-    local temp="0"
-    # 输入为空
-    if [[ ! -n $address ]]; then
-        temp="1"
-    fi
-    # 输入不含:符号
-    if [[ -n $address && $address != *":"* ]]; then
-        temp="2"
-    fi
-    # 检查IPv6地址是否以fe80开头（链接本地地址）
-    if [[ $address == fe80:* ]]; then
-        temp="3"
-    fi
-    # 检查IPv6地址是否以fc00或fd00开头（唯一本地地址）
-    if [[ $address == fc00:* || $address == fd00:* ]]; then
-        temp="4"
-    fi
-    # 检查IPv6地址是否以2001:db8开头（文档前缀）
-    if [[ $address == 2001:db8* ]]; then
-        temp="5"
-    fi
-    # 检查IPv6地址是否以::1开头（环回地址）
-    if [[ $address == ::1 ]]; then
-        temp="6"
-    fi
-    # 检查IPv6地址是否以::ffff:开头（IPv4映射地址）
-    if [[ $address == ::ffff:* ]]; then
-        temp="7"
-    fi
-    # 检查IPv6地址是否以2002:开头（6to4隧道地址）
-    if [[ $address == 2002:* ]]; then
-        temp="8"
-    fi
-    # 检查IPv6地址是否以2001:0:开头（Teredo隧道地址，仅限2001:0::/32）
-    if [[ $address == 2001:0:* ]]; then
-        temp="9"
-    fi
-    if [ "$temp" -gt 0 ]; then
-        # 非公网情况
-        return 0
-    else
-        # 其他情况为公网地址
-        return 1
-    fi
+    ! is_public_ipv6 "${1:-}"
 }
 
 check_ipv6() {
-    IPV6=$(ip -6 addr show | grep global | awk '{print length, $2}' | sort -nr | head -n 1 | awk '{print $2}' | cut -d '/' -f1)
+    local ipv6_list candidate gateway_prefix
+    ipv6_list=$(ip -o -6 addr show scope global 2>/dev/null | awk '$0 !~ / tentative/ {print $4}')
+    IPV6=""
+    while IFS= read -r candidate; do
+        candidate=${candidate%/*}
+        if validate_ipv6_value "$candidate" && ! is_private_ipv6 "$candidate"; then
+            IPV6="$candidate"
+            break
+        fi
+    done <<<"$ipv6_list"
     if [ ! -f /usr/local/bin/pve_last_ipv6 ] || [ ! -s /usr/local/bin/pve_last_ipv6 ] || [ "$(sed -e '/^[[:space:]]*$/d' /usr/local/bin/pve_last_ipv6)" = "" ]; then
-        ipv6_list=$(ip -6 addr show | grep global | awk '{print length, $2}' | sort -nr | awk '{print $2}')
         line_count=$(echo "$ipv6_list" | wc -l)
         if [ "$line_count" -ge 2 ]; then
             # 获取最后一行的内容
@@ -867,24 +869,14 @@ check_ipv6() {
             # 切分最后一个:之前的内容
             last_ipv6_prefix="${last_ipv6%:*}:"
             # 与${ipv6_gateway}比较是否相同
-            if [ "${last_ipv6_prefix}" = "${ipv6_gateway%:*}:" ]; then
+            gateway_prefix="${ipv6_gateway:-}"
+            gateway_prefix="${gateway_prefix%:*}:"
+            if [ "${last_ipv6_prefix}" = "$gateway_prefix" ]; then
                 echo $last_ipv6 >/usr/local/bin/pve_last_ipv6
             fi
             _green "The local machine is bound to more than one IPV6 address"
             _green "本机绑定了不止一个IPV6地址"
         fi
-    fi
-    if is_private_ipv6 "$IPV6"; then # 由于是内网IPV6地址，需要通过API获取外网地址
-        IPV6=""
-        API_NET=("ipv6.ip.sb" "https://ipget.net" "ipv6.ping0.cc" "https://api.my-ip.io/ip" "https://ipv6.icanhazip.com")
-        for p in "${API_NET[@]}"; do
-            response=$(curl -sLk6m8 "$p" | tr -d '[:space:]')
-            if [ $? -eq 0 ] && ! (echo "$response" | grep -q "error"); then
-                IPV6="$response"
-                break
-            fi
-            sleep 1
-        done
     fi
     if [ -n "$IPV6" ]; then
         if ! write_network_state_atomic /usr/local/bin/pve_check_ipv6 "$IPV6" validate_ipv6_value; then
