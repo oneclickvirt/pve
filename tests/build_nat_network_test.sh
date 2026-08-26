@@ -236,6 +236,18 @@ if ! extract_function configure_ipv6_forwarding | grep -Fq 'net.ipv6.conf.vmbr0.
     printf 'FAIL: PVE IPv6 forwarding must preserve router advertisements on vmbr0\n' >&2
     exit 1
 fi
+if extract_function configure_ipv6_forwarding | grep -Fq 'net.ipv6.conf.all.proxy_ndp=1'; then
+    printf 'FAIL: PVE must not enable NDP proxying globally\n' >&2
+    exit 1
+fi
+if extract_function configure_ipv6_forwarding | grep -Fq 'net.ipv6.conf.default.proxy_ndp=1'; then
+    printf 'FAIL: PVE must not enable NDP proxying by default on future interfaces\n' >&2
+    exit 1
+fi
+if grep -Fq 'post-down sysctl -w net.ipv6.conf.all.forwarding=0' "$network_script"; then
+    printf 'FAIL: PVE must not disable host IPv6 forwarding when vmbr1 is stopped\n' >&2
+    exit 1
+fi
 captured_ipv6_path=""
 captured_ipv6_value=""
 write_network_state_atomic() {

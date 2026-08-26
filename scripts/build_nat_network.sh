@@ -1232,7 +1232,6 @@ iface vmbr1 inet static
 iface vmbr1 inet6 static
     address ${nat_ipv6_gateway}/64
     post-up sysctl -w net.ipv6.conf.all.forwarding=1
-    post-down sysctl -w net.ipv6.conf.all.forwarding=0
 EOF
     else
         cat <<EOF | sudo tee -a /etc/network/interfaces
@@ -1252,7 +1251,6 @@ iface vmbr1 inet6 static
     address ${nat_ipv6_gateway}/64
     post-up sysctl -w net.ipv6.conf.all.forwarding=1
     post-up ip6tables -t nat -A POSTROUTING -s ${nat_ipv6_subnet} -o vmbr0 -j MASQUERADE
-    post-down sysctl -w net.ipv6.conf.all.forwarding=0
     post-down ip6tables -t nat -D POSTROUTING -s ${nat_ipv6_subnet} -o vmbr0 -j MASQUERADE
 EOF
     fi
@@ -1383,12 +1381,12 @@ EOF
 configure_ipv6_forwarding() {
     local direct_bridge="${1:-vmbr2}"
     validate_pve_direct_ipv6_bridge_value "$direct_bridge" || return 1
-    update_sysctl "net.ipv6.conf.all.forwarding=1"
     # Keep SLAAC router advertisements on the external bridge after enabling
     # forwarding, otherwise Linux can expire the host default IPv6 route.
     update_sysctl "net.ipv6.conf.vmbr0.accept_ra=2"
-    update_sysctl "net.ipv6.conf.all.proxy_ndp=1"
-    update_sysctl "net.ipv6.conf.default.proxy_ndp=1"
+    update_sysctl "net.ipv6.conf.all.forwarding=1"
+    # NDP proxying is meaningful only on bridges that carry this topology.
+    # Do not make unrelated current or future interfaces proxy NDP packets.
     update_sysctl "net.ipv6.conf.vmbr0.proxy_ndp=1"
     update_sysctl "net.ipv6.conf.vmbr1.proxy_ndp=1"
     update_sysctl "net.ipv6.conf.${direct_bridge}.proxy_ndp=1"
