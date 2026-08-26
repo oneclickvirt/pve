@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/oneclickvirt/pve
-# 2026.08.26
+# 2026.08.27
 
 ########## 预设部分输出和部分中间变量
 
@@ -446,6 +446,80 @@ pve_network_bridge_exists() {
         $1 == "iface" && $2 == bridge { found = 1 }
         END { exit found ? 0 : 1 }
     ' "$interfaces_file"
+}
+
+# A PVE installation may still have its IPv6 default route on a physical NIC
+# while it is writing that NIC into vmbr0. Persisting RA/NDP on the physical
+# port in that transition would break after the next reload or reboot.
+pve_vmbr0_owns_interface() {
+    local candidate="$1" interfaces_file
+    validate_interface_value "$candidate" || return 1
+    interfaces_file="${PVE_NETWORK_INTERFACES_FILE:-/etc/network/interfaces}"
+    [ -r "$interfaces_file" ] || return 1
+    awk -v candidate="$candidate" '
+        $1 == "iface" {
+            in_vmbr0 = ($2 == "vmbr0")
+            next
+        }
+        in_vmbr0 && $1 == "bridge_ports" {
+            for (i = 2; i <= NF; i++) {
+                if ($i == candidate) {
+                    found = 1
+                    exit
+                }
+            }
+        }
+        END { exit(found ? 0 : 1) }
+    ' "$interfaces_file"
+}
+
+# The IPv6 uplink is not necessarily vmbr0. Bare-metal hosts, cloud guests,
+# and custom PVE bridge layouts may receive router advertisements on another
+# interface. Prefer the IPv6 default route, but map an in-progress PVE bridge
+# migration to vmbr0 so the persisted setting survives the next reboot.
+pve_ipv6_uplink_interface() {
+    local candidate
+    candidate=$(ip -6 route show default 2>/dev/null | awk '
+        /^default / {
+            for (i = 1; i < NF; i++) {
+                if ($i == "dev") {
+                    print $(i + 1)
+                    exit
+                }
+            }
+        }
+    ')
+    if validate_interface_value "$candidate" && ip link show dev "$candidate" >/dev/null 2>&1; then
+        if [ "$candidate" != vmbr0 ] && pve_vmbr0_owns_interface "$candidate"; then
+            printf '%s\n' vmbr0
+            return 0
+        fi
+        printf '%s\n' "$candidate"
+        return 0
+    fi
+    for candidate in vmbr0 eth0; do
+        if validate_interface_value "$candidate" && ip link show dev "$candidate" >/dev/null 2>&1; then
+            printf '%s\n' "$candidate"
+            return 0
+        fi
+    done
+    return 1
+}
+
+# Keep the explicit override and HE tunnel behavior, but otherwise put NDP on
+# the interface that actually receives the IPv6 default route.
+pve_direct_ndp_interface() {
+    local transport="${1:-bridge}" requested="${PVE_IPV6_DIRECT_NDP_INTERFACE:-}"
+    if [ -n "$requested" ]; then
+        validate_pve_direct_ipv6_bridge_value "$requested" || return 1
+        printf '%s\n' "$requested"
+        return 0
+    fi
+    if [ "$transport" = tunnel ]; then
+        printf '%s\n' he-ipv6
+        return 0
+    fi
+    pve_ipv6_uplink_interface || printf '%s\n' vmbr0
 }
 
 disable_ndpresponder() {
@@ -1355,14 +1429,7 @@ iface ${direct_bridge} inet6 static
     bridge_fd 0
 EOF
     if [ "$direct_mode" = ndp ] || [ "$direct_transport" = tunnel ]; then
-        ndp_interface="${PVE_IPV6_DIRECT_NDP_INTERFACE:-}"
-        if [ -z "$ndp_interface" ]; then
-            if [ "$direct_transport" = tunnel ]; then
-                ndp_interface="he-ipv6"
-            else
-                ndp_interface="vmbr0"
-            fi
-        fi
+        ndp_interface="$(pve_direct_ndp_interface "$direct_transport")" || return 1
         validate_pve_direct_ipv6_bridge_value "$ndp_interface" || return 1
         if [ -f "/usr/local/bin/ndpresponder" ] && [ -f "/etc/systemd/system/ndpresponder.service" ]; then
             new_exec_start="ExecStart=/usr/local/bin/ndpresponder -i ${ndp_interface} -n ${direct_prefix}"
@@ -1379,15 +1446,17 @@ EOF
 
 # 配置IPV6转发设置
 configure_ipv6_forwarding() {
-    local direct_bridge="${1:-vmbr2}"
+    local direct_bridge="${1:-vmbr2}" uplink
     validate_pve_direct_ipv6_bridge_value "$direct_bridge" || return 1
-    # Keep SLAAC router advertisements on the external bridge after enabling
-    # forwarding, otherwise Linux can expire the host default IPv6 route.
-    update_sysctl "net.ipv6.conf.vmbr0.accept_ra=2"
+    uplink="$(pve_ipv6_uplink_interface 2>/dev/null || true)"
+    [ -n "$uplink" ] || uplink=vmbr0
+    # Keep SLAAC router advertisements on the actual external uplink after
+    # enabling forwarding, otherwise Linux can expire the host default route.
+    update_sysctl "net.ipv6.conf.${uplink}.accept_ra=2"
     update_sysctl "net.ipv6.conf.all.forwarding=1"
     # NDP proxying is meaningful only on bridges that carry this topology.
     # Do not make unrelated current or future interfaces proxy NDP packets.
-    update_sysctl "net.ipv6.conf.vmbr0.proxy_ndp=1"
+    update_sysctl "net.ipv6.conf.${uplink}.proxy_ndp=1"
     update_sysctl "net.ipv6.conf.vmbr1.proxy_ndp=1"
     update_sysctl "net.ipv6.conf.${direct_bridge}.proxy_ndp=1"
 }

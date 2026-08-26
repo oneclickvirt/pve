@@ -39,6 +39,10 @@ eval "$(extract_function select_nat_ipv4_subnet)"
 eval "$(extract_function pve_nat_ipv6_candidate_is_safe)"
 eval "$(extract_function select_nat_ipv6_subnet)"
 eval "$(extract_function pve_save_direct_ipv6_config)"
+eval "$(extract_function pve_vmbr0_owns_interface)"
+eval "$(extract_function pve_ipv6_uplink_interface)"
+eval "$(extract_function pve_direct_ndp_interface)"
+eval "$(extract_function configure_ipv6_forwarding)"
 
 _green() { :; }
 _red() { :; }
@@ -57,7 +61,23 @@ ipcalc() {
 }
 nat_ipv6_addresses=""
 nat_ipv6_routes=""
+pve_default_ipv6_interface=""
+pve_ipv6_link_interfaces="vmbr0 eth0"
+export PVE_NETWORK_INTERFACES_FILE="${tmp_dir}/interfaces"
+: >"$PVE_NETWORK_INTERFACES_FILE"
 ip() {
+    if [[ "$*" == "-6 route show default" ]]; then
+        if [ -n "$pve_default_ipv6_interface" ]; then
+            printf 'default via fe80::1 dev %s proto ra metric 1024\n' "$pve_default_ipv6_interface"
+        fi
+        return 0
+    fi
+    if [[ "$*" == "link show dev "* ]]; then
+        if [[ " ${pve_ipv6_link_interfaces} " == *" ${4:-} "* ]]; then
+            return 0
+        fi
+        return 1
+    fi
     if [[ "$*" == "-o -6 addr show" ]]; then
         printf '%s\n' "$nat_ipv6_addresses"
         return 0
@@ -232,8 +252,75 @@ for classifier_script in "$repo_root/scripts/build_nat_network.sh" "$repo_root/s
         exit 1
     fi
 done
-if ! extract_function configure_ipv6_forwarding | grep -Fq 'net.ipv6.conf.vmbr0.accept_ra=2'; then
-    printf 'FAIL: PVE IPv6 forwarding must preserve router advertisements on vmbr0\n' >&2
+
+# A default IPv6 route can be on a physical NIC, a routed bridge, or another
+# provider-selected uplink. Preserve the vmbr0 fallback only when no route is
+# available yet, and keep HE/6in4 plus explicit NDP-interface behavior.
+pve_default_ipv6_interface=eth0
+pve_ipv6_link_interfaces="eth0 vmbr0"
+assert_eq eth0 "$(pve_ipv6_uplink_interface)" "default-route IPv6 uplink"
+unset PVE_IPV6_DIRECT_NDP_INTERFACE
+assert_eq eth0 "$(pve_direct_ndp_interface bridge)" "default-route NDP uplink"
+assert_eq he-ipv6 "$(pve_direct_ndp_interface tunnel)" "HE tunnel NDP uplink"
+export PVE_IPV6_DIRECT_NDP_INTERFACE=wan6
+assert_eq wan6 "$(pve_direct_ndp_interface bridge)" "explicit NDP uplink"
+unset PVE_IPV6_DIRECT_NDP_INTERFACE
+pve_default_ipv6_interface=""
+pve_ipv6_link_interfaces="vmbr0"
+assert_eq vmbr0 "$(pve_ipv6_uplink_interface)" "legacy vmbr0 IPv6 uplink"
+
+# During a first PVE install the active route can still point to the physical
+# port, while the generated persistent configuration makes that port a vmbr0
+# bridge member. The responder must follow the post-reload logical uplink.
+cat >"$PVE_NETWORK_INTERFACES_FILE" <<'EOF'
+auto vmbr0
+iface vmbr0 inet static
+    bridge_ports eth0
+EOF
+pve_default_ipv6_interface=eth0
+pve_ipv6_link_interfaces="eth0 vmbr0"
+assert_eq vmbr0 "$(pve_ipv6_uplink_interface)" "bridged IPv6 uplink migration"
+assert_eq vmbr0 "$(pve_direct_ndp_interface bridge)" "bridged NDP uplink migration"
+
+captured_sysctls=()
+update_sysctl() {
+    captured_sysctls+=("$1")
+}
+configure_ipv6_forwarding vmbr2
+printf '%s\n' "${captured_sysctls[@]}" | grep -Fqx 'net.ipv6.conf.vmbr0.accept_ra=2' || {
+    printf 'FAIL: PVE bridged IPv6 migration did not preserve RA on vmbr0\n' >&2
+    exit 1
+}
+printf '%s\n' "${captured_sysctls[@]}" | grep -Fqx 'net.ipv6.conf.vmbr0.proxy_ndp=1' || {
+    printf 'FAIL: PVE bridged IPv6 migration did not scope NDP proxying to vmbr0\n' >&2
+    exit 1
+}
+
+# A non-bridged runtime uplink remains scoped to the actual default route.
+: >"$PVE_NETWORK_INTERFACES_FILE"
+pve_default_ipv6_interface=eth0
+pve_ipv6_link_interfaces="eth0 vmbr0"
+captured_sysctls=()
+configure_ipv6_forwarding vmbr2
+printf '%s\n' "${captured_sysctls[@]}" | grep -Fqx 'net.ipv6.conf.eth0.accept_ra=2' || {
+    printf 'FAIL: PVE IPv6 forwarding did not preserve RA on the default-route uplink\n' >&2
+    exit 1
+}
+printf '%s\n' "${captured_sysctls[@]}" | grep -Fqx 'net.ipv6.conf.eth0.proxy_ndp=1' || {
+    printf 'FAIL: PVE IPv6 forwarding did not scope NDP proxying to the default-route uplink\n' >&2
+    exit 1
+}
+if printf '%s\n' "${captured_sysctls[@]}" | grep -Fqx 'net.ipv6.conf.vmbr0.accept_ra=2'; then
+    printf 'FAIL: PVE IPv6 forwarding retained a hard-coded vmbr0 RA setting\n' >&2
+    exit 1
+fi
+
+if ! extract_function configure_ipv6_forwarding | grep -Fq 'pve_ipv6_uplink_interface'; then
+    printf 'FAIL: PVE IPv6 forwarding must select the actual IPv6 uplink\n' >&2
+    exit 1
+fi
+if ! extract_function configure_vmbr2_with_explicit_ipv6_prefix | grep -Fq 'pve_direct_ndp_interface'; then
+    printf 'FAIL: PVE direct IPv6 setup must select the actual NDP uplink\n' >&2
     exit 1
 fi
 if extract_function configure_ipv6_forwarding | grep -Fq 'net.ipv6.conf.all.proxy_ndp=1'; then
