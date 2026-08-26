@@ -109,9 +109,13 @@ exercise_nat_ipv6_selector() {
     local state_dir="$tmp_dir/${selector_name}-state"
     # shellcheck source=/dev/null
     source "$config_file"
+    # shellcheck disable=SC2317
     _blue() { :; }
+    # shellcheck disable=SC2317
     _green() { :; }
+    # shellcheck disable=SC2317
     _red() { :; }
+    # shellcheck disable=SC2317
     _yellow() { :; }
 
     rm -rf -- "$state_dir"
