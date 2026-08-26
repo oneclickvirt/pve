@@ -211,6 +211,31 @@ EOF
     assert_rejected "${selector_name} /128 direct prefix" pve_load_direct_ipv6_config
     assert_eq "false" "$pve_direct_ipv6_available" "${selector_name} /128 leaves direct mode disabled"
 
+    # A /127 cannot accommodate PVE's supported 100-256 guest ID range.
+    export PVE_IPV6_ROUTED_PREFIX='2a14:7c0:1002:10f8::/127'
+    export PVE_IPV6_DIRECT_GATEWAY='2a14:7c0:1002:10f8::1'
+    assert_rejected "${selector_name} /127 direct prefix" pve_load_direct_ipv6_config
+    assert_eq "false" "$pve_direct_ipv6_available" "${selector_name} /127 leaves direct mode disabled"
+
+    # A /120 has room for every supported guest ID. Preserve established
+    # addresses where possible and allocate ID 256 from the unused low range.
+    export PVE_IPV6_ROUTED_PREFIX='2a14:7c0:1002:3000::/120'
+    export PVE_IPV6_DIRECT_GATEWAY='2a14:7c0:1002:3000::1'
+    export PVE_IPV6_DIRECT_MODE=ndp
+    pve_load_direct_ipv6_config
+    assert_eq "true" "$pve_direct_ipv6_available" "${selector_name} /120 direct prefix"
+    assert_eq "2a14:7c0:1002:3000::64" "$(pve_direct_ipv6_for_id 100)" "${selector_name} /120 first guest address"
+    assert_eq "2a14:7c0:1002:3000::ff" "$(pve_direct_ipv6_for_id 255)" "${selector_name} /120 last historical guest address"
+    assert_eq "2a14:7c0:1002:3000::2" "$(pve_direct_ipv6_for_id 256)" "${selector_name} /120 boundary guest address"
+
+    # A configured bridge gateway may itself use a historical guest-numbered
+    # address. Reassign only that guest to avoid a duplicate assignment.
+    export PVE_IPV6_ROUTED_PREFIX='2a14:7c0:1002:3100::/64'
+    export PVE_IPV6_DIRECT_GATEWAY='2a14:7c0:1002:3100::64'
+    pve_load_direct_ipv6_config
+    assert_eq "2a14:7c0:1002:3100::1" "$(pve_direct_ipv6_for_id 100)" "${selector_name} gateway collision guest address"
+    assert_eq "2a14:7c0:1002:3100::65" "$(pve_direct_ipv6_for_id 101)" "${selector_name} gateway collision preserves other guest"
+
     # A routed prefix may use a link-local upstream gateway. Guests use the
     # bridge address inside their own routed prefix instead of that fe80 next hop.
     export PVE_IPV6_ROUTED_PREFIX='2a14:7c0:1002:2000::/64'

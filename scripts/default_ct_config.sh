@@ -391,20 +391,48 @@ try:
     identifier = int(sys.argv[3], 10)
 except ValueError:
     raise SystemExit(1)
-if identifier <= 0 or identifier >= network.num_addresses:
+if identifier < 100 or identifier > 256:
     raise SystemExit(1)
 
 # Retain the historical address form when the host's /64 fits inside the
 # delegated prefix (for example, host ...:10f8::1/38 -> guest ...:10f8::64).
-candidate = ipaddress.IPv6Address((int(gateway) & ~((1 << 64) - 1)) | identifier)
-if candidate not in network:
-    candidate = ipaddress.IPv6Address(int(network.network_address) + identifier)
-for offset in range(network.num_addresses):
-    if candidate in network and candidate != gateway and candidate != network.network_address:
-        print(candidate.compressed)
-        raise SystemExit(0)
-    candidate = ipaddress.IPv6Address(int(candidate) + 1)
-raise SystemExit(1)
+# Build assignments for the complete PVE ID range so an address that collides
+# with the bridge gateway, or ID 256 in a /120, cannot duplicate another ID.
+def historical_candidate(vm_id):
+    candidate = ipaddress.IPv6Address((int(gateway) & ~((1 << 64) - 1)) | vm_id)
+    if candidate in network:
+        return candidate
+    if vm_id >= network.num_addresses:
+        return None
+    return ipaddress.IPv6Address(int(network.network_address) + vm_id)
+
+assignments = {}
+assigned_addresses = set()
+fallback_ids = []
+for vm_id in range(100, 257):
+    candidate = historical_candidate(vm_id)
+    if (
+        candidate is None
+        or candidate == network.network_address
+        or candidate == gateway
+        or candidate in assigned_addresses
+    ):
+        fallback_ids.append(vm_id)
+        continue
+    assignments[vm_id] = candidate
+    assigned_addresses.add(candidate)
+
+for vm_id in fallback_ids:
+    for offset in range(1, network.num_addresses):
+        candidate = ipaddress.IPv6Address(int(network.network_address) + offset)
+        if candidate != gateway and candidate not in assigned_addresses:
+            assignments[vm_id] = candidate
+            assigned_addresses.add(candidate)
+            break
+    else:
+        raise SystemExit(1)
+
+print(assignments[identifier].compressed)
 PY
 }
 

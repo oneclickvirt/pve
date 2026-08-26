@@ -165,6 +165,14 @@ if pve_direct_ipv6_env_config >/dev/null; then
     exit 1
 fi
 
+export PVE_IPV6_ROUTED_PREFIX='2a14:7c0:1002:10f8::/127'
+export PVE_IPV6_DIRECT_GATEWAY='2a14:7c0:1002:10f8::1'
+export PVE_IPV6_DIRECT_MODE=ndp
+if pve_direct_ipv6_env_config >/dev/null; then
+    printf 'FAIL: point-to-point /127 was accepted for the PVE 100-256 guest ID range\n' >&2
+    exit 1
+fi
+
 export PVE_STATE_DIR="${tmp_dir}/direct-state"
 mkdir -p "$PVE_STATE_DIR"
 pve_save_direct_ipv6_config '2a14:7c0:1002:2000::/64' '2a14:7c0:1002:2000::1' routed fe80::1 vmbr9 tunnel
