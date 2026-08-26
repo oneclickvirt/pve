@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/oneclickvirt/pve
-# 2025.06.09
+# 2026.08.26
 # 创建NAT全端口映射的虚拟机
 # 前置条件：
 # 要用到的外网IPV4地址已绑定到vmbr0网卡上(手动附加时务必在PVE安装完毕且自动配置网关后再附加)，且宿主机的IPV4地址仍为顺序第一
@@ -154,10 +154,10 @@ create_vm() {
             --ostype l26 \
             ${kvm_flag}
     elif [ "$independent_ipv6" = "y" ]; then
-        if [ -s "$appended_file" ]; then
+        if [ -s "$appended_file" ] || [ "${pve_direct_ipv6_available:-false}" != true ]; then
             net1_bridge="vmbr1"
         else
-            net1_bridge="vmbr2"
+            net1_bridge="$(pve_direct_ipv6_bridge)" || return 1
         fi
         qm create "$vm_num" \
             --agent 1 \
@@ -230,7 +230,7 @@ create_vm() {
 configure_network() {
     user_ip="${pve_nat_prefix}.${vm_num}"
     if [ "$independent_ipv6" == "y" ]; then
-        if [ ! -z "$host_ipv6_address" ] && [ ! -z "$ipv6_prefixlen" ] && [ ! -z "$ipv6_gateway" ] && [ ! -z "$ipv6_address_without_last_segment" ]; then
+        if [ "${pve_direct_ipv6_available:-false}" = true ] || [ -s /usr/local/bin/pve_appended_content.txt ]; then
             qm set $vm_num --ipconfig0 ip=${user_ip}/24,gw=${pve_nat_gateway}
             appended_file="/usr/local/bin/pve_appended_content.txt"
             if [ -s "$appended_file" ]; then
@@ -249,11 +249,15 @@ configure_network() {
                     echo "虚拟机已配置NAT映射：$vm_internal_ipv6 -> $host_external_ipv6"
                     independent_ipv6_status="Y"
                 fi
-            elif grep -q "vmbr2" /etc/network/interfaces; then
-                # 使用 vmbr2 网桥直接分配IPv6地址
-                qm set $vm_num --ipconfig1 ip6="${ipv6_address_without_last_segment}${vm_num}/128",gw6="${host_ipv6_address}"
-                vm_external_ipv6="${ipv6_address_without_last_segment}${vm_num}"
-                independent_ipv6_status="Y"
+            elif [ "${pve_direct_ipv6_available:-false}" = true ]; then
+                # 使用已确认的委派前缀直接分配 IPv6 地址
+                if vm_external_ipv6="$(pve_direct_ipv6_for_id "$vm_num")"; then
+                    qm set $vm_num --ipconfig1 ip6="${vm_external_ipv6}/128",gw6="${pve_direct_ipv6_gateway}"
+                    independent_ipv6_status="Y"
+                else
+                    independent_ipv6_status="N"
+                    vm_external_ipv6=""
+                fi
             else
                 independent_ipv6_status="N"
             fi
@@ -322,6 +326,7 @@ main() {
     check_cdn_file
     load_default_config || exit 1
     load_nat_ipv4_config || exit 1
+    pve_load_direct_ipv6_config || exit 1
     setup_locale
     get_system_arch || exit 1
     check_kvm_support

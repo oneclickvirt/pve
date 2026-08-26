@@ -153,7 +153,7 @@ create_container() {
 configure_networking() {
     independent_ipv6_status="N"
     if [ "$independent_ipv6" == "y" ]; then
-        if [ ! -z "$host_ipv6_address" ] && [ ! -z "$ipv6_prefixlen" ] && [ ! -z "$ipv6_gateway" ] && [ ! -z "$ipv6_address_without_last_segment" ]; then
+        if [ "${pve_direct_ipv6_available:-false}" = true ] || [ -s /usr/local/bin/pve_appended_content.txt ]; then
             appended_file="/usr/local/bin/pve_appended_content.txt"
             if [ -s "$appended_file" ]; then
                 # 使用 vmbr1 网桥和 NAT 映射
@@ -176,16 +176,21 @@ configure_networking() {
                     echo "容器已配置NAT映射：$ct_internal_ipv6 -> $host_external_ipv6"
                     independent_ipv6_status="Y"
                 fi
-            elif grep -q "vmbr2" /etc/network/interfaces; then
-                # 使用 vmbr2 网桥直接分配IPv6地址
+            elif [ "${pve_direct_ipv6_available:-false}" = true ]; then
+                # 使用已确认的委派前缀直接分配 IPv6 地址
                 pct set $CTID --net0 name=eth0,ip=${user_ip}/24,bridge=vmbr1,gw=${pve_nat_gateway}
-                pct set $CTID --net1 name=eth1,ip6="${ipv6_address_without_last_segment}${CTID}/128",bridge=vmbr2,gw6="${host_ipv6_address}"
-                pct set $CTID --nameserver 1.1.1.1
-                pct set $CTID --searchdomain local
-                ct_external_ipv6="${ipv6_address_without_last_segment}${CTID}"
-                independent_ipv6_status="Y"
-                _fw6_drop_icmpv6_ping "${ipv6_address_without_last_segment}${CTID}" "${ipv6_prefixlen:+${ipv6_address_without_last_segment}/${ipv6_prefixlen}}"
-                _fw_save
+                if ct_external_ipv6="$(pve_direct_ipv6_for_id "$CTID")"; then
+                    direct_ipv6_bridge="$(pve_direct_ipv6_bridge)" || return 1
+                    pct set $CTID --net1 name=eth1,ip6="${ct_external_ipv6}/128",bridge="${direct_ipv6_bridge}",gw6="${pve_direct_ipv6_gateway}"
+                    pct set $CTID --nameserver 1.1.1.1
+                    pct set $CTID --searchdomain local
+                    independent_ipv6_status="Y"
+                    _fw6_drop_icmpv6_ping "${ct_external_ipv6}" "${pve_direct_ipv6_prefix}"
+                    _fw_save
+                else
+                    independent_ipv6_status="N"
+                    ct_external_ipv6=""
+                fi
             fi
         fi
     fi

@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/oneclickvirt/pve
-# 2025.06.10
+# 2026.08.26
 
 _red() { echo -e "\033[31m\033[01m$*\033[0m"; }
 _green() { echo -e "\033[32m\033[01m$*\033[0m"; }
@@ -17,6 +17,7 @@ load_nat_ipv4_config() {
     fi
     pve_nat_prefix="${pve_nat_gateway%.*}"
     load_nat_ipv6_config || return 1
+    pve_load_direct_ipv6_config || return 1
 }
 pve_nat_ipv6_candidate_is_safe() {
     local candidate="${1:-}" host_state
@@ -135,6 +136,278 @@ if candidate not in network or candidate == network.network_address:
 print(candidate)
 PY
 }
+
+# Direct public IPv6 is intentionally opt-in for new installs. A host address
+# or an RA-advertised /64 does not prove that the whole prefix is delegated to
+# the host. Existing direct bridges are still discovered so working
+# installations using NDP (including non-nibble prefixes such as /38) keep
+# their current addressing scheme.
+pve_ipv6_state_file() {
+    printf '%s/%s\n' "${PVE_STATE_DIR:-/usr/local/bin}" "$1"
+}
+
+pve_read_single_line_state() {
+    local path="$1" value
+    [ -s "$path" ] || return 1
+    [ "$(awk 'END { print NR }' "$path" 2>/dev/null)" = "1" ] || return 1
+    IFS= read -r value <"$path" || return 1
+    [ -n "$value" ] || return 1
+    printf '%s\n' "$value"
+}
+
+pve_direct_ipv6_bridge() {
+    local bridge="${PVE_IPV6_DIRECT_BRIDGE:-}" stored_bridge
+    if [ -z "$bridge" ]; then
+        stored_bridge="$(pve_read_single_line_state "$(pve_ipv6_state_file pve_direct_ipv6_bridge)" 2>/dev/null || true)"
+        bridge="${stored_bridge:-vmbr2}"
+    fi
+    [[ "$bridge" =~ ^[[:alnum:]_.:-]+$ ]] || return 1
+    printf '%s\n' "$bridge"
+}
+
+pve_direct_ipv6_normalize() {
+    local prefix="${1:-}" upstream_gateway="${2:-}" mode="${3:-ndp}" bridge_gateway="${4:-}"
+    command -v python3 >/dev/null 2>&1 || return 1
+    python3 - "$prefix" "$upstream_gateway" "$mode" "$bridge_gateway" <<'PY'
+import ipaddress
+import sys
+
+try:
+    network = ipaddress.IPv6Network(sys.argv[1], strict=False)
+    upstream_gateway = ipaddress.IPv6Address(sys.argv[2].split('/', 1)[0].strip())
+    preferred_bridge_gateway = (
+        ipaddress.IPv6Address(sys.argv[4].split('/', 1)[0].strip())
+        if sys.argv[4].strip()
+        else None
+    )
+except ValueError:
+    raise SystemExit(1)
+
+mode = sys.argv[3].lower()
+global_unicast = ipaddress.IPv6Network("2000::/3")
+if (
+    network.prefixlen > 120
+    or not network.subnet_of(global_unicast)
+    or mode not in {"ndp", "routed"}
+):
+    raise SystemExit(1)
+
+if mode == "ndp":
+    if not upstream_gateway.is_global or upstream_gateway not in network:
+        raise SystemExit(1)
+    bridge_gateway = upstream_gateway
+else:
+    # A routed prefix can have an upstream global or link-local next hop. That
+    # next hop lives on the host uplink; guests must instead use an address on
+    # their own direct bridge as their default gateway.
+    if not (upstream_gateway.is_global or upstream_gateway.is_link_local):
+        raise SystemExit(1)
+    if preferred_bridge_gateway is not None:
+        if (
+            not preferred_bridge_gateway.is_global
+            or preferred_bridge_gateway not in network
+            or preferred_bridge_gateway == network.network_address
+        ):
+            raise SystemExit(1)
+        bridge_gateway = preferred_bridge_gateway
+    elif upstream_gateway.is_global and upstream_gateway in network and upstream_gateway != network.network_address:
+        bridge_gateway = upstream_gateway
+    else:
+        bridge_gateway = ipaddress.IPv6Address(int(network.network_address) + 1)
+
+print(network.with_prefixlen)
+print(bridge_gateway.compressed)
+print(mode)
+print(upstream_gateway.compressed)
+PY
+}
+
+pve_direct_ipv6_bridge_cidr() {
+    local value interfaces_file bridge
+    bridge="$(pve_direct_ipv6_bridge)" || return 1
+    value="$(ip -o -6 addr show dev "$bridge" scope global 2>/dev/null | awk '
+        $0 ~ /inet6/ { for (i = 1; i <= NF; i++) if ($i == "inet6") { print $(i + 1); exit } }
+    ' | while IFS= read -r candidate; do
+        if python3 - "$candidate" <<'PY' >/dev/null 2>&1
+import ipaddress
+import sys
+try:
+    interface = ipaddress.IPv6Interface(sys.argv[1])
+except ValueError:
+    raise SystemExit(1)
+raise SystemExit(0 if interface.ip.is_global else 1)
+PY
+        then
+            printf '%s\n' "$candidate"
+            break
+        fi
+    done)"
+    if [ -n "$value" ]; then
+        printf '%s\n' "$value"
+        return 0
+    fi
+    interfaces_file="${PVE_NETWORK_INTERFACES_FILE:-/etc/network/interfaces}"
+    [ -r "$interfaces_file" ] || return 1
+    awk -v bridge="$bridge" '
+        $1 == "iface" && $2 == bridge && $3 == "inet6" { inside = 1; next }
+        $1 == "iface" { inside = 0 }
+        inside && $1 == "address" { print $2; exit }
+    ' "$interfaces_file"
+}
+
+pve_direct_ipv6_bridge_present() {
+    local bridge interfaces_file
+    bridge="$(pve_direct_ipv6_bridge)" || return 1
+    ip link show "$bridge" >/dev/null 2>&1 && return 0
+    local interfaces_file="${PVE_NETWORK_INTERFACES_FILE:-/etc/network/interfaces}"
+    [ -r "$interfaces_file" ] || return 1
+    awk -v bridge="$bridge" '
+        $1 == "auto" {
+            for (i = 2; i <= NF; i++) if ($i == bridge) found = 1
+        }
+        $1 == "iface" && $2 == bridge { found = 1 }
+        END { exit found ? 0 : 1 }
+    ' "$interfaces_file"
+}
+
+pve_direct_ipv6_transport() {
+    local interfaces_file="${PVE_NETWORK_INTERFACES_FILE:-/etc/network/interfaces}"
+    if [ -r "$interfaces_file" ] && grep -Eiq '(^|[[:space:]])(he-ipv6|sit[0-9]*|6in4)([[:space:]]|$)' "$interfaces_file"; then
+        printf '%s\n' tunnel
+    else
+        printf '%s\n' bridge
+    fi
+}
+
+pve_direct_ipv6_bridge_configured() {
+    local bridge_cidr
+    [ "${pve_direct_ipv6_available:-false}" = true ] || return 1
+    bridge_cidr="$(pve_direct_ipv6_bridge_cidr)" || return 1
+    command -v python3 >/dev/null 2>&1 || return 1
+    python3 - "$bridge_cidr" "$pve_direct_ipv6_prefix" "$pve_direct_ipv6_gateway" <<'PY' >/dev/null 2>&1
+import ipaddress
+import sys
+
+try:
+    bridge = ipaddress.IPv6Interface(sys.argv[1])
+    network = ipaddress.IPv6Network(sys.argv[2], strict=False)
+    gateway = ipaddress.IPv6Address(sys.argv[3])
+except ValueError:
+    raise SystemExit(1)
+raise SystemExit(0 if bridge.network == network and bridge.ip == gateway else 1)
+PY
+}
+
+pve_load_direct_ipv6_config() {
+    local state_prefix state_gateway state_mode state_transport state_upstream prefix upstream_gateway bridge_gateway mode bridge_cidr source normalized_output
+    local -a normalized_values
+    pve_direct_ipv6_available=false
+    pve_direct_ipv6_prefix=""
+    pve_direct_ipv6_gateway=""
+    pve_direct_ipv6_prefixlen=""
+    pve_direct_ipv6_mode=""
+    pve_direct_ipv6_source=""
+    pve_direct_ipv6_transport=""
+    pve_direct_ipv6_upstream_gateway=""
+
+    state_prefix="$(pve_ipv6_state_file pve_direct_ipv6_prefix)"
+    state_gateway="$(pve_ipv6_state_file pve_direct_ipv6_gateway)"
+    state_mode="$(pve_ipv6_state_file pve_direct_ipv6_mode)"
+    state_transport="$(pve_ipv6_state_file pve_direct_ipv6_transport)"
+    state_upstream="$(pve_ipv6_state_file pve_direct_ipv6_upstream_gateway)"
+    if [ -n "${PVE_IPV6_ROUTED_PREFIX:-}" ] || [ -n "${PVE_IPV6_DIRECT_GATEWAY:-}" ] || [ -n "${PVE_IPV6_DIRECT_MODE:-}" ]; then
+        prefix="${PVE_IPV6_ROUTED_PREFIX:-}"
+        upstream_gateway="${PVE_IPV6_DIRECT_GATEWAY:-}"
+        bridge_gateway="${PVE_IPV6_BRIDGE_GATEWAY:-}"
+        mode="${PVE_IPV6_DIRECT_MODE:-ndp}"
+        source="environment"
+        if [ -z "$bridge_gateway" ]; then
+            bridge_gateway="$(pve_direct_ipv6_bridge_cidr 2>/dev/null | cut -d/ -f1 || true)"
+        fi
+        if [ -z "$upstream_gateway" ]; then
+            upstream_gateway="$bridge_gateway"
+        fi
+        if [ -z "$upstream_gateway" ]; then
+            upstream_gateway="$(pve_read_single_line_state "$(pve_ipv6_state_file pve_check_ipv6)" 2>/dev/null || true)"
+        fi
+    elif prefix="$(pve_read_single_line_state "$state_prefix" 2>/dev/null)" && bridge_gateway="$(pve_read_single_line_state "$state_gateway" 2>/dev/null)"; then
+        upstream_gateway="$(pve_read_single_line_state "$state_upstream" 2>/dev/null || printf '%s' "$bridge_gateway")"
+        mode="$(pve_read_single_line_state "$state_mode" 2>/dev/null || printf '%s' ndp)"
+        source="state"
+    elif bridge_cidr="$(pve_direct_ipv6_bridge_cidr)" && [ -n "$bridge_cidr" ]; then
+        prefix="$bridge_cidr"
+        upstream_gateway="${bridge_cidr%/*}"
+        bridge_gateway="$upstream_gateway"
+        mode="ndp"
+        source="legacy-direct-bridge"
+    else
+        return 0
+    fi
+
+    # A persisted prefix without a live direct bridge is not evidence that the whole
+    # prefix is still routed to this host. Keep SLAAC and stale state on NAT66.
+    if [ "$source" != environment ] && ! pve_direct_ipv6_bridge_present; then
+        return 0
+    fi
+
+    if ! normalized_output="$(pve_direct_ipv6_normalize "$prefix" "$upstream_gateway" "$mode" "$bridge_gateway")"; then
+        if [ "$source" = "environment" ]; then
+            _red "Invalid PVE direct IPv6 configuration; set a delegated public prefix, gateway, and mode ndp or routed"
+            _red "PVE 直连 IPv6 配置无效；请设置已委派的公网前缀、网关，以及 ndp 或 routed 模式"
+            return 1
+        fi
+        _yellow "Ignoring invalid persisted or legacy direct-bridge IPv6 configuration"
+        _yellow "忽略无效的持久化或旧直连网桥 IPv6 配置"
+        return 0
+    fi
+    mapfile -t normalized_values <<<"$normalized_output"
+    [ "${#normalized_values[@]}" -eq 4 ] || return 1
+    pve_direct_ipv6_prefix="${normalized_values[0]}"
+    pve_direct_ipv6_gateway="${normalized_values[1]}"
+    pve_direct_ipv6_mode="${normalized_values[2]}"
+    pve_direct_ipv6_upstream_gateway="${normalized_values[3]}"
+    pve_direct_ipv6_prefixlen="${pve_direct_ipv6_prefix##*/}"
+    pve_direct_ipv6_source="$source"
+    pve_direct_ipv6_transport="$(pve_read_single_line_state "$state_transport" 2>/dev/null || true)"
+    [ -n "$pve_direct_ipv6_transport" ] || pve_direct_ipv6_transport="$(pve_direct_ipv6_transport)"
+    pve_direct_ipv6_available=true
+    return 0
+}
+
+pve_direct_ipv6_ndp_required() {
+    [ "${pve_direct_ipv6_mode:-}" = "ndp" ] || [ "${pve_direct_ipv6_transport:-}" = tunnel ]
+}
+
+pve_direct_ipv6_for_id() {
+    local identifier="${1:-}"
+    command -v python3 >/dev/null 2>&1 || return 1
+    python3 - "${pve_direct_ipv6_prefix:-}" "${pve_direct_ipv6_gateway:-}" "$identifier" <<'PY'
+import ipaddress
+import sys
+
+try:
+    network = ipaddress.IPv6Network(sys.argv[1], strict=False)
+    gateway = ipaddress.IPv6Address(sys.argv[2])
+    identifier = int(sys.argv[3], 10)
+except ValueError:
+    raise SystemExit(1)
+if identifier <= 0 or identifier >= network.num_addresses:
+    raise SystemExit(1)
+
+# Retain the historical address form when the host's /64 fits inside the
+# delegated prefix (for example, host ...:10f8::1/38 -> guest ...:10f8::64).
+candidate = ipaddress.IPv6Address((int(gateway) & ~((1 << 64) - 1)) | identifier)
+if candidate not in network:
+    candidate = ipaddress.IPv6Address(int(network.network_address) + identifier)
+for offset in range(network.num_addresses):
+    if candidate in network and candidate != gateway and candidate != network.network_address:
+        print(candidate.compressed)
+        raise SystemExit(0)
+    candidate = ipaddress.IPv6Address(int(candidate) + 1)
+raise SystemExit(1)
+PY
+}
+
 is_noninteractive() {
     case "${noninteractive:-}" in
     true | TRUE | True | 1 | yes | YES | Yes | y | Y)
@@ -240,19 +513,23 @@ validate_ctid() {
 check_ipv6_setup() {
     if [ "$independent_ipv6" == "y" ]; then
         appended_file="/usr/local/bin/pve_appended_content.txt"
-        if [ ! -s "$appended_file" ]; then
-            service_status=$(systemctl is-active ndpresponder.service)
-            if [ "$service_status" == "active" ]; then
-                _green "The ndpresponder service started successfully and is running, and the host can open a service with a separate IPV6 address."
-                _green "ndpresponder服务启动成功且正在运行，宿主机可开设带独立IPV6地址的服务。"
-            else
-                _green "The status of the ndpresponder service is abnormal and the host may not open a service with a separate IPV6 address."
-                _green "ndpresponder服务状态异常，宿主机不可开设带独立IPV6地址的服务。"
-                return 1
-            fi
-        elif [ -s "$appended_file" ]; then
+        if [ -s "$appended_file" ]; then
             _green "Additional IPv6 addresses exist for mapping by NAT, and the host can open services with separate IPV6 addresses."
             _green "存在额外的IPv6地址可供NAT进行映射，宿主机可开设带独立IPV6地址的服务。"
+        elif [ "${pve_direct_ipv6_available:-false}" = true ]; then
+            if pve_direct_ipv6_ndp_required; then
+                service_status=$(systemctl is-active ndpresponder.service 2>/dev/null || true)
+                if [ "$service_status" != "active" ]; then
+                    _red "ndpresponder is required for this NDP IPv6 prefix but is not active"
+                    _red "当前 IPv6 前缀需要 ndpresponder，但服务未运行"
+                    return 1
+                fi
+            fi
+            _green "Independent IPv6 direct-assignment mode is available (${pve_direct_ipv6_mode})."
+            _green "独立 IPv6 直连分配模式可用（${pve_direct_ipv6_mode}）。"
+        else
+            _yellow "No delegated public IPv6 prefix is available; falling back to IPv6 NAT66."
+            _yellow "未检测到已委派的公网 IPv6 前缀，将回退到 IPv6 NAT66。"
         fi
         if [ -f /usr/local/bin/pve_check_ipv6 ]; then
             host_ipv6_address=$(cat /usr/local/bin/pve_check_ipv6)

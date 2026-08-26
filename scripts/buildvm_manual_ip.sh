@@ -219,10 +219,11 @@ create_vm() {
         net0="--net0 virtio,bridge=vmbr0,firewall=0"
     fi
     if [ "$independent_ipv6" = "y" ]; then
-        if [ -s "$appended_file" ]; then
+        if [ -s "$appended_file" ] || [ "${pve_direct_ipv6_available:-false}" != true ]; then
             net1="--net1 virtio,bridge=vmbr1,firewall=0"
         else
-            net1="--net1 virtio,bridge=vmbr2,firewall=0"
+            direct_ipv6_bridge="$(pve_direct_ipv6_bridge)" || return 1
+            net1="--net1 virtio,bridge=${direct_ipv6_bridge},firewall=0"
         fi
     else
         net1=""
@@ -299,7 +300,7 @@ import_disk_and_setup() {
 configure_network() {
     independent_ipv6_status="N"
     if [ "$independent_ipv6" == "y" ]; then
-        if [ ! -z "$host_ipv6_address" ] && [ ! -z "$ipv6_prefixlen" ] && [ ! -z "$ipv6_gateway" ] && [ ! -z "$ipv6_address_without_last_segment" ]; then
+        if [ "${pve_direct_ipv6_available:-false}" = true ] || [ -s /usr/local/bin/pve_appended_content.txt ]; then
             _green "Use ${user_ip}/32 to set ipconfig0"
             if [ "$same_subnet_status" = true ]; then
                 qm set $vm_num --ipconfig0 ip=${user_ip}/${user_ip_range},gw=${gateway}
@@ -323,11 +324,15 @@ configure_network() {
                     echo "虚拟机已配置NAT映射：$vm_internal_ipv6 -> $host_external_ipv6"
                     independent_ipv6_status="Y"
                 fi
-            elif grep -q "vmbr2" /etc/network/interfaces; then
-                # 使用 vmbr2 网桥直接分配IPv6地址
-                qm set $vm_num --ipconfig1 ip6="${ipv6_address_without_last_segment}${vm_num}/128",gw6="${host_ipv6_address}"
-                vm_external_ipv6="${ipv6_address_without_last_segment}${vm_num}"
-                independent_ipv6_status="Y"
+            elif [ "${pve_direct_ipv6_available:-false}" = true ]; then
+                # 使用已确认的委派前缀直接分配 IPv6 地址
+                if vm_external_ipv6="$(pve_direct_ipv6_for_id "$vm_num")"; then
+                    qm set $vm_num --ipconfig1 ip6="${vm_external_ipv6}/128",gw6="${pve_direct_ipv6_gateway}"
+                    independent_ipv6_status="Y"
+                else
+                    independent_ipv6_status="N"
+                    vm_external_ipv6=""
+                fi
             else
                 independent_ipv6_status="N"
             fi
@@ -390,6 +395,7 @@ main() {
     check_cdn_file
     load_default_config || exit 1
     load_nat_ipv6_config || exit 1
+    pve_load_direct_ipv6_config || exit 1
     setup_locale
     get_system_arch || exit 1
     check_kvm_support

@@ -11,9 +11,22 @@ trap 'rm -rf -- "$tmp_dir"' EXIT
 # shellcheck source=/dev/null
 source "${repo_root}/scripts/default_vm_config.sh"
 
+# These stubs are called by functions loaded from the sourced configuration.
+# shellcheck disable=SC2317
 _blue() { :; }
+# shellcheck disable=SC2317
 _red() { :; }
+# shellcheck disable=SC2317
 _yellow() { :; }
+# The configuration helpers intentionally expose these values as global state.
+# Initialize them here so ShellCheck can follow the test contract across the
+# indirect source call.
+pve_nat_ipv6_subnet=""
+pve_nat_ipv6_gateway=""
+pve_direct_ipv6_available=false
+pve_direct_ipv6_prefix=""
+pve_direct_ipv6_gateway=""
+pve_direct_ipv6_upstream_gateway=""
 download_calls=()
 _download_with_retry() {
     download_calls+=("$1")
@@ -69,13 +82,21 @@ assert_rejected() {
 # be claimed by a bridge, so cover both addresses and connected routes here.
 nat_ipv6_addresses=""
 nat_ipv6_routes=""
+direct_ipv6_addresses=""
+direct_ipv6_bridge_present=false
 ip() {
     case "$*" in
+    "-o -6 addr show dev "*)
+        printf '%s\n' "$direct_ipv6_addresses"
+        ;;
     "-o -6 addr show")
         printf '%s\n' "$nat_ipv6_addresses"
         ;;
     "-6 route show table all")
         printf '%s\n' "$nat_ipv6_routes"
+        ;;
+    "link show "*)
+        "$direct_ipv6_bridge_present"
         ;;
     *)
         command ip "$@"
@@ -130,4 +151,94 @@ exercise_nat_ipv6_selector() {
 exercise_nat_ipv6_selector "${repo_root}/scripts/default_vm_config.sh" "VM"
 exercise_nat_ipv6_selector "${repo_root}/scripts/default_ct_config.sh" "CT"
 
-printf 'default VM image selection tests passed\n'
+exercise_direct_ipv6_config() {
+    local config_file="$1" selector_name="$2"
+    local state_dir="$tmp_dir/${selector_name}-direct-state"
+    local interfaces_file="$tmp_dir/${selector_name}-interfaces"
+
+    # shellcheck source=/dev/null
+    source "$config_file"
+    _blue() { :; }
+    _green() { :; }
+    _red() { :; }
+    _yellow() { :; }
+
+    rm -rf -- "$state_dir"
+    mkdir -p "$state_dir"
+    : >"$interfaces_file"
+    export PVE_STATE_DIR="$state_dir"
+    export PVE_NETWORK_INTERFACES_FILE="$interfaces_file"
+    unset PVE_IPV6_ROUTED_PREFIX PVE_IPV6_DIRECT_GATEWAY PVE_IPV6_DIRECT_MODE
+    unset PVE_IPV6_BRIDGE_GATEWAY PVE_IPV6_DIRECT_BRIDGE PVE_IPV6_DIRECT_TRANSPORT
+
+    # A historical vmbr2 /38 remains valid. This is the non-nibble-prefix
+    # bridge form reported by the existing PVE deployment.
+    cat >"$interfaces_file" <<'EOF'
+auto vmbr2
+iface vmbr2 inet6 static
+    address 2a14:7c0:1002:10f8::1/38
+EOF
+    direct_ipv6_addresses='10: vmbr2    inet6 2a14:7c0:1002:10f8::1/38 scope global'
+    direct_ipv6_bridge_present=true
+    pve_load_direct_ipv6_config
+    assert_eq "true" "$pve_direct_ipv6_available" "${selector_name} legacy /38 direct bridge"
+    assert_eq "2a14:7c0:1000::/38" "$pve_direct_ipv6_prefix" "${selector_name} normalizes non-nibble prefix"
+    assert_eq "2a14:7c0:1002:10f8::1" "$pve_direct_ipv6_gateway" "${selector_name} legacy bridge gateway"
+    assert_eq "vmbr2" "$(pve_direct_ipv6_bridge)" "${selector_name} legacy direct bridge name"
+    assert_eq "2a14:7c0:1002:10f8::64" "$(pve_direct_ipv6_for_id 100)" "${selector_name} /38 guest address"
+
+    # A plain SLAAC /64 on the uplink does not imply a delegated guest prefix.
+    rm -rf -- "$state_dir"
+    mkdir -p "$state_dir"
+    cat >"$interfaces_file" <<'EOF'
+auto eth0
+iface eth0 inet dhcp
+EOF
+    direct_ipv6_addresses='2: eth0    inet6 2605:52c0:2:14b:be24:11ff:fe6e:d967/64 scope global dynamic'
+    direct_ipv6_bridge_present=false
+    pve_load_direct_ipv6_config
+    assert_eq "false" "$pve_direct_ipv6_available" "${selector_name} SLAAC /64 remains NAT66"
+
+    # A host-only /128 also cannot provide distinct guest addresses.
+    direct_ipv6_addresses=""
+    export PVE_IPV6_ROUTED_PREFIX='2a14:7c0:1002:10f8::1/128'
+    export PVE_IPV6_DIRECT_GATEWAY='2a14:7c0:1002:10f8::1'
+    export PVE_IPV6_DIRECT_MODE=ndp
+    assert_rejected "${selector_name} /128 direct prefix" pve_load_direct_ipv6_config
+    assert_eq "false" "$pve_direct_ipv6_available" "${selector_name} /128 leaves direct mode disabled"
+
+    # A routed prefix may use a link-local upstream gateway. Guests use the
+    # bridge address inside their own routed prefix instead of that fe80 next hop.
+    export PVE_IPV6_ROUTED_PREFIX='2a14:7c0:1002:2000::/64'
+    export PVE_IPV6_DIRECT_GATEWAY='fe80::1'
+    export PVE_IPV6_DIRECT_MODE=routed
+    export PVE_IPV6_DIRECT_BRIDGE=vmbr9
+    unset PVE_IPV6_BRIDGE_GATEWAY
+    pve_load_direct_ipv6_config
+    assert_eq "true" "$pve_direct_ipv6_available" "${selector_name} routed link-local gateway"
+    assert_eq "2a14:7c0:1002:2000::1" "$pve_direct_ipv6_gateway" "${selector_name} routed guest bridge gateway"
+    assert_eq "fe80::1" "$pve_direct_ipv6_upstream_gateway" "${selector_name} routed upstream gateway"
+    assert_eq "vmbr9" "$(pve_direct_ipv6_bridge)" "${selector_name} custom direct bridge"
+    assert_eq "2a14:7c0:1002:2000::64" "$(pve_direct_ipv6_for_id 100)" "${selector_name} routed guest address"
+
+    # The tunnel marker keeps NDP mandatory even when the prefix itself is
+    # routed, matching HE/6in4 deployments.
+    printf '%s\n' tunnel >"$state_dir/pve_direct_ipv6_transport"
+    cat >>"$interfaces_file" <<'EOF'
+auto he-ipv6
+iface he-ipv6 inet6 v4tunnel
+EOF
+    pve_load_direct_ipv6_config
+    if ! pve_direct_ipv6_ndp_required; then
+        printf 'FAIL: %s tunnel direct IPv6 did not require NDP\n' "$selector_name" >&2
+        exit 1
+    fi
+
+    unset PVE_IPV6_ROUTED_PREFIX PVE_IPV6_DIRECT_GATEWAY PVE_IPV6_DIRECT_MODE
+    unset PVE_IPV6_BRIDGE_GATEWAY PVE_IPV6_DIRECT_BRIDGE PVE_IPV6_DIRECT_TRANSPORT
+}
+
+exercise_direct_ipv6_config "${repo_root}/scripts/default_vm_config.sh" "VM"
+exercise_direct_ipv6_config "${repo_root}/scripts/default_ct_config.sh" "CT"
+
+printf 'default configuration tests passed\n'

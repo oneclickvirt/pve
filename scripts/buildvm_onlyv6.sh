@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/oneclickvirt/pve
-# 2025.06.10
+# 2026.08.26
 # 自动选择要绑定的IPV6地址
 # ./buildvm_onlyv6.sh VMID 用户名 密码 CPU核数 内存 硬盘 系统 存储盘
 # ./buildvm_onlyv6.sh 152 test1 1234567 1 512 5 debian11 local
@@ -44,27 +44,19 @@ init_params() {
 
 check_environment() {
     appended_file="/usr/local/bin/pve_appended_content.txt"
-    if [ ! -s "$appended_file" ]; then
-        if [ ! -f /usr/local/bin/pve_check_ipv6 ]; then
-            _yellow "No ipv6 address exists to open a server with a standalone IPV6 address"
-            _yellow "不存在可用于开设独立 IPV6 服务的 IPv6 地址"
-        fi
-        if ! grep -q "vmbr2" /etc/network/interfaces; then
-            _yellow "No vmbr2 exists to open a server with a standalone IPV6 address"
-            _yellow "不存在可用于开设独立 IPV6 服务的 vmbr2 网桥"
-        fi
-        service_status=$(systemctl is-active ndpresponder.service)
-        if [ "$service_status" == "active" ]; then
-            _green "The ndpresponder service started successfully and is running, and the host can open a service with a separate IPV6 address."
-            _green "ndpresponder服务启动成功且正在运行，宿主机可开设带独立IPV6地址的服务。"
-        else
-            _green "The status of the ndpresponder service is abnormal and the host may not open a service with a separate IPV6 address."
-            _green "ndpresponder服务状态异常，宿主机不可开设带独立IPV6地址的服务。"
+    if [ -s "$appended_file" ]; then
+        _green "Additional IPv6 addresses exist for mapping by NAT, and the host can open services with separate IPV6 addresses."
+        _green "存在额外的IPv6地址可供映射，宿主机可开设带独立IPV6地址的服务。"
+    elif [ "${pve_direct_ipv6_available:-false}" = true ]; then
+        if pve_direct_ipv6_ndp_required && [ "$(systemctl is-active ndpresponder.service 2>/dev/null || true)" != active ]; then
+            _red "ndpresponder is required for this IPv6 prefix but is not active"
+            _red "当前 IPv6 前缀需要 ndpresponder，但服务未运行"
             exit 1
         fi
-    elif [ -s "$appended_file" ]; then
-        _green "Additional IPv6 addresses exist for mapping by NAT, and the host can open services with separate IPV6 addresses."
-        _green "存在额外的IPv6地址可供NAT进行映射，宿主机可开设带独立IPV6地址的服务。"
+    else
+        _red "No delegated public IPv6 prefix is available for an IPv6-only VM"
+        _red "未检测到可用于纯 IPv6 虚拟机的已委派公网前缀"
+        exit 1
     fi
 }
 
@@ -144,10 +136,10 @@ get_ipv6_info() {
 }
 
 create_vm() {
-    if [ -s "$appended_file" ]; then
+    if [ -s "$appended_file" ] || [ "${pve_direct_ipv6_available:-false}" != true ]; then
         net1_bridge="vmbr1"
     else
-        net1_bridge="vmbr2"
+        net1_bridge="$(pve_direct_ipv6_bridge)" || return 1
     fi
     qm create "$vm_num" \
         --agent 1 \
@@ -234,11 +226,14 @@ configure_vm() {
         vm_external_ipv6="$host_external_ipv6"
         echo "VM configured with NAT mapping: $vm_internal_ipv6 -> $host_external_ipv6"
         echo "虚拟机已配置NAT映射：$vm_internal_ipv6 -> $host_external_ipv6"
-    else
-        qm set $vm_num --ipconfig1 ip6="${ipv6_address_without_last_segment}${vm_num}/128",gw6="${host_ipv6_address}"
-        vm_external_ipv6="${ipv6_address_without_last_segment}${vm_num}"
-        _fw6_drop_icmpv6_ping "${ipv6_address_without_last_segment}${vm_num}" "${ipv6_prefixlen:+${ipv6_address_without_last_segment}/${ipv6_prefixlen}}"
+    elif [ "${pve_direct_ipv6_available:-false}" = true ]; then
+        vm_external_ipv6="$(pve_direct_ipv6_for_id "$vm_num")" || exit 1
+        qm set $vm_num --ipconfig1 ip6="${vm_external_ipv6}/128",gw6="${pve_direct_ipv6_gateway}"
+        _fw6_drop_icmpv6_ping "${vm_external_ipv6}" "${pve_direct_ipv6_prefix}"
         _fw_save
+    else
+        _red "No usable IPv6 allocation mode is available"
+        exit 1
     fi
     
     qm set $vm_num --cipassword $password --ciuser $user
@@ -280,6 +275,7 @@ main() {
     check_cdn_file
     load_default_config || exit 1
     load_nat_ipv4_config || exit 1
+    pve_load_direct_ipv6_config || exit 1
     setup_locale
     init_params "$@"
     validate_vm_num || exit 1

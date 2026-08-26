@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/oneclickvirt/pve
-# 2025.06.09
+# 2026.08.26
 
 # ./build_macos_vm.sh VMID CPU核数 内存 硬盘 SSH端口 VNC端口 系统 存储盘 独立IPV6
 # ./build_macos_vm.sh 100 2 4096 45 44022 45901 high-sierra local N
@@ -181,10 +181,12 @@ create_vm() {
             --name macos-${vm_num} \
             ${kvm_flag}
     else
+        local direct_ipv6_bridge
+        direct_ipv6_bridge="$(pve_direct_ipv6_bridge)" || return 1
         qm create $vm_num --agent 1 --scsihw virtio-scsi-pci \
             --cores $core --sockets 1 \
             --net0 vmxnet3,bridge=vmbr1,firewall=0 \
-            --net1 vmxnet3,bridge=vmbr2,firewall=0 \
+            --net1 vmxnet3,bridge="${direct_ipv6_bridge}",firewall=0 \
             --args "$cpu_args" \
             --machine q35 \
             --ostype other \
@@ -280,11 +282,12 @@ create_vm() {
 configure_network() {
     user_ip="${pve_nat_prefix}.${vm_num}"
     if [ "$independent_ipv6" == "y" ]; then
-        if [ ! -z "$host_ipv6_address" ] && [ ! -z "$ipv6_prefixlen" ] && [ ! -z "$ipv6_gateway" ] && [ ! -z "$ipv6_address_without_last_segment" ]; then
-            if grep -q "vmbr2" /etc/network/interfaces; then
-                independent_ipv6_status="Y"
-            else
+        if [ "${pve_direct_ipv6_available:-false}" = true ]; then
+            if pve_direct_ipv6_ndp_required && [ "$(systemctl is-active ndpresponder.service 2>/dev/null || true)" != active ]; then
                 independent_ipv6_status="N"
+            else
+                vm_external_ipv6="$(pve_direct_ipv6_for_id "$vm_num")" || vm_external_ipv6=""
+                [ -n "$vm_external_ipv6" ] && independent_ipv6_status="Y" || independent_ipv6_status="N"
             fi
         else
             independent_ipv6_status="N"
@@ -304,7 +307,7 @@ setup_port_forwarding() {
 
 save_vm_info() {
     if [ "$independent_ipv6_status" == "Y" ]; then
-        echo "$vm_num $core $memory $disk $sshn $vnc_port $system $storage ${ipv6_address_without_last_segment}${vm_num}" >>"vm${vm_num}"
+        echo "$vm_num $core $memory $disk $sshn $vnc_port $system $storage ${vm_external_ipv6}" >>"vm${vm_num}"
         data=$(echo " VMID CPU核数-CPU 内存-memory 硬盘-disk SSH端口 VNC端口 系统-system 存储盘-storage 独立IPV6地址-ipv6_address")
     else
         echo "$vm_num $core $memory $disk $sshn $vnc_port $system $storage" >>"vm${vm_num}"
@@ -545,6 +548,7 @@ main() {
     check_cdn_file
     load_default_config || exit 1
     load_nat_ipv4_config || exit 1
+    pve_load_direct_ipv6_config || exit 1
     setup_locale
     get_system_arch
     init_params "$@"

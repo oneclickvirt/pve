@@ -325,6 +325,136 @@ raise SystemExit(0 if network.prefixlen == 64 and network.subnet_of(ipaddress.IP
 PY
 }
 
+validate_pve_direct_ipv6_bridge_value() {
+    local value="${1-}"
+    is_single_network_value "$value" && [ "${#value}" -le 15 ] && [[ "$value" =~ ^[A-Za-z0-9_.:-]+$ ]]
+}
+
+validate_pve_direct_ipv6_mode_value() {
+    case "${1-}" in
+    ndp | routed) return 0 ;;
+    *) return 1 ;;
+    esac
+}
+
+validate_pve_direct_ipv6_transport_value() {
+    case "${1-}" in
+    bridge | tunnel) return 0 ;;
+    *) return 1 ;;
+    esac
+}
+
+# Normalize explicitly delegated IPv6 configuration.  A host's SLAAC address
+# is deliberately not an input here: it proves reachability, not that a whole
+# prefix can be handed to guests.
+pve_direct_ipv6_normalize() {
+    local prefix="${1:-}" upstream_gateway="${2:-}" mode="${3:-ndp}" bridge_gateway="${4:-}"
+    command -v python3 >/dev/null 2>&1 || return 1
+    python3 - "$prefix" "$upstream_gateway" "$mode" "$bridge_gateway" <<'PY'
+import ipaddress
+import sys
+
+try:
+    network = ipaddress.IPv6Network(sys.argv[1], strict=False)
+    upstream_gateway = ipaddress.IPv6Address(sys.argv[2].split('/', 1)[0].strip())
+    preferred_bridge_gateway = (
+        ipaddress.IPv6Address(sys.argv[4].split('/', 1)[0].strip())
+        if sys.argv[4].strip()
+        else None
+    )
+except ValueError:
+    raise SystemExit(1)
+
+mode = sys.argv[3].lower()
+global_unicast = ipaddress.IPv6Network("2000::/3")
+if network.prefixlen > 120 or not network.subnet_of(global_unicast) or mode not in {"ndp", "routed"}:
+    raise SystemExit(1)
+
+if mode == "ndp":
+    if not upstream_gateway.is_global or upstream_gateway not in network:
+        raise SystemExit(1)
+    bridge_gateway = upstream_gateway
+else:
+    if not (upstream_gateway.is_global or upstream_gateway.is_link_local):
+        raise SystemExit(1)
+    if preferred_bridge_gateway is not None:
+        if (
+            not preferred_bridge_gateway.is_global
+            or preferred_bridge_gateway not in network
+            or preferred_bridge_gateway == network.network_address
+        ):
+            raise SystemExit(1)
+        bridge_gateway = preferred_bridge_gateway
+    elif upstream_gateway.is_global and upstream_gateway in network and upstream_gateway != network.network_address:
+        bridge_gateway = upstream_gateway
+    else:
+        bridge_gateway = ipaddress.IPv6Address(int(network.network_address) + 1)
+
+print(network.with_prefixlen)
+print(bridge_gateway.compressed)
+print(mode)
+print(upstream_gateway.compressed)
+PY
+}
+
+pve_direct_ipv6_env_config() {
+    local prefix="${PVE_IPV6_ROUTED_PREFIX:-}" upstream_gateway="${PVE_IPV6_DIRECT_GATEWAY:-}"
+    local mode="${PVE_IPV6_DIRECT_MODE:-ndp}" bridge_gateway="${PVE_IPV6_BRIDGE_GATEWAY:-}"
+    local bridge="${PVE_IPV6_DIRECT_BRIDGE:-vmbr2}" transport="${PVE_IPV6_DIRECT_TRANSPORT:-bridge}"
+
+    [ -n "$prefix" ] && [ -n "$upstream_gateway" ] || return 1
+    validate_pve_direct_ipv6_bridge_value "$bridge" || return 1
+    validate_pve_direct_ipv6_transport_value "$transport" || return 1
+    pve_direct_ipv6_normalize "$prefix" "$upstream_gateway" "$mode" "$bridge_gateway" || return 1
+    printf '%s\n' "$bridge" "$transport"
+}
+
+pve_direct_ipv6_requested() {
+    [ -n "${PVE_IPV6_ROUTED_PREFIX:-}" ] || [ -n "${PVE_IPV6_DIRECT_GATEWAY:-}" ] || [ -n "${PVE_IPV6_DIRECT_MODE:-}" ] ||
+        [ -n "${PVE_IPV6_BRIDGE_GATEWAY:-}" ] || [ -n "${PVE_IPV6_DIRECT_BRIDGE:-}" ] || [ -n "${PVE_IPV6_DIRECT_TRANSPORT:-}" ]
+}
+
+pve_direct_ipv6_state_file() {
+    printf '%s/%s\n' "${PVE_STATE_DIR:-/usr/local/bin}" "$1"
+}
+
+pve_save_direct_ipv6_config() {
+    local prefix="$1" bridge_gateway="$2" mode="$3" upstream_gateway="$4" bridge="$5" transport="$6" normalized_output
+    local -a normalized_values
+    validate_pve_direct_ipv6_bridge_value "$bridge" || return 1
+    validate_pve_direct_ipv6_transport_value "$transport" || return 1
+    normalized_output="$(pve_direct_ipv6_normalize "$prefix" "$upstream_gateway" "$mode" "$bridge_gateway")" || return 1
+    mapfile -t normalized_values <<<"$normalized_output"
+    [ "${#normalized_values[@]}" -eq 4 ] || return 1
+    write_network_state_atomic "$(pve_direct_ipv6_state_file pve_direct_ipv6_prefix)" "${normalized_values[0]}" is_single_network_value || return 1
+    write_network_state_atomic "$(pve_direct_ipv6_state_file pve_direct_ipv6_gateway)" "${normalized_values[1]}" is_single_network_value || return 1
+    write_network_state_atomic "$(pve_direct_ipv6_state_file pve_direct_ipv6_mode)" "${normalized_values[2]}" validate_pve_direct_ipv6_mode_value || return 1
+    write_network_state_atomic "$(pve_direct_ipv6_state_file pve_direct_ipv6_upstream_gateway)" "${normalized_values[3]}" is_single_network_value || return 1
+    write_network_state_atomic "$(pve_direct_ipv6_state_file pve_direct_ipv6_bridge)" "$bridge" validate_pve_direct_ipv6_bridge_value || return 1
+    write_network_state_atomic "$(pve_direct_ipv6_state_file pve_direct_ipv6_transport)" "$transport" validate_pve_direct_ipv6_transport_value
+}
+
+pve_network_bridge_exists() {
+    local bridge="$1" interfaces_file="${PVE_NETWORK_INTERFACES_FILE:-/etc/network/interfaces}"
+    validate_pve_direct_ipv6_bridge_value "$bridge" || return 1
+    ip link show "$bridge" >/dev/null 2>&1 && return 0
+    [ -r "$interfaces_file" ] || return 1
+    awk -v bridge="$bridge" '
+        $1 == "auto" {
+            for (i = 2; i <= NF; i++) if ($i == bridge) found = 1
+        }
+        $1 == "iface" && $2 == bridge { found = 1 }
+        END { exit found ? 0 : 1 }
+    ' "$interfaces_file"
+}
+
+disable_ndpresponder() {
+    if command -v systemctl >/dev/null 2>&1; then
+        systemctl disable --now ndpresponder.service 2>/dev/null || true
+    fi
+    rm -f /etc/systemd/system/ndpresponder.service
+}
+
 write_network_state_atomic() {
     local path="$1"
     local value="$2"
@@ -1128,24 +1258,13 @@ EOF
     fi
 }
 
-# 配置vmbr2网桥（如果需要）
+# 配置直连 IPv6 网桥（仅明确委派前缀、已有桥或 HE/6in4 时）
 configure_vmbr2() {
+    local appended_file direct_config direct_bridge
+    local -a direct_values
     chattr -i /etc/network/interfaces
     appended_file="/usr/local/bin/pve_appended_content.txt"
-    if [ -n "$ipv6_prefixlen" ] && [ "$((ipv6_prefixlen))" -le 112 ] && [ ! -s "$appended_file" ]; then
-        if grep -q "vmbr2" /etc/network/interfaces; then
-            _blue "vmbr2 already exists in /etc/network/interfaces"
-            _blue "vmbr2 已存在在 /etc/network/interfaces"
-        elif [ -f /usr/local/bin/pve_maximum_subset ] && [ $(cat /usr/local/bin/pve_maximum_subset) = false ]; then
-            _blue "No set vmbr2"
-        elif [ "$status_he" = true ]; then
-            configure_vmbr2_with_he_tunnel
-        elif [ ! -z "$ipv6_address" ] && [ ! -z "$ipv6_prefixlen" ] && [ ! -z "$ipv6_gateway" ] && [ ! -z "$ipv6_address_without_last_segment" ]; then
-            configure_vmbr2_with_ipv6_subnet
-        else
-            rm -rf /etc/systemd/system/ndpresponder.service
-        fi
-    elif [ -s "$appended_file" ]; then
+    if [ -s "$appended_file" ]; then
         tmp_script="/usr/local/bin/check_ipv6.sh"
         echo '#!/bin/bash' > "$tmp_script"
         echo "" >> "$tmp_script"
@@ -1158,8 +1277,44 @@ configure_vmbr2() {
         echo "wait" >> "$tmp_script"
         chmod +x "$tmp_script"
         (crontab -l 2>/dev/null; echo "*/15 * * * * bash $tmp_script") | sort -u | crontab -
+        return 0
+    fi
+
+    if pve_direct_ipv6_requested; then
+        if ! direct_config="$(pve_direct_ipv6_env_config)"; then
+            _red "Invalid explicit PVE direct IPv6 configuration; keeping IPv6 NAT66 only"
+            _red "显式 PVE 直连 IPv6 配置无效；仅保留 IPv6 NAT66"
+            return 1
+        fi
+        mapfile -t direct_values <<<"$direct_config"
+        [ "${#direct_values[@]}" -eq 6 ] || return 1
+        direct_bridge="${direct_values[4]}"
+        if pve_network_bridge_exists "$direct_bridge"; then
+            _blue "${direct_bridge} already exists; preserving the existing direct IPv6 bridge"
+            _blue "${direct_bridge} 已存在；保留已有直连 IPv6 网桥"
+        elif [ -f /usr/local/bin/pve_maximum_subset ] && [ "$(cat /usr/local/bin/pve_maximum_subset)" = false ]; then
+            _blue "No set ${direct_bridge}"
+        else
+            configure_vmbr2_with_explicit_ipv6_prefix "${direct_values[@]}" || return 1
+        fi
+    elif pve_network_bridge_exists vmbr2; then
+        # Preserve historical NDP bridges, including a working /64 or non-nibble
+        # delegated prefix. Their presence is stronger evidence than a host-only
+        # SLAAC address and must not be replaced during an upgrade.
+        _blue "vmbr2 already exists; preserving the existing direct IPv6 bridge"
+        _blue "vmbr2 已存在；保留已有直连 IPv6 网桥"
+    elif [ "$status_he" = true ]; then
+        if [ -f /usr/local/bin/pve_maximum_subset ] && [ "$(cat /usr/local/bin/pve_maximum_subset)" = false ]; then
+            _blue "No set vmbr2"
+        else
+            configure_vmbr2_with_he_tunnel || return 1
+        fi
     else
-        rm -rf /etc/systemd/system/ndpresponder.service
+        # A regular SLAAC /64 or /128 is not a delegation. Keep NAT66 for new
+        # installs rather than synthesizing a public child prefix on vmbr2.
+        disable_ndpresponder
+        _blue "No delegated direct IPv6 prefix detected; using IPv6 NAT66"
+        _blue "未检测到已委派的直连 IPv6 前缀；使用 IPv6 NAT66"
     fi
 }
 
@@ -1184,35 +1339,50 @@ EOF
         file_path="/etc/systemd/system/ndpresponder.service"
         sed -i "s|^ExecStart=.*|${new_exec_start}|" "$file_path"
     fi
-    configure_ipv6_forwarding
+    pve_save_direct_ipv6_config "$new_subnet" "${new_subnet%/*}" routed "$ipv6_gateway" vmbr2 tunnel || return 1
+    configure_ipv6_forwarding vmbr2
 }
 
-# 为IPV6子网配置vmbr2
-configure_vmbr2_with_ipv6_subnet() {
+# 为明确委派的 IPv6 前缀配置直连网桥
+configure_vmbr2_with_explicit_ipv6_prefix() {
+    local direct_prefix="$1" direct_gateway="$2" direct_mode="$3" direct_upstream_gateway="$4"
+    local direct_bridge="$5" direct_transport="$6" ndp_interface new_exec_start file_path
     chattr -i /etc/network/interfaces
-    appended_file="/usr/local/bin/pve_appended_content.txt"
-    if [ ! -s "$appended_file" ] && [ -f "/usr/local/bin/ndpresponder" ]; then
-        cat <<EOF | sudo tee -a /etc/network/interfaces
-auto vmbr2
-iface vmbr2 inet6 static
-    address ${ipv6_address}/${ipv6_prefixlen}
+    cat <<EOF | sudo tee -a /etc/network/interfaces
+auto ${direct_bridge}
+iface ${direct_bridge} inet6 static
+    address ${direct_gateway}/${direct_prefix##*/}
     bridge_ports none
     bridge_stp off
     bridge_fd 0
 EOF
-        ndp_prefixlen=${ipv6_prefixlen}
-        [ "$ndp_prefixlen" -gt 128 ] 2>/dev/null && ndp_prefixlen=128
-        new_exec_start="ExecStart=/usr/local/bin/ndpresponder -i vmbr0 -n ${ipv6_address_without_last_segment}0/${ndp_prefixlen}"
-        file_path="/etc/systemd/system/ndpresponder.service"
-        sed -i "s|^ExecStart=.*|${new_exec_start}|" "$file_path"
-        echo '*/2 * * * * curl -m 6 -s ipv6.ip.sb && curl -m 6 -s ipv6.ip.sb' | crontab -
+    if [ "$direct_mode" = ndp ] || [ "$direct_transport" = tunnel ]; then
+        ndp_interface="${PVE_IPV6_DIRECT_NDP_INTERFACE:-}"
+        if [ -z "$ndp_interface" ]; then
+            if [ "$direct_transport" = tunnel ]; then
+                ndp_interface="he-ipv6"
+            else
+                ndp_interface="vmbr0"
+            fi
+        fi
+        validate_pve_direct_ipv6_bridge_value "$ndp_interface" || return 1
+        if [ -f "/usr/local/bin/ndpresponder" ] && [ -f "/etc/systemd/system/ndpresponder.service" ]; then
+            new_exec_start="ExecStart=/usr/local/bin/ndpresponder -i ${ndp_interface} -n ${direct_prefix}"
+            file_path="/etc/systemd/system/ndpresponder.service"
+            sed -i "s|^ExecStart=.*|${new_exec_start}|" "$file_path"
+        fi
+    else
+        disable_ndpresponder
     fi
-    configure_ipv6_forwarding
+    pve_save_direct_ipv6_config "$direct_prefix" "$direct_gateway" "$direct_mode" "$direct_upstream_gateway" "$direct_bridge" "$direct_transport" || return 1
+    configure_ipv6_forwarding "$direct_bridge"
 }
 
 
 # 配置IPV6转发设置
 configure_ipv6_forwarding() {
+    local direct_bridge="${1:-vmbr2}"
+    validate_pve_direct_ipv6_bridge_value "$direct_bridge" || return 1
     update_sysctl "net.ipv6.conf.all.forwarding=1"
     # Keep SLAAC router advertisements on the external bridge after enabling
     # forwarding, otherwise Linux can expire the host default IPv6 route.
@@ -1221,7 +1391,7 @@ configure_ipv6_forwarding() {
     update_sysctl "net.ipv6.conf.default.proxy_ndp=1"
     update_sysctl "net.ipv6.conf.vmbr0.proxy_ndp=1"
     update_sysctl "net.ipv6.conf.vmbr1.proxy_ndp=1"
-    update_sysctl "net.ipv6.conf.vmbr2.proxy_ndp=1"
+    update_sysctl "net.ipv6.conf.${direct_bridge}.proxy_ndp=1"
 }
 
 # 安装并配置防火墙

@@ -24,6 +24,12 @@ eval "$(extract_function validate_ipv4_value)"
 eval "$(extract_function validate_ipv4_network24_value)"
 eval "$(extract_function validate_ipv6_value)"
 eval "$(extract_function validate_ipv6_network_value)"
+eval "$(extract_function validate_pve_direct_ipv6_bridge_value)"
+eval "$(extract_function validate_pve_direct_ipv6_mode_value)"
+eval "$(extract_function validate_pve_direct_ipv6_transport_value)"
+eval "$(extract_function pve_direct_ipv6_normalize)"
+eval "$(extract_function pve_direct_ipv6_env_config)"
+eval "$(extract_function pve_direct_ipv6_state_file)"
 eval "$(extract_function write_network_state_atomic)"
 eval "$(extract_function read_network_state)"
 eval "$(extract_function is_public_ipv6)"
@@ -32,6 +38,7 @@ eval "$(extract_function check_ipv6)"
 eval "$(extract_function select_nat_ipv4_subnet)"
 eval "$(extract_function pve_nat_ipv6_candidate_is_safe)"
 eval "$(extract_function select_nat_ipv6_subnet)"
+eval "$(extract_function pve_save_direct_ipv6_config)"
 
 _green() { :; }
 _red() { :; }
@@ -119,6 +126,64 @@ nat_ipv6_addresses=$'2: eth0    inet6 2605:52c0:2:14b:be24:11ff:fe6e:d967/64 sco
 nat_ipv6_routes=$'2605:52c0:2:14b::/64 dev eth0 proto kernel\nfd42:5339:296f:1f07::/64 dev vmbr1 proto kernel\nlocal fd42:5339:296f:1f07::1 dev vmbr1 table local'
 select_nat_ipv6_subnet
 assert_eq "fd42:5339:296f:1f07::/64" "$(cat "$PVE_STATE_DIR/pve_nat_ipv6_subnet")" "active vmbr1 ULA subnet remains stable"
+
+# Direct public IPv6 is only enabled from explicit delegation data. A normal
+# SLAAC address is intentionally absent from this input path.
+unset PVE_IPV6_ROUTED_PREFIX PVE_IPV6_DIRECT_GATEWAY PVE_IPV6_DIRECT_MODE
+unset PVE_IPV6_BRIDGE_GATEWAY PVE_IPV6_DIRECT_BRIDGE PVE_IPV6_DIRECT_TRANSPORT
+if pve_direct_ipv6_env_config >/dev/null; then
+    printf 'FAIL: PVE direct IPv6 accepted an unspecified SLAAC-derived prefix\n' >&2
+    exit 1
+fi
+
+export PVE_IPV6_ROUTED_PREFIX='2a14:7c0:1002:10f8::1/38'
+export PVE_IPV6_DIRECT_GATEWAY='2a14:7c0:1002:10f8::1'
+export PVE_IPV6_DIRECT_MODE=ndp
+export PVE_IPV6_DIRECT_BRIDGE=vmbr2
+export PVE_IPV6_DIRECT_TRANSPORT=bridge
+mapfile -t direct_values < <(pve_direct_ipv6_env_config)
+assert_eq "2a14:7c0:1000::/38" "${direct_values[0]}" "explicit non-nibble delegated prefix"
+assert_eq "2a14:7c0:1002:10f8::1" "${direct_values[1]}" "explicit NDP bridge gateway"
+assert_eq "vmbr2" "${direct_values[4]}" "explicit direct bridge"
+
+export PVE_IPV6_ROUTED_PREFIX='2a14:7c0:1002:2000::/64'
+export PVE_IPV6_DIRECT_GATEWAY='fe80::1'
+export PVE_IPV6_DIRECT_MODE=routed
+export PVE_IPV6_DIRECT_BRIDGE=vmbr9
+export PVE_IPV6_DIRECT_TRANSPORT=tunnel
+unset PVE_IPV6_BRIDGE_GATEWAY
+mapfile -t direct_values < <(pve_direct_ipv6_env_config)
+assert_eq "2a14:7c0:1002:2000::1" "${direct_values[1]}" "routed guest bridge gateway"
+assert_eq "routed" "${direct_values[2]}" "routed direct mode"
+assert_eq "fe80::1" "${direct_values[3]}" "routed upstream link-local gateway"
+assert_eq "vmbr9" "${direct_values[4]}" "routed custom bridge"
+assert_eq "tunnel" "${direct_values[5]}" "routed tunnel transport"
+
+export PVE_IPV6_ROUTED_PREFIX='2a14:7c0:1002:10f8::1/128'
+if pve_direct_ipv6_env_config >/dev/null; then
+    printf 'FAIL: host-only /128 was accepted as a PVE direct IPv6 prefix\n' >&2
+    exit 1
+fi
+
+export PVE_STATE_DIR="${tmp_dir}/direct-state"
+mkdir -p "$PVE_STATE_DIR"
+pve_save_direct_ipv6_config '2a14:7c0:1002:2000::/64' '2a14:7c0:1002:2000::1' routed fe80::1 vmbr9 tunnel
+assert_eq "2a14:7c0:1002:2000::/64" "$(cat "$PVE_STATE_DIR/pve_direct_ipv6_prefix")" "persisted routed prefix"
+assert_eq "2a14:7c0:1002:2000::1" "$(cat "$PVE_STATE_DIR/pve_direct_ipv6_gateway")" "persisted guest bridge gateway"
+assert_eq "fe80::1" "$(cat "$PVE_STATE_DIR/pve_direct_ipv6_upstream_gateway")" "persisted upstream gateway"
+assert_eq "vmbr9" "$(cat "$PVE_STATE_DIR/pve_direct_ipv6_bridge")" "persisted direct bridge"
+unset PVE_IPV6_ROUTED_PREFIX PVE_IPV6_DIRECT_GATEWAY PVE_IPV6_DIRECT_MODE
+unset PVE_IPV6_BRIDGE_GATEWAY PVE_IPV6_DIRECT_BRIDGE PVE_IPV6_DIRECT_TRANSPORT
+export PVE_STATE_DIR="${tmp_dir}/state"
+
+if extract_function configure_vmbr2 | grep -Fq 'configure_vmbr2_with_ipv6_subnet'; then
+    printf 'FAIL: PVE must not derive a vmbr2 public subnet from a host SLAAC address\n' >&2
+    exit 1
+fi
+if ! extract_function configure_vmbr2 | grep -Fq 'pve_direct_ipv6_requested'; then
+    printf 'FAIL: PVE direct IPv6 bridge setup must require explicit delegation\n' >&2
+    exit 1
+fi
 
 for ipv6_script in "$repo_root/scripts/build_nat_network.sh" "$repo_root/scripts/check_kernal.sh" "$repo_root/scripts/install_pve.sh"; do
     ipv6_check=$(sed -n '/^check_ipv6() {/,/^}/p' "$ipv6_script")

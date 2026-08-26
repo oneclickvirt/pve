@@ -42,27 +42,19 @@ init() {
 
 check_requirements() {
     appended_file="/usr/local/bin/pve_appended_content.txt"
-    if [ ! -s "$appended_file" ]; then
-        if [ ! -f /usr/local/bin/pve_check_ipv6 ]; then
-            _yellow "No ipv6 address exists to open a server with a standalone IPV6 address"
-            _yellow "不存在可用于开设独立 IPV6 服务的 IPv6 地址"
-        fi
-        if ! grep -q "vmbr2" /etc/network/interfaces; then
-            _yellow "No vmbr2 exists to open a server with a standalone IPV6 address"
-            _yellow "不存在可用于开设独立 IPV6 服务的 vmbr2 网桥"
-        fi
-        service_status=$(systemctl is-active ndpresponder.service)
-        if [ "$service_status" == "active" ]; then
-            _green "The ndpresponder service started successfully and is running, and the host can open a service with a separate IPV6 address."
-            _green "ndpresponder服务启动成功且正在运行，宿主机可开设带独立IPV6地址的服务。"
-        else
-            _green "The status of the ndpresponder service is abnormal and the host may not open a service with a separate IPV6 address."
-            _green "ndpresponder服务状态异常，宿主机不可开设带独立IPV6地址的服务。"
+    if [ -s "$appended_file" ]; then
+        _green "Additional IPv6 addresses exist for mapping by NAT, and the host can open services with separate IPV6 addresses."
+        _green "存在额外的IPv6地址可供映射，宿主机可开设带独立IPV6地址的服务。"
+    elif [ "${pve_direct_ipv6_available:-false}" = true ]; then
+        if pve_direct_ipv6_ndp_required && [ "$(systemctl is-active ndpresponder.service 2>/dev/null || true)" != active ]; then
+            _red "ndpresponder is required for this IPv6 prefix but is not active"
+            _red "当前 IPv6 前缀需要 ndpresponder，但服务未运行"
             exit 1
         fi
-    elif [ -s "$appended_file" ]; then
-        _green "Additional IPv6 addresses exist for mapping by NAT, and the host can open services with separate IPV6 addresses."
-        _green "存在额外的IPv6地址可供NAT进行映射，宿主机可开设带独立IPV6地址的服务。"
+    else
+        _red "No delegated public IPv6 prefix is available for an IPv6-only container"
+        _red "未检测到可用于纯 IPv6 容器的已委派公网前缀"
+        exit 1
     fi
 }
 
@@ -297,16 +289,20 @@ create_container() {
         ct_external_ipv6="$host_external_ipv6"
         echo "Container configured with NAT mapping: $ct_internal_ipv6 -> $host_external_ipv6"
         echo "容器已配置NAT映射：$ct_internal_ipv6 -> $host_external_ipv6"
-    elif grep -q "vmbr2" /etc/network/interfaces; then
-        # 使用 vmbr2 网桥直接分配IPv6地址
-        pct set $CTID --net0 name=eth0,ip6="${ipv6_address_without_last_segment}${CTID}/128",bridge=vmbr2,gw6="${host_ipv6_address}"
+    elif [ "${pve_direct_ipv6_available:-false}" = true ]; then
+        # 使用已确认的直连网桥直接分配 IPv6 地址
+        ct_external_ipv6="$(pve_direct_ipv6_for_id "$CTID")" || exit 1
+        direct_ipv6_bridge="$(pve_direct_ipv6_bridge)" || exit 1
+        pct set $CTID --net0 name=eth0,ip6="${ct_external_ipv6}/128",bridge="${direct_ipv6_bridge}",gw6="${pve_direct_ipv6_gateway}"
         pct set $CTID --net1 name=eth1,ip=${user_ip}/24,bridge=vmbr1,gw=${pve_nat_gateway}
         pct set $CTID --nameserver "8.8.8.8 8.8.4.4 2001:4860:4860::8888 2001:4860:4860::8844"
-        echo "Container configured with vmbr2: ${ipv6_address_without_last_segment}${CTID}"
-        echo "容器已配置使用vmbr2：${ipv6_address_without_last_segment}${CTID}"
-        ct_external_ipv6="${ipv6_address_without_last_segment}${CTID}"
-        _fw6_drop_icmpv6_ping "${ipv6_address_without_last_segment}${CTID}" "${ipv6_prefixlen:+${ipv6_address_without_last_segment}/${ipv6_prefixlen}}"
+        echo "Container configured with ${direct_ipv6_bridge}: ${ct_external_ipv6}"
+        echo "容器已配置使用 ${direct_ipv6_bridge}：${ct_external_ipv6}"
+        _fw6_drop_icmpv6_ping "${ct_external_ipv6}" "${pve_direct_ipv6_prefix}"
         _fw_save
+    else
+        _red "No usable IPv6 allocation mode is available"
+        exit 1
     fi
     sleep 3
 }
@@ -348,6 +344,7 @@ main() {
     check_cdn_file
     load_default_config
     load_nat_ipv4_config || exit 1
+    pve_load_direct_ipv6_config || exit 1
     set_locale
     check_requirements
     get_system_arch || exit 1
