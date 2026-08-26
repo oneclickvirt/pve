@@ -47,6 +47,7 @@ jobs:
           bash tests/build_nat_network_test.sh
           bash tests/ifupdown2_install_test.sh
           bash tests/default_vm_config_test.sh
+          bash tests/pve_delete_ipv6_test.sh
           bash tests/ssh_sh_portability_test.sh
           bash tests/configure_network_test.sh
 

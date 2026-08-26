@@ -1,7 +1,7 @@
 #!/bin/bash
 # from
 # https://github.com/oneclickvirt/pve
-# 2026.08.26
+# 2026.08.27
 # ./pve_delete.sh arg1 arg2
 # arg 可填入虚拟机/容器的序号，可以有任意多个；或使用 all 删除全部
 # 日志 /var/log/pve_delete.log
@@ -74,6 +74,30 @@ extract_first_ipv4_from_config() {
 
     printf ''
     return 0
+}
+
+extract_first_public_ipv6_from_config() {
+    local config_text=$1
+
+    command -v python3 >/dev/null 2>&1 || {
+        printf ''
+        return 0
+    }
+    python3 - "$config_text" <<'PY'
+import ipaddress
+import re
+import sys
+
+for match in re.finditer(r"(?:^|[,\s])ip6=([^,\s]+)", sys.argv[1]):
+    value = match.group(1).split("/", 1)[0]
+    try:
+        address = ipaddress.IPv6Address(value)
+    except ValueError:
+        continue
+    if address.is_global:
+        print(address.compressed)
+        break
+PY
 }
 
 delete_nft_ipv4_rules_for_ip() {
@@ -282,15 +306,157 @@ PY
     fi
 }
 
+# Resolve the exact direct IPv6 assignment used by the VM/CT builders.  New
+# installations persist the delegated prefix and bridge gateway, while older
+# installations only have the host address and prefix length.
+resolve_vmbr2_icmpv6_rule_values() {
+    local vmctid=$1
+    local configured_ipv6="${2:-}"
+    local state_dir="${PVE_STATE_DIR:-/usr/local/bin}"
+    local direct_prefix_file direct_gateway_file host_ipv6_file prefixlen_file
+    local direct_prefix="" direct_gateway="" host_ipv6="" prefixlen="" resolved=""
+
+    state_dir="${state_dir%/}"
+    direct_prefix_file="${state_dir}/pve_direct_ipv6_prefix"
+    direct_gateway_file="${state_dir}/pve_direct_ipv6_gateway"
+    host_ipv6_file="${state_dir}/pve_check_ipv6"
+    prefixlen_file="${state_dir}/pve_ipv6_prefixlen"
+    command -v python3 >/dev/null 2>&1 || return 1
+
+    # Treat a partial direct-assignment state as invalid instead of falling
+    # back to a host-derived address that could remove another guest's rule.
+    if [ -e "$direct_prefix_file" ] || [ -e "$direct_gateway_file" ]; then
+        [ -s "$direct_prefix_file" ] && [ -s "$direct_gateway_file" ] || return 1
+        direct_prefix=$(cat "$direct_prefix_file")
+        direct_gateway=$(cat "$direct_gateway_file")
+        resolved=$(python3 - direct "$direct_prefix" "$direct_gateway" "$vmctid" <<'PY'
+import ipaddress
+import sys
+
+try:
+    mode, prefix_value, gateway_value, identifier_value = sys.argv[1:]
+    identifier = int(identifier_value, 10)
+except ValueError:
+    raise SystemExit(1)
+
+if mode == "direct":
+    try:
+        network = ipaddress.IPv6Network(prefix_value, strict=False)
+        gateway = ipaddress.IPv6Address(gateway_value)
+    except ValueError:
+        raise SystemExit(1)
+    if gateway not in network or identifier < 100 or identifier > 256:
+        raise SystemExit(1)
+
+    # This is intentionally identical to pve_direct_ipv6_for_id in the VM/CT
+    # configuration scripts, including gateway and small-prefix collisions.
+    def historical_candidate(vm_id):
+        candidate = ipaddress.IPv6Address((int(gateway) & ~((1 << 64) - 1)) | vm_id)
+        if candidate in network:
+            return candidate
+        if vm_id >= network.num_addresses:
+            return None
+        return ipaddress.IPv6Address(int(network.network_address) + vm_id)
+
+    assignments = {}
+    assigned_addresses = set()
+    fallback_ids = []
+    for vm_id in range(100, 257):
+        candidate = historical_candidate(vm_id)
+        if (
+            candidate is None
+            or candidate == network.network_address
+            or candidate == gateway
+            or candidate in assigned_addresses
+        ):
+            fallback_ids.append(vm_id)
+            continue
+        assignments[vm_id] = candidate
+        assigned_addresses.add(candidate)
+
+    for vm_id in fallback_ids:
+        for offset in range(1, network.num_addresses):
+            candidate = ipaddress.IPv6Address(int(network.network_address) + offset)
+            if candidate != gateway and candidate not in assigned_addresses:
+                assignments[vm_id] = candidate
+                assigned_addresses.add(candidate)
+                break
+        else:
+            raise SystemExit(1)
+
+    address = assignments[identifier]
+    source = network
+else:
+    raise SystemExit(1)
+
+print(f"{address.compressed}\t{source.with_prefixlen}")
+PY
+) || return 1
+    else
+        [ -s "$host_ipv6_file" ] || return 1
+        host_ipv6=$(cat "$host_ipv6_file")
+        [ -s "$prefixlen_file" ] && prefixlen=$(cat "$prefixlen_file")
+        resolved=$(python3 - legacy "$host_ipv6" "$prefixlen" "$vmctid" "$configured_ipv6" <<'PY'
+import ipaddress
+import sys
+
+try:
+    mode, host_value, prefixlen_value, identifier_value, configured_value = sys.argv[1:]
+    host = ipaddress.IPv6Address(host_value)
+    identifier = int(identifier_value, 10)
+except ValueError:
+    raise SystemExit(1)
+if mode != "legacy" or identifier < 0:
+    raise SystemExit(1)
+
+# A recently upgraded direct bridge can have no persisted prefix state even
+# though its VM/CT already carries the current decimal assignment. Use that
+# observed address when it belongs to the legacy host prefix.
+network = None
+if prefixlen_value:
+    try:
+        network = ipaddress.IPv6Network((host, int(prefixlen_value, 10)), strict=False)
+    except ValueError:
+        network = None
+
+if configured_value:
+    try:
+        address = ipaddress.IPv6Address(configured_value)
+    except ValueError:
+        raise SystemExit(1)
+    if network is not None and address not in network:
+        raise SystemExit(1)
+else:
+    # Preserve the legacy last-hextet convention for hosts that predate
+    # persisted direct-prefix state. ipaddress validates and normalizes it.
+    try:
+        address = ipaddress.IPv6Address(f"{host_value.rsplit(':', 1)[0]}:{identifier}")
+    except ValueError:
+        raise SystemExit(1)
+
+source = network.with_prefixlen if network is not None else ""
+
+print(f"{address.compressed}\t{source}")
+PY
+) || return 1
+    fi
+
+    [ -n "$resolved" ] || return 1
+    printf '%s\n' "$resolved"
+}
+
 # 清理vmbr2直接分配IPv6（HE隧道/原生子网）模式的ICMPv6 ping屏蔽规则
 cleanup_vmbr2_icmpv6_rule() {
     local vmctid=$1
-    if [ ! -f /usr/local/bin/pve_check_ipv6 ]; then
+    local configured_ipv6="${2:-}"
+    local resolved="" ipv6_addr="" local_prefix_del=""
+
+    if ! resolved=$(resolve_vmbr2_icmpv6_rule_values "$vmctid" "$configured_ipv6"); then
+        log "No valid direct IPv6 assignment state for ${vmctid}; skipping ICMPv6 rule cleanup"
         return 0
     fi
-    local host_ipv6
-    host_ipv6=$(cat /usr/local/bin/pve_check_ipv6)
-    local ipv6_addr="${host_ipv6%:*}:${vmctid}"
+    IFS=$'\t' read -r ipv6_addr local_prefix_del <<<"$resolved"
+    [ -n "$ipv6_addr" ] || return 0
     log "Cleaning up ICMPv6 ping block rule for $ipv6_addr"
     if use_nft_backend; then
         nft -a list chain ip6 raw prerouting 2>/dev/null | grep -F "$ipv6_addr" | sed 's/.*# handle //' | awk '{print $1}' | while read -r h; do
@@ -299,10 +465,7 @@ cleanup_vmbr2_icmpv6_rule() {
         printf '#!/usr/sbin/nft -f\nflush ruleset\n' > /etc/nftables.conf
         nft list ruleset >> /etc/nftables.conf
     else
-        local ipv6_prefixlen_del=""
-        [ -f /usr/local/bin/pve_ipv6_prefixlen ] && ipv6_prefixlen_del=$(cat /usr/local/bin/pve_ipv6_prefixlen)
-        if [ -n "$ipv6_prefixlen_del" ]; then
-            local local_prefix_del="${host_ipv6%:*}:/${ipv6_prefixlen_del}"
+        if [ -n "$local_prefix_del" ]; then
             ip6tables -t raw -D PREROUTING -d "$ipv6_addr" -s "$local_prefix_del" -p icmpv6 --icmpv6-type echo-request -j ACCEPT 2>/dev/null || true
             ip6tables -t raw -D PREROUTING -d "$ipv6_addr" -s fe80::/10 -p icmpv6 --icmpv6-type echo-request -j ACCEPT 2>/dev/null || true
         fi
@@ -339,6 +502,7 @@ cleanup_ct_files() {
 handle_vm_deletion() {
     local vmid=$1
     local ip_address=$2
+    local configured_ipv6="${3:-}"
     log "Starting deletion process for VM $vmid (IP: $ip_address)"
     # 解锁VM
     log "Attempting to unlock VM $vmid"
@@ -356,7 +520,7 @@ handle_vm_deletion() {
     # 清理IPv6 NAT映射规则
     cleanup_ipv6_nat_rules "$vmid"
     # 清理vmbr2模式 ICMPv6 屏蔽规则
-    cleanup_vmbr2_icmpv6_rule "$vmid"
+    cleanup_vmbr2_icmpv6_rule "$vmid" "$configured_ipv6"
     # 清理相关文件
     cleanup_vm_files "$vmid"
     # 更新防火墙规则
@@ -374,6 +538,7 @@ handle_vm_deletion() {
 handle_ct_deletion() {
     local ctid=$1
     local ip_address=$2
+    local configured_ipv6="${3:-}"
     log "Starting deletion process for CT $ctid (IP: $ip_address)"
     # 停止容器
     log "Stopping CT $ctid"
@@ -390,7 +555,7 @@ handle_ct_deletion() {
     # 清理IPv6 NAT映射规则
     cleanup_ipv6_nat_rules "$ctid"
     # 清理vmbr2模式 ICMPv6 屏蔽规则
-    cleanup_vmbr2_icmpv6_rule "$ctid"
+    cleanup_vmbr2_icmpv6_rule "$ctid" "$configured_ipv6"
     # 更新防火墙规则
     if [ -n "$ip_address" ]; then
         log "Removing firewall rules for IP $ip_address"
@@ -404,6 +569,7 @@ handle_ct_deletion() {
 
 # 主函数
 main() {
+    local config_text="" ip_address="" ipv6_address=""
     # 检查参数
     if [ $# -eq 0 ]; then
         echo "Usage: $0 <VMID/CTID|all> [VMID/CTID...]"
@@ -423,22 +589,27 @@ main() {
         fi
     done
     # 获取所有VM和CT的IP信息
-    declare -A vmip_array
-    declare -A ctip_array
+    declare -A vmip_array vmipv6_array ctip_array ctipv6_array
     # 获取VM的IP
     vmids=$(qm list | awk '{if(NR>1)print $1}')
     if [ -n "$vmids" ]; then
         for vmid in $vmids; do
-            ip_address=$(extract_first_ipv4_from_config "$(qm config "$vmid" 2>/dev/null || true)")
+            config_text=$(qm config "$vmid" 2>/dev/null || true)
+            ip_address=$(extract_first_ipv4_from_config "$config_text")
+            ipv6_address=$(extract_first_public_ipv6_from_config "$config_text")
             vmip_array["$vmid"]="${ip_address:-}"
+            vmipv6_array["$vmid"]="${ipv6_address:-}"
         done
     fi
     # 获取CT的IP
     ctids=$(pct list | awk '{if(NR>1)print $1}')
     if [ -n "$ctids" ]; then
         for ctid in $ctids; do
-            ip_address=$(extract_first_ipv4_from_config "$(pct config "$ctid" 2>/dev/null || true)")
+            config_text=$(pct config "$ctid" 2>/dev/null || true)
+            ip_address=$(extract_first_ipv4_from_config "$config_text")
+            ipv6_address=$(extract_first_public_ipv6_from_config "$config_text")
             ctip_array["$ctid"]="${ip_address:-}"
+            ctipv6_array["$ctid"]="${ipv6_address:-}"
         done
     fi
     if [ "$delete_all" = true ]; then
@@ -454,9 +625,9 @@ main() {
     # 处理删除操作
     for id in "${!unique_ids[@]}"; do
         if [ -n "${vmip_array[$id]+x}" ]; then
-            handle_vm_deletion "$id" "${vmip_array[$id]}"
+            handle_vm_deletion "$id" "${vmip_array[$id]}" "${vmipv6_array[$id]-}"
         elif [ -n "${ctip_array[$id]+x}" ]; then
-            handle_ct_deletion "$id" "${ctip_array[$id]}"
+            handle_ct_deletion "$id" "${ctip_array[$id]}" "${ctipv6_array[$id]-}"
         else
             log "Warning: ID $id not found in existing VMs or CTs"
         fi
@@ -483,10 +654,11 @@ main() {
     log "Operation completed successfully"
     echo "Finish."
 }
-# 检查是否为root用户
-if [ "$(id -u)" != "0" ]; then
-    echo "This script must be run as root"
-    exit 1
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+    # 检查是否为root用户
+    if [ "$(id -u)" != "0" ]; then
+        echo "This script must be run as root"
+        exit 1
+    fi
+    main "$@"
 fi
-# 运行主函数
-main "$@"
