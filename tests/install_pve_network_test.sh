@@ -21,6 +21,7 @@ eval "$(extract_function validate_interface_value)"
 eval "$(extract_function validate_ipv4_value)"
 eval "$(extract_function validate_ipv4_network24_value)"
 eval "$(extract_function validate_ipv6_value)"
+eval "$(extract_function pve_configured_ipv6_triplet)"
 eval "$(extract_function write_network_state_atomic)"
 eval "$(extract_function read_network_state)"
 eval "$(extract_function ensure_selected_interface_ipv4_config)"
@@ -73,6 +74,57 @@ validate_ipv4_value "192.0.2.10/31"
 validate_ipv4_network24_value "10.250.0.0/24"
 validate_ipv6_value "2001:db8:1:2:3::10/80"
 validate_ipv6_value "2001:db8::10/128"
+
+# The live address can disappear while ifupdown2 moves a NIC into vmbr0.
+# Recover its configured address, actual prefix length, and gateway without
+# reading translated or colorized terminal output.
+configured_interfaces="${tmp_dir}/ipv6-interfaces"
+configured_dir="${tmp_dir}/ipv6-interfaces.d"
+mkdir -p "$configured_dir"
+cat >"${configured_dir}/50-cloud-init" <<'EOF'
+# IPv6-Adresse und passerelle restent dans la configuration cloud-init.
+auto eth0
+iface eth0 inet6 static
+    address 2a14:7c0:1002:10f8::1/38
+    gateway fe80::1
+EOF
+PVE_NETWORK_INTERFACES_FILE="$configured_interfaces"
+PVE_NETWORK_INTERFACES_DIR="$configured_dir"
+assert_eq $'2a14:7c0:1002:10f8::1\t38\tfe80::1' "$(pve_configured_ipv6_triplet eth0)" "configured non-nibble IPv6 prefix"
+assert_rejected "unconfigured IPv6 interface" pve_configured_ipv6_triplet eth1
+cat >"$configured_interfaces" <<'EOF'
+iface eth0 inet6 static
+    address 2a01:4f8:c014:1a63::1/120
+    gateway fe80::1
+EOF
+assert_eq $'2a01:4f8:c014:1a63::1\t120\tfe80::1' "$(pve_configured_ipv6_triplet eth0)" "configured narrow IPv6 prefix"
+printf 'iface eth0 inet6 static\n    address 2a01:4f8:c014:1a63::1/64\n    gateway \033[32mfe80::1\033[0m\n' >"$configured_interfaces"
+rm -f "${configured_dir}/50-cloud-init"
+assert_rejected "colorized configured IPv6 gateway" pve_configured_ipv6_triplet eth0
+unset PVE_NETWORK_INTERFACES_FILE PVE_NETWORK_INTERFACES_DIR
+
+(
+    eval "$(extract_function get_ipv6_gateway)"
+    eval "$(extract_function check_ipv6)"
+    eval "$(extract_function get_ipv6_prefixlen)"
+    PVE_NETWORK_INTERFACES_FILE="$configured_interfaces"
+    PVE_NETWORK_INTERFACES_DIR="$configured_dir"
+    interface=eth0
+    pve_ipv6_json_probe() { :; }
+    read_network_state() { return 1; }
+    write_network_state_atomic() { :; }
+    is_private_ipv6() { return 1; }
+    for prefix in 38 120; do
+        printf 'iface eth0 inet6 static\n    address 2a14:7c0:1002:10f8::1/%s\n    gateway fe80::1\n' "$prefix" >"$configured_interfaces"
+        get_ipv6_gateway
+        check_ipv6
+        ipv6_address="$IPV6"
+        get_ipv6_prefixlen
+        assert_eq "2a14:7c0:1002:10f8::1" "$ipv6_address" "restore exact host IPv6"
+        assert_eq "$prefix" "$ipv6_prefixlen" "restore configured IPv6 prefix"
+        assert_eq "fe80::1" "$ipv6_gateway" "restore configured IPv6 gateway"
+    done
+)
 
 state_file="${tmp_dir}/network-state"
 printf 'old-value\n' >"$state_file"

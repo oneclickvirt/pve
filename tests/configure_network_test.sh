@@ -16,17 +16,19 @@ mkdir -p "$mock_bin"
 cat >"${mock_bin}/ip" <<'EOF'
 #!/usr/bin/env bash
 case "$*" in
-"-6 route show default")
+"-j -6 route show default")
     if [[ -n "${PVE_TEST_DEFAULT_IPV6_INTERFACE:-}" ]]; then
-        printf 'default via fe80::1 dev %s proto ra metric 1024\n' "$PVE_TEST_DEFAULT_IPV6_INTERFACE"
+        printf '[{"dst":"default","gateway":"fe80::1","dev":"%s"}]\n' "$PVE_TEST_DEFAULT_IPV6_INTERFACE"
+    else
+        printf '%s\n' '[]'
     fi
     ;;
-"-o -6 addr show scope global")
+"-j -6 addr show scope global")
     if [[ -n "${PVE_TEST_DEFAULT_IPV6_INTERFACE:-}" ]]; then
-        printf '%s\n' "2: ${PVE_TEST_DEFAULT_IPV6_INTERFACE}    inet6 2605:52c0:2:14b::9/64 scope global dynamic"
+        printf '[{"ifname":"%s","addr_info":[{"family":"inet6","local":"2605:52c0:2:14b::9","prefixlen":64,"scope":"global"}]}]\n' "$PVE_TEST_DEFAULT_IPV6_INTERFACE"
+    else
+        printf '%s\n' '[{"ifname":"vmbr0","addr_info":[{"family":"inet6","local":"2a14:7c0:1002:10f8::1","prefixlen":128,"scope":"global"}]},{"ifname":"vmbr2","addr_info":[{"family":"inet6","local":"2a14:7c0:1002:10f8::1","prefixlen":38,"scope":"global"}]}]'
     fi
-    printf '%s\n' '3: vmbr0    inet6 2a14:7c0:1002:10f8::1/128 scope global'
-    printf '%s\n' '5: vmbr2    inet6 2a14:7c0:1002:10f8::1/38 scope global'
     ;;
 "link show dev vmbr0")
     exit 0

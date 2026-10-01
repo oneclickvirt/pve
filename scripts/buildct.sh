@@ -41,8 +41,16 @@ init() {
     storage="${12:-local}"
     independent_ipv6="${13:-N}"
     validate_storage_name "$storage"
+    if ! [[ "$CTID" =~ ^[0-9]+$ ]] || [[ "$CTID" -lt 100 || "$CTID" -gt 256 ]]; then
+        echo "CTID must be in the range 100 ~ 256: ${CTID}" >&2
+        return 1
+    fi
+    local metadata_dir="${PVE_CT_METADATA_DIR:-/root}"
+    if [ -e "${metadata_dir}/ct${CTID}" ] || [ -L "${metadata_dir}/ct${CTID}" ]; then
+        echo "Refusing to replace existing container metadata: ${metadata_dir}/ct${CTID}" >&2
+        return 1
+    fi
     independent_ipv6=$(echo "$independent_ipv6" | tr '[:upper:]' '[:lower:]')
-    rm -rf "ct${CTID}"
     en_system=$(echo "$system_ori" | sed 's/[0-9]*//g; s/\.$//')
     num_system=$(echo "$system_ori" | sed 's/[a-zA-Z]*//g')
     system="$en_system-$num_system"
@@ -99,6 +107,14 @@ download_with_retry() {
 }
 
 load_default_config() {
+    if [ -n "${PVE_DEFAULT_CT_CONFIG_FILE:-}" ]; then
+        if [ ! -r "$PVE_DEFAULT_CT_CONFIG_FILE" ]; then
+            echo "PVE default CT configuration is unreadable: $PVE_DEFAULT_CT_CONFIG_FILE" >&2
+            return 1
+        fi
+        . "$PVE_DEFAULT_CT_CONFIG_FILE"
+        return
+    fi
     local config_url="${cdn_success_url}https://raw.githubusercontent.com/oneclickvirt/pve/main/scripts/default_ct_config.sh"
     local config_file="default_ct_config.sh"
     if download_with_retry "$config_url" "$config_file"; then
@@ -140,14 +156,22 @@ create_container() {
         echo -e "\e[31m请检查 pve-cluster 状态和 /etc/pve 挂载状态\e[0m"
         exit 1
     fi
-    pct start $CTID
+    # Configure the network while the container is stopped.  Applying
+    # `pct set --net*` after start asks PVE to hotplug the interface and can
+    # fail on images that do not yet have /etc/network/interfaces.  The old
+    # order printed that error but continued with a zero exit status, leaving
+    # a container whose persisted config and running network differed.
+    pct set "$CTID" --hostname "$CTID" || exit 1
+}
+
+start_container() {
+    pct start "$CTID"
     if [ $? -ne 0 ]; then
         echo -e "\e[31mpct start failed for CT ${CTID}\e[0m"
         echo -e "\e[31mCT ${CTID} 启动失败\e[0m"
         exit 1
     fi
     sleep 5
-    pct set $CTID --hostname $CTID
 }
 
 configure_networking() {
@@ -157,20 +181,20 @@ configure_networking() {
             appended_file="/usr/local/bin/pve_appended_content.txt"
             if [ -s "$appended_file" ]; then
                 # 使用 vmbr1 网桥和 NAT 映射
-                ct_internal_ipv6="$(pve_nat_ipv6_for_id "$CTID")"
-                pct set $CTID --net0 name=eth0,ip=${user_ip}/24,bridge=vmbr1,gw=${pve_nat_gateway}
-                pct set $CTID --net1 name=eth1,ip6="${ct_internal_ipv6}/64",bridge=vmbr1,gw6="${pve_nat_ipv6_gateway}"
-                pct set $CTID --nameserver 1.1.1.1
-                pct set $CTID --searchdomain local
+                ct_internal_ipv6="$(pve_nat_ipv6_for_id "$CTID")" || return 1
+                pct set "$CTID" --net0 "name=eth0,ip=${user_ip}/24,bridge=vmbr1,gw=${pve_nat_gateway}" || return 1
+                pct set "$CTID" --net1 "name=eth1,ip6=${ct_internal_ipv6}/64,bridge=vmbr1,gw6=${pve_nat_ipv6_gateway}" || return 1
+                pct set "$CTID" --nameserver 1.1.1.1 || return 1
+                pct set "$CTID" --searchdomain local || return 1
                 # 获取可用的外部 IPv6 地址
                 host_external_ipv6=$(get_available_vmbr1_ipv6)
                 if [ -z "$host_external_ipv6" ]; then
                     echo -e "\e[31mNo available IPv6 address found for NAT mapping\e[0m"
                     echo -e "\e[31m没有可用的IPv6地址用于NAT映射\e[0m"
-                    independent_ipv6_status="N"
+                    return 1
                 else
                     # 设置 NAT 映射
-                    setup_nat_mapping "$ct_internal_ipv6" "$host_external_ipv6"
+                    setup_nat_mapping "$ct_internal_ipv6" "$host_external_ipv6" || return 1
                     ct_external_ipv6="$host_external_ipv6"
                     echo "Container configured with NAT mapping: $ct_internal_ipv6 -> $host_external_ipv6"
                     echo "容器已配置NAT映射：$ct_internal_ipv6 -> $host_external_ipv6"
@@ -178,26 +202,37 @@ configure_networking() {
                 fi
             elif [ "${pve_direct_ipv6_available:-false}" = true ]; then
                 # 使用已确认的委派前缀直接分配 IPv6 地址
-                pct set $CTID --net0 name=eth0,ip=${user_ip}/24,bridge=vmbr1,gw=${pve_nat_gateway}
+                pct set "$CTID" --net0 "name=eth0,ip=${user_ip}/24,bridge=vmbr1,gw=${pve_nat_gateway}" || return 1
                 if ct_external_ipv6="$(pve_direct_ipv6_for_id "$CTID")"; then
                     direct_ipv6_bridge="$(pve_direct_ipv6_bridge)" || return 1
-                    pct set $CTID --net1 name=eth1,ip6="${ct_external_ipv6}/128",bridge="${direct_ipv6_bridge}",gw6="${pve_direct_ipv6_gateway}"
-                    pct set $CTID --nameserver 1.1.1.1
-                    pct set $CTID --searchdomain local
+                    pct set "$CTID" --net1 "name=eth1,ip6=${ct_external_ipv6}/128,bridge=${direct_ipv6_bridge},gw6=${pve_direct_ipv6_gateway}" || return 1
+                    pct set "$CTID" --nameserver 1.1.1.1 || return 1
+                    pct set "$CTID" --searchdomain local || return 1
                     independent_ipv6_status="Y"
                     _fw6_drop_icmpv6_ping "${ct_external_ipv6}" "${pve_direct_ipv6_prefix}"
                     _fw_save
                 else
-                    independent_ipv6_status="N"
-                    ct_external_ipv6=""
+                    echo "No safe public IPv6 address is available for CT ${CTID}" >&2
+                    return 1
                 fi
             fi
+        else
+            # A normal host address (including /128) is not a delegated
+            # prefix. Give the guest a private ULA and share the host's
+            # public egress through the already checked NAT66 rule.
+            ct_internal_ipv6="$(pve_nat_ipv6_for_id "$CTID")" || return 1
+            pct set "$CTID" --net0 "name=eth0,ip=${user_ip}/24,bridge=vmbr1,gw=${pve_nat_gateway}" || return 1
+            pct set "$CTID" --net1 "name=eth1,ip6=${ct_internal_ipv6}/64,bridge=vmbr1,gw6=${pve_nat_ipv6_gateway}" || return 1
+            pct set "$CTID" --nameserver '1.1.1.1 2606:4700:4700::1111' || return 1
+            independent_ipv6_status="NAT66"
+            echo "Container IPv6 NAT66 address: ${ct_internal_ipv6} (shared public egress)"
+            echo "容器 IPv6 NAT66 地址：${ct_internal_ipv6}（共享公网出口）"
         fi
     fi
     if [ "$independent_ipv6_status" == "N" ]; then
-        pct set $CTID --net0 name=eth0,ip=${user_ip}/24,bridge=vmbr1,gw=${pve_nat_gateway}
-        pct set $CTID --nameserver 1.1.1.1
-        pct set $CTID --searchdomain local
+        pct set "$CTID" --net0 "name=eth0,ip=${user_ip}/24,bridge=vmbr1,gw=${pve_nat_gateway}" || return 1
+        pct set "$CTID" --nameserver 1.1.1.1 || return 1
+        pct set "$CTID" --searchdomain local || return 1
     fi
     sleep 3
 }
@@ -246,15 +281,38 @@ setup_ssh() {
 }
 
 check_network() {
-    public_network_check_res=$(pct exec $CTID -- curl -lk -m 6 ${cdn_success_url}https://raw.githubusercontent.com/spiritLHLS/ecs/main/back/test)
+    public_network_check_res=$(pct exec "$CTID" -- curl -lk -m 6 "${cdn_success_url}https://raw.githubusercontent.com/spiritLHLS/ecs/main/back/test")
     if [[ $public_network_check_res == *"success"* ]]; then
         echo "network is public"
         echo "网络连通正常"
     else
-        echo "nameserver 8.8.8.8" | pct exec $CTID -- tee -a /etc/resolv.conf
+        echo "nameserver 8.8.8.8" | pct exec "$CTID" -- tee -a /etc/resolv.conf
         sleep 1
-        pct exec $CTID -- curl -lk -m 6 ${cdn_success_url}https://raw.githubusercontent.com/spiritLHLS/ecs/main/back/test
+        pct exec "$CTID" -- curl -lk -m 6 "${cdn_success_url}https://raw.githubusercontent.com/spiritLHLS/ecs/main/back/test" || return 1
     fi
+}
+
+ensure_fixed_system_tools() {
+    if pct exec "$CTID" -- sh -c 'command -v curl >/dev/null 2>&1 && command -v lsof >/dev/null 2>&1'; then
+        return 0
+    fi
+    if pct exec "$CTID" -- sh -c 'command -v apt-get >/dev/null 2>&1'; then
+        pct exec "$CTID" -- env DEBIAN_FRONTEND=noninteractive apt-get update -y || return 1
+        pct exec "$CTID" -- env DEBIAN_FRONTEND=noninteractive apt-get install -y curl lsof || return 1
+    elif pct exec "$CTID" -- sh -c 'command -v dnf >/dev/null 2>&1'; then
+        pct exec "$CTID" -- dnf install -y curl lsof || return 1
+    elif pct exec "$CTID" -- sh -c 'command -v yum >/dev/null 2>&1'; then
+        pct exec "$CTID" -- yum install -y curl lsof || return 1
+    elif pct exec "$CTID" -- sh -c 'command -v apk >/dev/null 2>&1'; then
+        pct exec "$CTID" -- apk add --no-cache curl lsof || return 1
+    elif pct exec "$CTID" -- sh -c 'command -v zypper >/dev/null 2>&1'; then
+        pct exec "$CTID" -- zypper --non-interactive install curl lsof || return 1
+    else
+        echo "Unable to install required fixed-image probe tools (curl, lsof)" >&2
+        echo "无法为固定镜像安装必要的探针工具（curl、lsof）" >&2
+        return 1
+    fi
+    pct exec "$CTID" -- sh -c 'command -v curl >/dev/null 2>&1 && command -v lsof >/dev/null 2>&1'
 }
 
 restart_ssh() {
@@ -276,8 +334,9 @@ configure_os() {
         if [[ "${CN}" == true ]]; then
             change_mirrors || return 1
         fi
+        ensure_fixed_system_tools || return 1
         sleep 2
-        check_network
+        check_network || return 1
         sleep 2
         restart_ssh
     else
@@ -333,32 +392,67 @@ setup_port_forwarding() {
 }
 
 save_container_info() {
-    local ct_conf="/etc/pve/lxc/${CTID}.conf"
-    if [ "$independent_ipv6_status" == "Y" ]; then
-        echo "$CTID $password $core $memory $disk $sshn $web1_port $web2_port $port_first $port_last $system_ori $storage ${ct_external_ipv6}" >>"ct${CTID}"
-        data=$(echo " CTID root密码-password CPU核数-CPU 内存-memory 硬盘-disk SSH端口 80端口 443端口 外网端口起-port-start 外网端口止-port-end 系统-system 存储盘-storage 独立IPV6地址-ipv6_address")
-    else
-        echo "$CTID $password $core $memory $disk $sshn $web1_port $web2_port $port_first $port_last $system_ori $storage" >>"ct${CTID}"
-        data=$(echo " CTID root密码-password CPU核数-CPU 内存-memory 硬盘-disk SSH端口 80端口 443端口 外网端口起-port-start 外网端口止-port-end 系统-system 存储盘-storage")
+    local metadata_dir="${PVE_CT_METADATA_DIR:-/root}"
+    local metadata_file="${metadata_dir}/ct${CTID}"
+    local ct_conf="${PVE_CT_CONFIG_DIR:-/etc/pve/lxc}/${CTID}.conf"
+    local metadata_tmp comment_tmp metadata_values entry
+    local -a comment_entries
+    if [ -e "$metadata_file" ] || [ -L "$metadata_file" ]; then
+        echo "Refusing to replace existing container metadata: ${metadata_file}" >&2
+        return 1
     fi
-    values=$(cat "ct${CTID}")
-    IFS=' ' read -ra data_array <<<"$data"
-    IFS=' ' read -ra values_array <<<"$values"
-    length=${#data_array[@]}
-    for ((i = 0; i < $length; i++)); do
-        echo "${data_array[$i]} ${values_array[$i]}"
-        echo ""
-    done >"/tmp/temp${CTID}.txt"
-    sed -i 's/^/# /' "/tmp/temp${CTID}.txt"
+    if [ "$independent_ipv6_status" == "Y" ]; then
+        printf -v metadata_values '%s %s %s %s %s %s %s %s %s %s %s %s %s' \
+            "$CTID" "$password" "$core" "$memory" "$disk" "$sshn" "$web1_port" "$web2_port" \
+            "$port_first" "$port_last" "$system_ori" "$storage" "${ct_external_ipv6}"
+        comment_entries=("CTID ${CTID}" "CPU核数-CPU ${core}" "内存-memory ${memory}" "硬盘-disk ${disk}" \
+            "SSH端口 ${sshn}" "80端口 ${web1_port}" "443端口 ${web2_port}" \
+            "外网端口起-port-start ${port_first}" "外网端口止-port-end ${port_last}" \
+            "系统-system ${system_ori}" "存储盘-storage ${storage}" "独立IPV6地址-ipv6_address ${ct_external_ipv6}")
+    elif [ "$independent_ipv6_status" == "NAT66" ]; then
+        printf -v metadata_values '%s %s %s %s %s %s %s %s %s %s %s %s %s' \
+            "$CTID" "$password" "$core" "$memory" "$disk" "$sshn" "$web1_port" "$web2_port" \
+            "$port_first" "$port_last" "$system_ori" "$storage" "${ct_internal_ipv6}"
+        comment_entries=("CTID ${CTID}" "CPU核数-CPU ${core}" "内存-memory ${memory}" "硬盘-disk ${disk}" \
+            "SSH端口 ${sshn}" "80端口 ${web1_port}" "443端口 ${web2_port}" \
+            "外网端口起-port-start ${port_first}" "外网端口止-port-end ${port_last}" \
+            "系统-system ${system_ori}" "存储盘-storage ${storage}" "共享NAT66地址-ipv6_address ${ct_internal_ipv6}")
+    else
+        printf -v metadata_values '%s %s %s %s %s %s %s %s %s %s %s %s' \
+            "$CTID" "$password" "$core" "$memory" "$disk" "$sshn" "$web1_port" "$web2_port" \
+            "$port_first" "$port_last" "$system_ori" "$storage"
+        comment_entries=("CTID ${CTID}" "CPU核数-CPU ${core}" "内存-memory ${memory}" "硬盘-disk ${disk}" \
+            "SSH端口 ${sshn}" "80端口 ${web1_port}" "443端口 ${web2_port}" \
+            "外网端口起-port-start ${port_first}" "外网端口止-port-end ${port_last}" \
+            "系统-system ${system_ori}" "存储盘-storage ${storage}")
+    fi
+    mkdir -p "$metadata_dir" || return 1
+    metadata_tmp=$(mktemp "${metadata_dir}/.ct${CTID}.XXXXXX") || return 1
+    if ! printf '%s\n' "$metadata_values" >"$metadata_tmp" || ! chmod 600 "$metadata_tmp"; then
+        rm -f -- "$metadata_tmp"
+        return 1
+    fi
+    if ! ln -- "$metadata_tmp" "$metadata_file"; then
+        rm -f -- "$metadata_tmp"
+        echo "Unable to save container metadata without replacing an existing file: ${metadata_file}" >&2
+        return 1
+    fi
+    rm -f -- "$metadata_tmp"
     if [ -f "$ct_conf" ]; then
-        cat "$ct_conf" >>"/tmp/temp${CTID}.txt"
-        cp "/tmp/temp${CTID}.txt" "$ct_conf"
+        comment_tmp=$(mktemp "${metadata_dir}/.ct${CTID}.comments.XXXXXX") || return 1
+        for entry in "${comment_entries[@]}"; do
+            printf '# %s\n\n' "$entry"
+        done >"$comment_tmp"
+        cat "$ct_conf" >>"$comment_tmp" || { rm -f -- "$comment_tmp"; return 1; }
+        if ! cp "$comment_tmp" "$ct_conf"; then
+            rm -f -- "$comment_tmp"
+            return 1
+        fi
+        rm -f -- "$comment_tmp"
     else
         echo -e "\e[33mSkip writing metadata into missing LXC config: $ct_conf\e[0m"
         echo -e "\e[33m跳过写入不存在的 LXC 配置文件：$ct_conf\e[0m"
     fi
-    rm -rf "/tmp/temp${CTID}.txt"
-    cat "ct${CTID}"
 }
 
 main() {
@@ -369,12 +463,13 @@ main() {
     set_locale
     get_system_arch || exit 1
     check_china
-    init "$@"
+    init "$@" || exit 1
     validate_ctid || exit 1
-    check_ipv6_setup
+    check_ipv6_setup || exit 1
     prepare_system_image || exit 1
     create_container
-    configure_networking
+    configure_networking || exit 1
+    start_container
     configure_os || exit 1
     configure_container_extras
     setup_port_forwarding

@@ -84,8 +84,21 @@ nat_ipv6_addresses=""
 nat_ipv6_routes=""
 direct_ipv6_addresses=""
 direct_ipv6_bridge_present=false
+guest_ipv6_host_addresses=""
+guest_ipv6_routes=""
+pve_resource_json=""
+pvesh() { printf '%s\n' "$pve_resource_json"; }
 ip() {
     case "$*" in
+    "-j -6 addr show")
+        printf '%s\n' "${guest_ipv6_host_addresses:-$nat_ipv6_addresses}"
+        ;;
+    "-j -6 route show table all")
+        printf '%s\n' "${guest_ipv6_routes:-$nat_ipv6_routes}"
+        ;;
+    "-j -6 addr show dev "*)
+        printf '%s\n' "$direct_ipv6_addresses"
+        ;;
     "-o -6 addr show dev "*)
         printf '%s\n' "$direct_ipv6_addresses"
         ;;
@@ -122,8 +135,8 @@ exercise_nat_ipv6_selector() {
     mkdir -p "$state_dir"
     export PVE_STATE_DIR="$state_dir"
     unset PVE_NAT_IPV6_SUBNET
-    nat_ipv6_addresses='2: eth0    inet6 2605:52c0:2:14b:be24:11ff:fe6e:d967/64 scope global dynamic'
-    nat_ipv6_routes=$'2605:52c0:2:14b::/64 dev eth0 proto kernel metric 256\n::/0 via fe80::6016:20ff:fe1a:d6dd dev eth0 metric 1024'
+    nat_ipv6_addresses='[{"ifname":"eth0","addr_info":[{"family":"inet6","local":"2605:52c0:2:14b:be24:11ff:fe6e:d967","prefixlen":64,"scope":"global"}]}]'
+    nat_ipv6_routes='[{"type":"local","dst":"local","dev":"lo"},{"type":"multicast","dst":"multicast","dev":"eth0"},{"dst":"2605:52c0:2:14b::/64","dev":"eth0"},{"gateway":"fe80::6016:20ff:fe1a:d6dd","dev":"eth0"}]'
 
     load_nat_ipv6_config
     assert_eq "fd42:5339:296f:1f00::/64" "$pve_nat_ipv6_subnet" "${selector_name} automatic ULA subnet"
@@ -135,19 +148,19 @@ exercise_nat_ipv6_selector() {
     assert_eq "fd42:5339:296f:1f00::/64" "$(cat "$state_dir/pve_nat_ipv6_subnet")" "${selector_name} rejected public prefix preserves state"
 
     export PVE_NAT_IPV6_SUBNET='fd42:beef:1234:100::/64'
-    nat_ipv6_routes=$'fd42:beef:1234::/48 dev eth0 proto static\n2605:52c0:2:14b::/64 dev eth0 proto kernel'
+    nat_ipv6_routes='[{"dst":"fd42:beef:1234::/48","dev":"eth0"},{"dst":"2605:52c0:2:14b::/64","dev":"eth0"}]'
     assert_rejected "${selector_name} ULA child of host route" load_nat_ipv6_config
 
     unset PVE_NAT_IPV6_SUBNET
     printf '%s\n' 'fd42:5339:296f:1f07::/64' >"$state_dir/pve_nat_ipv6_subnet"
-    nat_ipv6_addresses=$'2: eth0    inet6 2605:52c0:2:14b:be24:11ff:fe6e:d967/64 scope global dynamic\n10: vmbr1    inet6 fd42:5339:296f:1f07::1/64 scope global'
-    nat_ipv6_routes=$'2605:52c0:2:14b::/64 dev eth0 proto kernel\nfd42:5339:296f:1f07::/64 dev vmbr1 proto kernel\nlocal fd42:5339:296f:1f07::1 dev vmbr1 table local'
+    nat_ipv6_addresses='[{"ifname":"eth0","addr_info":[{"family":"inet6","local":"2605:52c0:2:14b:be24:11ff:fe6e:d967","prefixlen":64,"scope":"global"}]},{"ifname":"vmbr1","addr_info":[{"family":"inet6","local":"fd42:5339:296f:1f07::1","prefixlen":64,"scope":"global"}]}]'
+    nat_ipv6_routes='[{"dst":"2605:52c0:2:14b::/64","dev":"eth0"},{"dst":"fd42:5339:296f:1f07::/64","dev":"vmbr1"},{"dst":"fd42:5339:296f:1f07::1","dev":"vmbr1","type":"local"}]'
     load_nat_ipv6_config
     assert_eq "fd42:5339:296f:1f07::/64" "$pve_nat_ipv6_subnet" "${selector_name} preserves active vmbr1 subnet"
 
     printf '%s\n' '2001:db8:1::/64' >"$state_dir/pve_nat_ipv6_subnet"
-    nat_ipv6_addresses='2: eth0    inet6 2605:52c0:2:14b:be24:11ff:fe6e:d967/64 scope global dynamic'
-    nat_ipv6_routes=$'2605:52c0:2:14b::/64 dev eth0 proto kernel\n::/0 via fe80::6016:20ff:fe1a:d6dd dev eth0 metric 1024'
+    nat_ipv6_addresses='[{"ifname":"eth0","addr_info":[{"family":"inet6","local":"2605:52c0:2:14b:be24:11ff:fe6e:d967","prefixlen":64,"scope":"global"}]}]'
+    nat_ipv6_routes='[{"dst":"2605:52c0:2:14b::/64","dev":"eth0"},{"dst":"default","gateway":"fe80::6016:20ff:fe1a:d6dd","dev":"eth0"}]'
     load_nat_ipv6_config
     assert_eq "fd42:5339:296f:1f00::/64" "$pve_nat_ipv6_subnet" "${selector_name} migrates legacy documentation subnet"
 }
@@ -167,6 +180,24 @@ exercise_direct_ipv6_config() {
     _red() { :; }
     _yellow() { :; }
 
+    pve_resource_json=$'\033[32m[{"type":"lxc","vmid":100},{"type":"qemu","vmid":101}]\033[0m'
+    if [ "$selector_name" = CT ]; then
+        CTID=100
+        assert_rejected "${selector_name} occupied colored JSON ID" validate_ctid
+        CTID=102
+        validate_ctid >/dev/null
+        pve_resource_json='Verfügbare Ressourcen ungültig'
+        assert_rejected "${selector_name} localized diagnostic" validate_ctid
+    else
+        vm_num=101
+        assert_rejected "${selector_name} occupied colored JSON ID" validate_vm_num
+        vm_num=102
+        validate_vm_num >/dev/null
+        pve_resource_json='ressources non valides'
+        assert_rejected "${selector_name} localized diagnostic" validate_vm_num
+    fi
+    pve_resource_json=""
+
     rm -rf -- "$state_dir"
     mkdir -p "$state_dir"
     : >"$interfaces_file"
@@ -182,7 +213,7 @@ auto vmbr2
 iface vmbr2 inet6 static
     address 2a14:7c0:1002:10f8::1/38
 EOF
-    direct_ipv6_addresses='10: vmbr2    inet6 2a14:7c0:1002:10f8::1/38 scope global'
+    direct_ipv6_addresses='[{"ifname":"vmbr2","addr_info":[{"family":"inet6","local":"2a14:7c0:1002:10f8::1","prefixlen":38,"scope":"global"}]}]'
     direct_ipv6_bridge_present=true
     pve_load_direct_ipv6_config
     assert_eq "true" "$pve_direct_ipv6_available" "${selector_name} legacy /38 direct bridge"
@@ -190,6 +221,18 @@ EOF
     assert_eq "2a14:7c0:1002:10f8::1" "$pve_direct_ipv6_gateway" "${selector_name} legacy bridge gateway"
     assert_eq "vmbr2" "$(pve_direct_ipv6_bridge)" "${selector_name} legacy direct bridge name"
     assert_eq "2a14:7c0:1002:10f8::64" "$(pve_direct_ipv6_for_id 100)" "${selector_name} /38 guest address"
+    guest_ipv6_host_addresses=$'\033[32m[{"ifname":"vmbr0","addr_info":[{"family":"inet6","local":"2a14:7c0:1002:10f8::64","prefixlen":128,"scope":"global"}]}]\033[0m'
+    guest_ipv6_routes='[{"type":"local","dst":"local","dev":"lo"},{"type":"multicast","dst":"multicast","dev":"eth0"},{"dst":"default","gateway":"2a14:7c0:1000::1","dev":"vmbr0"}]'
+    assert_eq "2a14:7c0:1000::2" "$(pve_direct_ipv6_for_id 100)" "${selector_name} keeps host address and route gateway"
+    guest_ipv6_host_addresses='[]'
+    guest_ipv6_routes='[{"type":"local","dst":"local","dev":"lo"},{"type":"multicast","dst":"multicast","dev":"eth0"},{"dst":"default","gateway":"2a14:7c0:1000::1","dev":"vmbr0"},{"dst":"2a14:7c0:1002:10f8::64/128","dev":"vmbr0"}]'
+    assert_eq "2a14:7c0:1000::2" "$(pve_direct_ipv6_for_id 100)" "${selector_name} keeps exact host route"
+    guest_ipv6_routes='[{"dst":"default","multipath":[{"gateway":"2a14:7c0:1002:10f8::64","dev":"vmbr0"},{"gateway":"fe80::2","dev":"vmbr1"}]}]'
+    assert_eq "2a14:7c0:1000::1" "$(pve_direct_ipv6_for_id 100)" "${selector_name} keeps multipath gateway"
+    guest_ipv6_host_addresses='IPv6-Adresse ungültig'
+    assert_rejected "${selector_name} localized IPv6 diagnostic" pve_direct_ipv6_for_id 100
+    guest_ipv6_host_addresses=""
+    guest_ipv6_routes=""
 
     # A plain SLAAC /64 on the uplink does not imply a delegated guest prefix.
     rm -rf -- "$state_dir"
@@ -198,7 +241,7 @@ EOF
 auto eth0
 iface eth0 inet dhcp
 EOF
-    direct_ipv6_addresses='2: eth0    inet6 2605:52c0:2:14b:be24:11ff:fe6e:d967/64 scope global dynamic'
+    direct_ipv6_addresses='[{"ifname":"eth0","addr_info":[{"family":"inet6","local":"2605:52c0:2:14b:be24:11ff:fe6e:d967","prefixlen":64,"scope":"global"}]}]'
     direct_ipv6_bridge_present=false
     pve_load_direct_ipv6_config
     assert_eq "false" "$pve_direct_ipv6_available" "${selector_name} SLAAC /64 remains NAT66"

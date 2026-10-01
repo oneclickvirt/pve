@@ -122,7 +122,7 @@ check_interface() {
             interface=${interface_2}
             return
         else
-            interfaces_list=$(ip addr show | awk '/^[0-9]+: [^lo]/ {print $2}' | cut -d ':' -f 1)
+            interfaces_list=$(pve_ipv6_json_probe interfaces) || return 1
             interface=""
             for iface in $interfaces_list; do
                 if [[ "$iface" = "$interface_1" || "$iface" = "$interface_2" ]]; then
@@ -147,12 +147,19 @@ update_sysctl() {
     sysctl_config="$1"  # 格式: key=value
     key="${sysctl_config%%=*}"
     value="${sysctl_config#*=}"
+    local legacy_conf="${PVE_SYSCTL_LEGACY_FILE:-/etc/sysctl.conf}"
     # 目标配置文件（systemd 方式）
-    custom_conf="/etc/sysctl.d/99-custom.conf"
-    mkdir -p /etc/sysctl.d
+    if [[ "$key" == net.ipv6.conf.* ]]; then
+        # Own these keys separately so uninstall can remove forwarding without
+        # editing the host's pre-existing sysctl configuration.
+        custom_conf="${PVE_IPV6_SYSCTL_CONFIG_FILE:-/etc/sysctl.d/99-oneclickvirt-pve-ipv6.conf}"
+    else
+        custom_conf="${PVE_SYSCTL_CONFIG_FILE:-/etc/sysctl.d/99-custom.conf}"
+    fi
+    mkdir -p "$(dirname "$custom_conf")"
     # 检查 /etc/sysctl.conf 是否存在并且在系统加载路径中
     use_etc_sysctl_conf=false
-    if [ -f /etc/sysctl.conf ]; then
+    if [[ "$key" != net.ipv6.conf.* ]] && [ -f "$legacy_conf" ]; then
         if grep -q "/etc/sysctl.conf" /etc/sysctl.d/README* 2>/dev/null || \
            grep -q "/etc/sysctl.conf" /lib/systemd/system/sysctl.service 2>/dev/null; then
             use_etc_sysctl_conf=true
@@ -170,14 +177,23 @@ update_sysctl() {
     fi
     # 如果系统还在用 /etc/sysctl.conf，也同步更新
     if [ "$use_etc_sysctl_conf" = true ]; then
-        if grep -q "^$sysctl_config" /etc/sysctl.conf; then
+        if grep -q "^$sysctl_config" "$legacy_conf"; then
             : # 已经有正确配置
-        elif grep -q "^#$sysctl_config" /etc/sysctl.conf; then
-            sed -i "s/^#$sysctl_config/$sysctl_config/" /etc/sysctl.conf
-        elif grep -q "^$key" /etc/sysctl.conf; then
-            sed -i "s|^$key.*|$sysctl_config|" /etc/sysctl.conf
+        elif grep -q "^#$sysctl_config" "$legacy_conf"; then
+            sed -i "s/^#$sysctl_config/$sysctl_config/" "$legacy_conf"
+        elif grep -q "^$key" "$legacy_conf"; then
+            sed -i "s|^$key.*|$sysctl_config|" "$legacy_conf"
         else
-            echo "$sysctl_config" >> /etc/sysctl.conf
+            echo "$sysctl_config" >> "$legacy_conf"
+        fi
+    fi
+    # ifupdown may not have created the new bridge yet. Keep its value in the
+    # config and let the if-up hook apply it as soon as the interface exists.
+    if [[ "$key" =~ ^net\.ipv6\.conf\.([A-Za-z0-9_.:-]+)\.(accept_ra|proxy_ndp)$ ]]; then
+        local sysctl_interface="${BASH_REMATCH[1]}" sysctl_setting="${BASH_REMATCH[2]}"
+        if [ ! -e "${PVE_IPV6_PROC_CONF_ROOT:-/proc/sys/net/ipv6/conf}/${sysctl_interface}/${sysctl_setting}" ]; then
+            pve_network_bridge_exists "$sysctl_interface" || return 1
+            return 0
         fi
     fi
     sysctl -w "$key=$value" >/dev/null 2>&1
@@ -479,16 +495,7 @@ pve_vmbr0_owns_interface() {
 # migration to vmbr0 so the persisted setting survives the next reboot.
 pve_ipv6_uplink_interface() {
     local candidate
-    candidate=$(ip -6 route show default 2>/dev/null | awk '
-        /^default / {
-            for (i = 1; i < NF; i++) {
-                if ($i == "dev") {
-                    print $(i + 1)
-                    exit
-                }
-            }
-        }
-    ')
+    candidate=$(pve_ipv6_json_probe default_interface 2>/dev/null || true)
     if validate_interface_value "$candidate" && ip link show dev "$candidate" >/dev/null 2>&1; then
         if [ "$candidate" != vmbr0 ] && pve_vmbr0_owns_interface "$candidate"; then
             printf '%s\n' vmbr0
@@ -558,42 +565,208 @@ read_network_state() {
     printf '%s\n' "$value"
 }
 
-check_ipv6() {
-    local ipv6_list candidate gateway_prefix
-    ipv6_list=$(ip -o -6 addr show scope global 2>/dev/null | awk '$0 !~ / tentative/ {print $4}')
-    IPV6=""
-    while IFS= read -r candidate; do
-        candidate=${candidate%/*}
-        if validate_ipv6_value "$candidate" && ! is_private_ipv6 "$candidate"; then
-            IPV6="$candidate"
-            break
-        fi
-    done <<<"$ipv6_list"
-    if [ ! -f /usr/local/bin/pve_last_ipv6 ] || [ ! -s /usr/local/bin/pve_last_ipv6 ] || [ "$(sed -e '/^[[:space:]]*$/d' /usr/local/bin/pve_last_ipv6)" = "" ]; then
-        line_count=$(echo "$ipv6_list" | wc -l)
-        if [ "$line_count" -ge 2 ]; then
-            # 获取最后一行的内容
-            last_ipv6=$(echo "$ipv6_list" | tail -n 1)
-            # 切分最后一个:之前的内容
-            last_ipv6_prefix="${last_ipv6%:*}:"
-            # 与${ipv6_gateway}比较是否相同
-            gateway_prefix="${ipv6_gateway:-}"
-            gateway_prefix="${gateway_prefix%:*}:"
-            if [ "${last_ipv6_prefix}" = "$gateway_prefix" ]; then
-                echo $last_ipv6 >/usr/local/bin/pve_last_ipv6
+pve_ipv6_json_probe() {
+    local mode="$1" selected_interface="${2:-}" replacement_interface="${3:-}" payload
+    case "$mode" in
+        addresses|address_bindings|linklocal)
+            if [ "${PVE_IPV6_ADDRESS_JSON_OVERRIDE+x}" = x ]; then
+                payload="$PVE_IPV6_ADDRESS_JSON_OVERRIDE"
+            else
+                payload=$(LC_ALL=C NO_COLOR=1 ip -j -6 addr show) || return 1
             fi
-            _green "The local machine is bound to more than one IPV6 address"
-            _green "本机绑定了不止一个IPV6地址"
-        fi
-    fi
+            ;;
+        gateway|default_interface|default_routes_restore)
+            if [ "${PVE_IPV6_ROUTE_JSON_OVERRIDE+x}" = x ]; then
+                payload="$PVE_IPV6_ROUTE_JSON_OVERRIDE"
+            else
+                payload=$(LC_ALL=C NO_COLOR=1 ip -j -6 route show default) || return 1
+            fi
+            ;;
+        interfaces) payload=$(LC_ALL=C NO_COLOR=1 ip -d -j link show) || return 1 ;;
+        *) return 1 ;;
+    esac
+    PVE_IPV6_PROBE_JSON="$payload" python3 - "$mode" "$selected_interface" "$replacement_interface" <<'PY'
+import ipaddress
+import json
+import os
+import re
+import sys
 
+mode, selected, replacement = sys.argv[1:]
+raw = re.sub(r'\x1b\[[0-?]*[ -/]*[@-~]', '', os.environ['PVE_IPV6_PROBE_JSON'])
+interface_pattern = re.compile(r'[A-Za-z0-9_.:-]{1,15}')
+
+def route_hops(row):
+    hops = row.get('nexthops') or row.get('multipath')
+    if hops is None:
+        return [row]
+    if not isinstance(hops, list) or not hops:
+        raise ValueError('invalid default route nexthops')
+    return hops
+
+try:
+    rows = json.loads(raw)
+    if not isinstance(rows, list):
+        raise ValueError('invalid iproute2 JSON')
+    if mode in ('gateway', 'default_interface', 'default_routes_restore'):
+        candidates = [row for row in rows if row.get('dst') in (None, '', 'default')]
+        candidates.sort(key=lambda row: row.get('dev') != selected if selected else False)
+        for row in candidates:
+            if mode == 'default_interface':
+                devices = [row.get('dev', '')]
+                devices.extend(hop.get('dev', '') for hop in route_hops(row))
+                device = next((value for value in devices if interface_pattern.fullmatch(value or '')), '')
+                if device:
+                    print(device)
+                    break
+            elif mode == 'gateway':
+                for hop in route_hops(row):
+                    device = hop.get('dev') or row.get('dev', '')
+                    gateway = hop.get('gateway') or row.get('gateway', '')
+                    if selected and device and device != selected:
+                        continue
+                    if gateway:
+                        print(ipaddress.IPv6Address(gateway))
+                        raise SystemExit(0)
+            else:
+                if row.get('type') not in (None, '', 'unicast'):
+                    continue
+                metric = row.get('metric')
+                if metric is not None and (not isinstance(metric, int) or metric < 0):
+                    raise ValueError('invalid default route metric')
+                hops = route_hops(row)
+                tokens = ['-6', 'route', 'replace', 'default']
+                if len(hops) > 1 and metric is not None:
+                    tokens.extend(['metric', str(metric)])
+                for hop in hops:
+                    device = hop.get('dev') or row.get('dev') or selected
+                    if not interface_pattern.fullmatch(device or ''):
+                        raise ValueError('invalid default route interface')
+                    if device == selected and replacement:
+                        device = replacement
+                    if len(hops) > 1:
+                        tokens.append('nexthop')
+                    gateway = hop.get('gateway') or row.get('gateway', '')
+                    gateway_address = ipaddress.IPv6Address(gateway) if gateway else None
+                    if gateway:
+                        tokens.extend(['via', gateway_address.compressed])
+                    tokens.extend(['dev', device])
+                    flags = hop.get('flags') or row.get('flags') or []
+                    if isinstance(flags, str):
+                        flags = [flags]
+                    if len(hops) > 1:
+                        weight = hop.get('weight', 1)
+                        if not isinstance(weight, int) or not 1 <= weight <= 256:
+                            raise ValueError('invalid default route nexthop weight')
+                        tokens.extend(['weight', str(weight)])
+                    if 'onlink' in flags or (gateway_address and gateway_address.is_link_local):
+                        tokens.append('onlink')
+                if len(hops) == 1 and metric is not None:
+                    tokens.extend(['metric', str(metric)])
+                print(' '.join(tokens))
+    elif mode == 'interfaces':
+        for row in rows:
+            device = row.get('ifname', '')
+            kind = (row.get('linkinfo') or {}).get('info_kind', '')
+            if kind in {'bridge', 'veth', 'dummy', 'macvlan', 'ipvlan', 'sit', 'tun', 'tap'}:
+                continue
+            if device != 'lo' and interface_pattern.fullmatch(device):
+                print(device)
+    else:
+        for row in rows:
+            device = row.get('ifname', '')
+            if selected and device != selected:
+                continue
+            for info in row.get('addr_info', []):
+                if info.get('family') != 'inet6' or info.get('tentative') or info.get('dadfailed'):
+                    continue
+                if {'tentative', 'dadfailed'} & set(info.get('flags') or []):
+                    continue
+                address = ipaddress.IPv6Address(info['local'])
+                prefix = info['prefixlen']
+                if not isinstance(prefix, int) or not 0 <= prefix <= 128:
+                    raise ValueError('invalid IPv6 prefix')
+                if mode == 'addresses' and info.get('scope') == 'global' and address.is_global:
+                    print(f'{address}/{prefix}')
+                if mode == 'address_bindings' and info.get('scope') == 'global' and address.is_global:
+                    if not interface_pattern.fullmatch(device):
+                        raise ValueError('invalid interface for global IPv6 address')
+                    print(f'{device}\t{address}/{prefix}')
+                if mode == 'linklocal' and address.is_link_local:
+                    print(f'{address}/{prefix}')
+except (KeyError, TypeError, ValueError, json.JSONDecodeError):
+    raise SystemExit(1)
+PY
+}
+
+pve_ipv6_configured_alias_addresses() {
+    local config_file="${1:-}"
+    [ -r "$config_file" ] || return 1
+    python3 - "$config_file" <<'PY'
+import ipaddress
+import pathlib
+import sys
+
+lines = pathlib.Path(sys.argv[1]).read_text(errors='replace').splitlines()
+for index, line in enumerate(lines):
+    fields = line.split()
+    if len(fields) < 2 or fields[:2] != ['#', 'control-alias']:
+        continue
+    if index + 2 >= len(lines):
+        continue
+    interface = lines[index + 1].split()
+    address = lines[index + 2].split()
+    if len(interface) < 4 or interface[0] != 'iface' or interface[2:4] != ['inet6', 'static']:
+        continue
+    if len(address) != 2 or address[0] != 'address':
+        continue
+    try:
+        candidate = ipaddress.IPv6Interface(address[1]).ip
+    except ValueError:
+        continue
+    if candidate.is_global:
+        print(candidate.compressed)
+PY
+}
+
+# Snapshot the routed host interface before bridge migration or HE handling
+# mutates the script's IPv6 allocation variables.
+pve_capture_host_ipv6_runtime() {
+    local default_interface addresses address_bindings gateway route_json address_json route_commands
+    route_json=$(LC_ALL=C NO_COLOR=1 ip -j -6 route show default) || return 1
+    address_json=$(LC_ALL=C NO_COLOR=1 ip -j -6 addr show) || return 1
+    default_interface=$(PVE_IPV6_ROUTE_JSON_OVERRIDE="$route_json" pve_ipv6_json_probe default_interface) || return 1
+    host_ipv6_runtime_interface="$default_interface"
+    host_ipv6_runtime_has_default_route=false
+    host_ipv6_runtime_cidrs=""
+    host_ipv6_runtime_address_bindings=""
+    host_ipv6_runtime_gateway=""
+    host_ipv6_runtime_route_json=""
+    addresses=$(PVE_IPV6_ADDRESS_JSON_OVERRIDE="$address_json" pve_ipv6_json_probe addresses) || return 1
+    address_bindings=$(PVE_IPV6_ADDRESS_JSON_OVERRIDE="$address_json" pve_ipv6_json_probe address_bindings) || return 1
+    host_ipv6_runtime_route_json="$route_json"
+    route_commands=$(PVE_IPV6_ROUTE_JSON_OVERRIDE="$route_json" pve_ipv6_json_probe default_routes_restore "$default_interface" "$default_interface") || return 1
+    if [ -n "$route_commands" ]; then
+        host_ipv6_runtime_has_default_route=true
+        gateway=$(PVE_IPV6_ROUTE_JSON_OVERRIDE="$route_json" pve_ipv6_json_probe gateway "$default_interface") || return 1
+        host_ipv6_runtime_gateway="$gateway"
+    fi
+    host_ipv6_runtime_cidrs="$addresses"
+    host_ipv6_runtime_address_bindings="$address_bindings"
+}
+
+check_ipv6() {
+    local preferred_interface rows
+    preferred_interface=$(pve_ipv6_json_probe default_interface) || return 1
+    rows=$(pve_ipv6_json_probe addresses "$preferred_interface") || return 1
+    if [ -z "$rows" ]; then
+        rows=$(pve_ipv6_json_probe addresses) || return 1
+    fi
+    IPV6="${rows%%/*}"
+    IPV6="${IPV6%%$'\n'*}"
     if [ -n "$IPV6" ]; then
-        if ! write_network_state_atomic /usr/local/bin/pve_check_ipv6 "$IPV6" validate_ipv6_value; then
-            _yellow "Ignoring invalid IPv6 detection output: ${IPV6@Q}"
-            _yellow "忽略无效的 IPv6 检测输出：${IPV6@Q}"
-            IPV6=""
-            rm -f /usr/local/bin/pve_check_ipv6
-        fi
+        validate_ipv6_value "$IPV6" || return 1
+        write_network_state_atomic /usr/local/bin/pve_check_ipv6 "$IPV6" validate_ipv6_value || return 1
     else
         rm -f /usr/local/bin/pve_check_ipv6
     fi
@@ -623,8 +796,20 @@ request_ipv6() {
 
 # 检测物理接口和MAC地址
 detect_network_interfaces() {
-    interface_1=$(lshw -C network | awk '/logical name:/{print $3}' | sed -n '1p')
-    interface_2=$(lshw -C network | awk '/logical name:/{print $3}' | sed -n '2p')
+    local detected_interfaces preferred_interface candidate
+    detected_interfaces=$(pve_ipv6_json_probe interfaces) || return 1
+    preferred_interface=$(pve_ipv6_json_probe default_interface 2>/dev/null || true)
+    if [ -n "$preferred_interface" ] && ! grep -Fxq "$preferred_interface" <<<"$detected_interfaces"; then
+        preferred_interface=""
+    fi
+    interface_1="${preferred_interface:-$(printf '%s\n' "$detected_interfaces" | head -n 1)}"
+    interface_2=""
+    while IFS= read -r candidate; do
+        if [ -n "$candidate" ] && [ "$candidate" != "$interface_1" ]; then
+            interface_2="$candidate"
+            break
+        fi
+    done <<<"$detected_interfaces"
     check_interface
 
     if ! validate_interface_value "$interface" || [ ! -d "/sys/class/net/$interface" ]; then
@@ -635,7 +820,7 @@ detect_network_interfaces() {
     write_network_state_atomic /usr/local/bin/pve_main_interface "$interface" validate_interface_value || return 1
 
     if [ ! -f /usr/local/bin/pve_mac_address ] || [ ! -s /usr/local/bin/pve_mac_address ] || [ "$(sed -e '/^[[:space:]]*$/d' /usr/local/bin/pve_mac_address)" = "" ]; then
-        mac_address=$(ip -o link show dev ${interface} | awk '{print $17}')
+        mac_address=$(cat "/sys/class/net/${interface}/address" 2>/dev/null || true)
         echo "$mac_address" >/usr/local/bin/pve_mac_address
     fi
     mac_address=$(cat /usr/local/bin/pve_mac_address)
@@ -656,8 +841,70 @@ setup_persistent_net_link() {
 }
 
 # 检测HE隧道配置
+pve_he_bridge_cidr() {
+    local tunnel_cidr="$1" tunnel_gateway="$2" host_cidrs="$3" route_json="$4"
+    python3 - "$tunnel_cidr" "$tunnel_gateway" "$host_cidrs" "$route_json" <<'PY'
+import ipaddress
+import json
+import re
+import sys
+
+try:
+    tunnel = ipaddress.IPv6Interface(sys.argv[1])
+    gateway = ipaddress.IPv6Address(sys.argv[2])
+    host_addresses = {
+        ipaddress.IPv6Interface(row).ip
+        for row in sys.argv[3].splitlines() if row.strip()
+    }
+    raw_routes = re.sub(r'\x1b\[[0-?]*[ -/]*[@-~]', '', sys.argv[4])
+    routes = json.loads(raw_routes)
+    if not isinstance(routes, list) or not tunnel.ip.is_global:
+        raise ValueError('invalid tunnel state')
+    parent = tunnel.network
+    # The guest allocator needs at least a /120; a /120 or narrower tunnel
+    # has no disjoint child large enough for that allocator.
+    target = ((parent.prefixlen + 7) // 8) * 8
+    if target <= parent.prefixlen:
+        target += 8
+    if target > 120:
+        raise ValueError('tunnel prefix too narrow')
+    occupied = host_addresses | {gateway}
+    other_routes = []
+    for row in routes:
+        destination = row.get('dst', 'default')
+        if not destination or destination == 'default':
+            continue
+        try:
+            route = ipaddress.IPv6Network(destination, strict=False)
+        except ValueError:
+            # `ip -j route show table all` may include route-kind labels
+            # such as local/multicast alongside real IPv6 destinations.
+            if isinstance(destination, str) and destination.split(None, 1)[0] in {
+                'local', 'broadcast', 'multicast', 'unreachable', 'prohibit',
+                'blackhole', 'throw', 'nat', 'cache',
+            }:
+                continue
+            raise
+        if route == parent and row.get('dev') == 'he-ipv6':
+            continue
+        other_routes.append(route)
+    for child in parent.subnets(new_prefix=target):
+        if any(address in child for address in occupied):
+            continue
+        if any(child.overlaps(route) for route in other_routes):
+            continue
+        print(f'{ipaddress.IPv6Address(int(child.network_address) + 1)}/{target}')
+        break
+    else:
+        raise ValueError('no unused tunnel child')
+except (KeyError, TypeError, ValueError, json.JSONDecodeError):
+    raise SystemExit(1)
+PY
+}
+
 detect_he_tunnel() {
     status_he=false
+    pve_capture_host_ipv6_runtime || return 1
     if grep -q "he-ipv6" /etc/network/interfaces; then
         local covert_tmp
         covert_tmp=$(mktemp /root/covert.sh.tmp.XXXXXX) || return 1
@@ -669,28 +916,34 @@ detect_he_tunnel() {
         fi
         /root/covert.sh
         sleep 1
-        status_he=true
-        chattr -i /etc/network/interfaces
         temp_config=$(awk '/auto he-ipv6/{flag=1; print $0; next} flag && flag++<10' /etc/network/interfaces)
-        sed -i '/^auto he-ipv6/,/^$/d' /etc/network/interfaces
-        chattr +i /etc/network/interfaces
-        ipv6_address=$(echo "$temp_config" | awk '/address/ {print $2}')
-        ipv6_gateway=$(echo "$temp_config" | awk '/gateway/ {print $2}')
-        ipv6_prefixlen=$(ifconfig he-ipv6 | grep -oP 'prefixlen \K\d+' | head -n 1)
+        local tunnel_cidr host_cidrs route_json
+        tunnel_cidr=$(pve_ipv6_json_probe addresses he-ipv6 | head -n 1) || return 1
+        [ -n "$tunnel_cidr" ] || return 1
+        ipv6_address="${tunnel_cidr%/*}"
+        ipv6_prefixlen="${tunnel_cidr##*/}"
+        ipv6_gateway=$(printf '%s\n' "$temp_config" | awk '$1 == "gateway" {print $2; exit}')
         validate_ipv6_value "$ipv6_address" || return 1
         validate_ipv6_value "$ipv6_gateway" && [[ "$ipv6_gateway" != */* ]] || return 1
         validate_ipv6_prefixlen_value "$ipv6_prefixlen" || return 1
-        target_mask=${ipv6_prefixlen}
-        remainder=$((target_mask % 8))
-        [ "$remainder" -ne 0 ] && ((target_mask += 8 - remainder))
-        [ "$target_mask" -gt 128 ] && target_mask=128
+        host_cidrs=$(pve_ipv6_json_probe addresses) || return 1
+        route_json=$(LC_ALL=C NO_COLOR=1 ip -j -6 route show table all) || return 1
+        # Keep the tunnel stanza and use NAT66 when no safe child exists.
+        if ! new_subnet=$(pve_he_bridge_cidr "$tunnel_cidr" "$ipv6_gateway" "$host_cidrs" "$route_json"); then
+            status_he=false
+            _yellow "No disjoint HE tunnel prefix is available for a direct IPv6 bridge; using NAT66"
+            detect_existing_ipv6_config || return 1
+            check_fe80_gateway
+            return
+        fi
+        target_mask="${new_subnet##*/}"
         write_network_state_atomic /usr/local/bin/pve_ipv6_prefixlen "$target_mask" validate_ipv6_prefixlen_value || return 1
-        ipv6_subnet_2=$(sipcalc --v6split=${target_mask} ${ipv6_gateway}/${ipv6_prefixlen} | awk '/Network/{n++} n==2' | awk '{print $3}' | grep -v '^$')
-        ipv6_subnet_2_without_last_segment="${ipv6_subnet_2%:*}:"
-        new_subnet="${ipv6_subnet_2_without_last_segment}1/${target_mask}"
-        ipv6_address="${ipv6_subnet_2_without_last_segment}1"
         write_network_state_atomic /usr/local/bin/pve_check_ipv6 "$ipv6_address" validate_ipv6_value || return 1
         write_network_state_atomic /usr/local/bin/pve_ipv6_gateway "$ipv6_gateway" validate_ipv6_value || return 1
+        chattr -i /etc/network/interfaces
+        sed -i '/^auto he-ipv6/,/^$/d' /etc/network/interfaces
+        chattr +i /etc/network/interfaces
+        status_he=true
     else
         detect_existing_ipv6_config
     fi
@@ -700,64 +953,52 @@ detect_he_tunnel() {
 
 # 检测已有的IPV6配置
 detect_existing_ipv6_config() {
-    if command -v rdisc6 >/dev/null 2>&1 && [ ! -f /usr/local/bin/pve_ipv6_real_prefixlen ]; then
-        _blue "Attempting to get real IPv6 prefix from router advertisement..."
-        _green "尝试使用从路由器通告中获取真实的 IPv6 前缀..."
-        _blue "Using network interface: ${interface}"
-        _green "正在使用网络接口: ${interface}"
-        rdisc6_output=$(timeout 10 rdisc6 ${interface} 2>/dev/null)
-        if [ -n "$rdisc6_output" ]; then
-            real_prefixlen=$(echo "$rdisc6_output" | grep -i "Prefix" | grep -oP '[:：]\s*[0-9a-fA-F:]+/\K\d+' | head -n 1)
-            if [ -n "$real_prefixlen" ] && [ "$real_prefixlen" -gt 0 ] && [ "$real_prefixlen" -le 128 ]; then
-                _green "Found real IPv6 prefix length from router advertisement: /$real_prefixlen"
-                _green "从路由器通告中发现真实的 IPv6 前缀长度: /$real_prefixlen"
-                write_network_state_atomic /usr/local/bin/pve_ipv6_real_prefixlen "$real_prefixlen" validate_ipv6_prefixlen_value || return 1
-            else
-                _yellow "Could not parse IPv6 prefix length on interface ${interface}"
-                _yellow "无法从接口 ${interface} 中解析 IPv6 前缀长度"
-            fi
-        else
-            _yellow "Could not get router advertisement response on interface ${interface} (timeout or no response)"
-            _yellow "无法在接口 ${interface} 上获取路由器通告响应(超时或无响应)"
-        fi
+    local preferred_interface live_cidrs persisted_cidr candidate
+    pve_capture_host_ipv6_runtime || return 1
+    preferred_interface="$host_ipv6_runtime_interface"
+    live_cidrs="$host_ipv6_runtime_cidrs"
+    if [ -n "$preferred_interface" ] && [ -z "$live_cidrs" ]; then
+        live_cidrs=$(pve_ipv6_json_probe addresses "$preferred_interface") || return 1
     fi
-    if real_prefixlen=$(read_network_state /usr/local/bin/pve_ipv6_real_prefixlen validate_ipv6_prefixlen_value 2>/dev/null); then
-        ipv6_prefixlen="$real_prefixlen"
-        _blue "Using real IPv6 prefix length: /$ipv6_prefixlen"
-        _green "检测到的真实 IPv6 前缀长度: /$ipv6_prefixlen"
-    else
-        ipv6_prefixlen=$(read_network_state /usr/local/bin/pve_ipv6_prefixlen validate_ipv6_prefixlen_value 2>/dev/null || true)
+    if [ -z "$live_cidrs" ]; then
+        live_cidrs=$(pve_ipv6_json_probe addresses) || return 1
     fi
-    ipv6_gateway=$(read_network_state /usr/local/bin/pve_ipv6_gateway validate_ipv6_value 2>/dev/null || true)
     ipv6_address=$(read_network_state /usr/local/bin/pve_check_ipv6 validate_ipv6_value 2>/dev/null || true)
-    if [ -n "$ipv6_address" ] && [ -n "$ipv6_prefixlen" ]; then
-        ipv6_address_without_last_segment="${ipv6_address%:*}:"
-        reconfigure_ipv6_address
+    persisted_cidr=""
+    while IFS= read -r candidate; do
+        [ -n "$candidate" ] || continue
+        if [ "${candidate%/*}" = "$ipv6_address" ]; then
+            persisted_cidr="$candidate"
+            break
+        fi
+    done <<<"$live_cidrs"
+    if [ -z "$persisted_cidr" ]; then
+        persisted_cidr="${live_cidrs%%$'\n'*}"
+    fi
+    if [ -n "$persisted_cidr" ]; then
+        ipv6_address="${persisted_cidr%/*}"
+        ipv6_prefixlen="${persisted_cidr##*/}"
+        validate_ipv6_value "$ipv6_address" || return 1
+        validate_ipv6_prefixlen_value "$ipv6_prefixlen" || return 1
+        write_network_state_atomic /usr/local/bin/pve_check_ipv6 "$ipv6_address" validate_ipv6_value || return 1
+        write_network_state_atomic /usr/local/bin/pve_ipv6_prefixlen "$ipv6_prefixlen" validate_ipv6_prefixlen_value || return 1
+        rm -f /usr/local/bin/pve_ipv6_real_prefixlen
+    else
+        ipv6_address=""
+        ipv6_prefixlen=""
+    fi
+    ipv6_gateway="$host_ipv6_runtime_gateway"
+    if [ -n "$ipv6_gateway" ]; then
+        validate_ipv6_value "$ipv6_gateway" || return 1
+        write_network_state_atomic /usr/local/bin/pve_ipv6_gateway "$ipv6_gateway" validate_ipv6_value || return 1
     fi
 }
 
 # 重新配置IPV6地址
 reconfigure_ipv6_address() {
-    if [[ $ipv6_address != *:: && $ipv6_address_without_last_segment != *:: ]]; then
-        ipv6_address=$(sipcalc -i ${ipv6_address}/${ipv6_prefixlen} | grep "Subnet prefix (masked)" | cut -d ' ' -f 4 | cut -d '/' -f 1 | sed 's/:0:0:0:0:/::/' | sed 's/:0:0:0:/::/')
-        ipv6_address="${ipv6_address%:*}:1"
-        if [ "$ipv6_address" == "$ipv6_gateway" ]; then
-            ipv6_address="${ipv6_address%:*}:2"
-        fi
-        ipv6_address_without_last_segment="${ipv6_address%:*}:"
-        if ping -c 1 -6 -W 3 $ipv6_address >/dev/null 2>&1; then
-            check_ipv6
-            ipv6_address=$(read_network_state /usr/local/bin/pve_check_ipv6 validate_ipv6_value 2>/dev/null || true)
-            ipv6_address_without_last_segment="${ipv6_address%:*}:"
-        fi
-    elif [[ $ipv6_address == *:: ]]; then
-        ipv6_address="${ipv6_address}1"
-        if [ "$ipv6_address" == "$ipv6_gateway" ]; then
-            ipv6_address="${ipv6_address%:*}:2"
-        fi
-        ipv6_address_without_last_segment="${ipv6_address%:*}:"
-        write_network_state_atomic /usr/local/bin/pve_check_ipv6 "$ipv6_address" validate_ipv6_value || return 1
-    fi
+    # Retain the address that is actually bound to the host. A guessed ::1
+    # inside the same prefix could belong to another host.
+    validate_ipv6_value "$ipv6_address"
 }
 
 # 检查fe80类型网关
@@ -1091,63 +1332,55 @@ select_nat_ipv4_subnet() {
 }
 
 pve_nat_ipv6_candidate_is_safe() {
-    local candidate="${1:-}" host_state
+    local candidate="${1:-}" address_json route_json
     command -v python3 >/dev/null 2>&1 || return 1
-    host_state="$(
-        {
-            ip -o -6 addr show 2>/dev/null || true
-            ip -6 route show table all 2>/dev/null || true
-        }
-    )"
-    python3 - "$candidate" "$host_state" <<'PY' >/dev/null 2>&1
+    address_json=$(LC_ALL=C NO_COLOR=1 ip -j -6 addr show) || return 1
+    route_json=$(LC_ALL=C NO_COLOR=1 ip -j -6 route show table all) || return 1
+    PVE_HOST_IPV6_ADDRESSES="$address_json" PVE_HOST_IPV6_ROUTES="$route_json" \
+        python3 - "$candidate" <<'PYCODE' >/dev/null 2>&1
 import ipaddress
+import json
+import os
+import re
 import sys
 
 try:
     candidate = ipaddress.IPv6Network(sys.argv[1], strict=False)
-except ValueError:
+    if candidate.prefixlen != 64 or not candidate.subnet_of(ipaddress.IPv6Network('fc00::/7')):
+        raise ValueError('not a ULA /64')
+    strip_ansi = lambda raw: re.sub(r'\x1b\[[0-?]*[ -/]*[@-~]', '', raw)
+    addresses = json.loads(strip_ansi(os.environ['PVE_HOST_IPV6_ADDRESSES']))
+    routes = json.loads(strip_ansi(os.environ['PVE_HOST_IPV6_ROUTES']))
+    if not isinstance(addresses, list) or not isinstance(routes, list):
+        raise ValueError('invalid iproute2 JSON')
+    for interface in addresses:
+        device = interface['ifname']
+        for info in interface.get('addr_info', []):
+            if info.get('family') != 'inet6':
+                continue
+            existing = ipaddress.IPv6Interface(f"{info['local']}/{info['prefixlen']}").network
+            if candidate.overlaps(existing) and not (device == 'vmbr1' and existing.subnet_of(candidate)):
+                raise ValueError('host address overlap')
+    for row in routes:
+        destination = row.get('dst', 'default')
+        if not destination or destination == 'default':
+            continue
+        try:
+            existing = ipaddress.IPv6Network(destination, strict=False)
+        except ValueError:
+            if isinstance(destination, str) and destination.split(None, 1)[0] in {
+                'local', 'broadcast', 'multicast', 'unreachable', 'prohibit',
+                'blackhole', 'throw', 'nat', 'cache',
+            }:
+                continue
+            raise
+        if existing.prefixlen == 0:
+            continue
+        if candidate.overlaps(existing) and not (row.get('dev') == 'vmbr1' and existing.subnet_of(candidate)):
+            raise ValueError('host route overlap')
+except (KeyError, TypeError, ValueError, json.JSONDecodeError):
     raise SystemExit(1)
-if candidate.prefixlen != 64 or not candidate.subnet_of(ipaddress.IPv6Network("fc00::/7")):
-    raise SystemExit(1)
-
-def vmbr1_owns(network, device):
-    # The bridge's connected /64 and its local gateway /128 are expected after
-    # installation.  They are not a conflict with the persisted NAT subnet.
-    return device == "vmbr1" and network.subnet_of(candidate)
-
-route_types = {"unreachable", "prohibit", "blackhole", "throw", "local", "broadcast", "anycast", "multicast"}
-for line in sys.argv[2].splitlines():
-    fields = line.split()
-    if not fields:
-        continue
-    if "inet6" in fields:
-        address_index = fields.index("inet6") + 1
-        if address_index >= len(fields):
-            continue
-        device = fields[1].split("@", 1)[0] if len(fields) > 1 else ""
-        token = fields[address_index]
-    else:
-        destination_index = 1 if fields[0] in route_types else 0
-        if destination_index >= len(fields):
-            continue
-        token = fields[destination_index]
-        if token == "default":
-            continue
-        device = ""
-        if "dev" in fields:
-            device_index = fields.index("dev") + 1
-            if device_index < len(fields):
-                device = fields[device_index].split("@", 1)[0]
-    try:
-        existing = ipaddress.IPv6Network(token, strict=False)
-    except ValueError:
-        continue
-    if existing.prefixlen == 0:
-        continue
-    if candidate.overlaps(existing) and not vmbr1_owns(existing, device):
-        raise SystemExit(1)
-raise SystemExit(0)
-PY
+PYCODE
 }
 
 # Select an RFC4193 /64 for the NAT bridge. A child of the uplink's SLAAC /64
@@ -1220,6 +1453,11 @@ configure_vmbr1() {
     else
         add_vmbr1_with_ipv6
     fi
+    # NAT66 also enables forwarding. Preserve router advertisements on the
+    # actual uplink even when no direct IPv6 vmbr2 is configured.
+    if [ -n "${nat_ipv6_subnet:-}" ]; then
+        configure_ipv6_forwarding vmbr1 || return 1
+    fi
 }
 
 # 添加带RA接受的vmbr1
@@ -1236,8 +1474,6 @@ iface vmbr1 inet static
     post-up echo 1 > /proc/sys/net/ipv4/ip_forward
     post-up echo 1 > /proc/sys/net/ipv4/conf/vmbr1/proxy_arp
     post-up nft -f /etc/nftables.conf 2>/dev/null || true
-
-pre-up echo 2 > /proc/sys/net/ipv6/conf/vmbr0/accept_ra
 EOF
     else
         cat <<EOF | sudo tee -a /etc/network/interfaces
@@ -1252,8 +1488,6 @@ iface vmbr1 inet static
     post-up echo 1 > /proc/sys/net/ipv4/conf/vmbr1/proxy_arp
     post-up iptables -t nat -A POSTROUTING -s '${nat_ipv4_subnet}' -o vmbr0 -j MASQUERADE
     post-down iptables -t nat -D POSTROUTING -s '${nat_ipv4_subnet}' -o vmbr0 -j MASQUERADE
-
-pre-up echo 2 > /proc/sys/net/ipv6/conf/vmbr0/accept_ra
 EOF
     fi
 }
@@ -1338,7 +1572,7 @@ EOF
 
 # 配置直连 IPv6 网桥（仅明确委派前缀、已有桥或 HE/6in4 时）
 configure_vmbr2() {
-    local appended_file direct_config direct_bridge
+    local appended_file direct_config direct_bridge alias_addresses ip delay
     local -a direct_values
     chattr -i /etc/network/interfaces
     appended_file="/usr/local/bin/pve_appended_content.txt"
@@ -1347,11 +1581,13 @@ configure_vmbr2() {
         echo '#!/bin/bash' > "$tmp_script"
         echo "" >> "$tmp_script"
         counter=0
-        grep -Po '(?<=address )[\da-fA-F:]+(?=/64)' "$appended_file" | while read -r ip; do
+        alias_addresses=$(pve_ipv6_configured_alias_addresses "$appended_file") || return 1
+        while IFS= read -r ip; do
+            [ -n "$ip" ] || continue
             delay=$((counter * 6))
             echo "sleep $delay; curl --interface $ip -6 -s https://ifconfig.co &" >> "$tmp_script"
             counter=$((counter + 1))
-        done
+        done <<<"$alias_addresses"
         echo "wait" >> "$tmp_script"
         chmod +x "$tmp_script"
         (crontab -l 2>/dev/null; echo "*/15 * * * * bash $tmp_script") | sort -u | crontab -
@@ -1452,23 +1688,105 @@ EOF
 
 # 配置IPV6转发设置
 configure_ipv6_forwarding() {
-    local direct_bridge="${1:-vmbr2}" uplink
+    local direct_bridge="${1:-vmbr2}" uplink runtime_uplink
     validate_pve_direct_ipv6_bridge_value "$direct_bridge" || return 1
     uplink="$(pve_ipv6_uplink_interface 2>/dev/null || true)"
     [ -n "$uplink" ] || uplink=vmbr0
+    runtime_uplink="$(pve_ipv6_json_probe default_interface 2>/dev/null || true)"
+    # A first install can still route through the physical port while vmbr0
+    # already owns it in the pending interfaces file. Protect that live port
+    # before turning on forwarding, then persist RA on the future bridge.
+    if [ "$runtime_uplink" != "$uplink" ] && validate_interface_value "$runtime_uplink" &&
+       [ -e "${PVE_IPV6_PROC_CONF_ROOT:-/proc/sys/net/ipv6/conf}/${runtime_uplink}/accept_ra" ]; then
+        sysctl -w "net.ipv6.conf.${runtime_uplink}.accept_ra=2" >/dev/null 2>&1 || return 1
+    fi
     # Keep SLAAC router advertisements on the actual external uplink after
     # enabling forwarding, otherwise Linux can expire the host default route.
-    update_sysctl "net.ipv6.conf.${uplink}.accept_ra=2"
-    update_sysctl "net.ipv6.conf.all.forwarding=1"
+    update_sysctl "net.ipv6.conf.${uplink}.accept_ra=2" || return 1
+    pve_install_ipv6_ifup_hook || return 1
+    update_sysctl "net.ipv6.conf.all.forwarding=1" || return 1
     # NDP proxying is meaningful only on bridges that carry this topology.
     # Do not make unrelated current or future interfaces proxy NDP packets.
-    update_sysctl "net.ipv6.conf.${uplink}.proxy_ndp=1"
-    update_sysctl "net.ipv6.conf.vmbr1.proxy_ndp=1"
-    update_sysctl "net.ipv6.conf.${direct_bridge}.proxy_ndp=1"
+    update_sysctl "net.ipv6.conf.${uplink}.proxy_ndp=1" || return 1
+    update_sysctl "net.ipv6.conf.vmbr1.proxy_ndp=1" || return 1
+    update_sysctl "net.ipv6.conf.${direct_bridge}.proxy_ndp=1" || return 1
+}
+
+# A bridged SLAAC address can disappear when ifupdown moves the provider's
+# physical port under vmbr0 and then reloads networking. Keep the exact live
+# address and gateway observed before that transition and restore them on the
+# resulting IPv6 uplink. This is deliberately address based instead of
+# assuming a /64 or a fixed interface name.
+restore_host_ipv6_runtime() {
+    local bindings="${host_ipv6_runtime_address_bindings:-}" gateway="${host_ipv6_runtime_gateway:-}" uplink binding_interface cidr address prefix route_commands route_command
+    local -a route_command_args
+    [ -n "$bindings" ] || [ "${host_ipv6_runtime_has_default_route:-false}" = true ] || return 0
+    if [ -n "$gateway" ]; then
+        validate_ipv6_value "$gateway" || return 1
+    fi
+    uplink="$(pve_ipv6_uplink_interface 2>/dev/null || true)"
+    [ -n "$uplink" ] || uplink="vmbr0"
+    validate_interface_value "$uplink" || return 1
+    sysctl -q -w "net.ipv6.conf.${uplink}.accept_ra=2" >/dev/null 2>&1 || true
+    while IFS=$'\t' read -r binding_interface cidr; do
+        [ -n "$cidr" ] || continue
+        validate_interface_value "$binding_interface" || return 1
+        address="${cidr%/*}"
+        prefix="${cidr##*/}"
+        validate_ipv6_value "$address" || return 1
+        validate_ipv6_prefixlen_value "$prefix" || return 1
+        if [ "$binding_interface" = "${host_ipv6_runtime_interface:-}" ]; then
+            binding_interface="$uplink"
+        fi
+        ip -6 addr replace "${address}/${prefix}" dev "$binding_interface" || return 1
+    done <<<"$bindings"
+    if [ "${host_ipv6_runtime_has_default_route:-false}" = true ]; then
+        route_commands=$(PVE_IPV6_ROUTE_JSON_OVERRIDE="${host_ipv6_runtime_route_json:-}" pve_ipv6_json_probe default_routes_restore "${host_ipv6_runtime_interface:-}" "$uplink") || return 1
+        while IFS= read -r route_command; do
+            [ -n "$route_command" ] || continue
+            read -r -a route_command_args <<<"$route_command"
+            ip "${route_command_args[@]}" || return 1
+        done <<<"$route_commands"
+    fi
+}
+
+# systemd-sysctl can run before ifupdown creates a PVE bridge. Reapply the
+# persisted per-interface settings whenever the bridge or uplink comes up.
+pve_install_ipv6_ifup_hook() {
+    local hook="${PVE_IPV6_IFUP_HOOK_FILE:-/etc/network/if-up.d/99-oneclickvirt-ipv6-sysctl}"
+    local config="${PVE_IPV6_SYSCTL_CONFIG_FILE:-/etc/sysctl.d/99-oneclickvirt-pve-ipv6.conf}"
+    local temporary
+    mkdir -p "$(dirname "$hook")" || return 1
+    temporary="$(mktemp "${hook}.XXXXXX")" || return 1
+    cat >"$temporary" <<'HOOK'
+#!/bin/sh
+set -eu
+case "${IFACE:-}" in
+    ''|*[!A-Za-z0-9_.:-]*) exit 0 ;;
+esac
+config='__PVE_SYSCTL_CONFIG__'
+[ -r "$config" ] || exit 0
+for setting in accept_ra proxy_ndp; do
+    key="net.ipv6.conf.${IFACE}.${setting}"
+    value=$(awk -F= -v key="$key" '$1 == key { result=$2 } END { gsub(/[[:space:]]/, "", result); print result }' "$config")
+    case "$value" in
+        0|1|2) sysctl -q -w "$key=$value" >/dev/null ;;
+    esac
+done
+HOOK
+    # The path is controlled by this installer, not a command argument.
+    sed "s|__PVE_SYSCTL_CONFIG__|${config}|" "$temporary" >"${temporary}.rendered" || {
+        rm -f "$temporary" "${temporary}.rendered"
+        return 1
+    }
+    mv -f "${temporary}.rendered" "$temporary" || { rm -f "$temporary" "${temporary}.rendered"; return 1; }
+    chmod 755 "$temporary" || { rm -f "$temporary"; return 1; }
+    mv -f "$temporary" "$hook"
 }
 
 # 安装并配置防火墙
 setup_firewall() {
+    local nft_config="${PVE_NFTABLES_CONF:-/etc/nftables.conf}"
     # 优先尝试安装 nftables（Debian 10+ 默认）
     if ! command -v nft >/dev/null 2>&1; then
         _green "Attempting to install nftables..."
@@ -1492,8 +1810,21 @@ setup_firewall() {
         nft add table ip6 nat 2>/dev/null || true
         nft 'add chain ip6 nat prerouting { type nat hook prerouting priority dstnat; policy accept; }' 2>/dev/null || true
         nft 'add chain ip6 nat postrouting { type nat hook postrouting priority srcnat; policy accept; }' 2>/dev/null || true
-        printf '#!/usr/sbin/nft -f\nflush ruleset\n' > /etc/nftables.conf
-        nft list ruleset >> /etc/nftables.conf
+        # vmbr1 may have been created by the IPv4-only/RA branch, or may
+        # already exist from an older install. NAT66 must not depend on which
+        # bridge-creation branch happened to run. The installer may still
+        # route through the physical NIC before ifupdown moves it under vmbr0,
+        # so use the configured post-install uplink. The host's public IPv6
+        # address remains on that uplink.
+        if [ -n "${nat_ipv6_subnet:-}" ]; then
+            nat66_uplink="$(pve_ipv6_uplink_interface)" || return 1
+            validate_interface_value "$nat66_uplink" || return 1
+            if ! nft list chain ip6 nat postrouting 2>/dev/null | grep -Fq "ip6 saddr ${nat_ipv6_subnet} oifname \"${nat66_uplink}\" masquerade"; then
+                nft add rule ip6 nat postrouting ip6 saddr "$nat_ipv6_subnet" oifname "$nat66_uplink" masquerade || return 1
+            fi
+        fi
+        printf '#!/usr/sbin/nft -f\nflush ruleset\n' > "$nft_config"
+        nft list ruleset >> "$nft_config"
         systemctl enable nftables 2>/dev/null || true
     else
         _green "nftables not available, using iptables with iptables-persistent"
@@ -1505,6 +1836,14 @@ setup_firewall() {
         if ! iptables -t nat -C POSTROUTING -s "$nat_ipv4_subnet" -o vmbr0 -j MASQUERADE 2>/dev/null; then
             iptables -t nat -A POSTROUTING -s "$nat_ipv4_subnet" -o vmbr0 -j MASQUERADE
         fi
+        if [ -n "${nat_ipv6_subnet:-}" ]; then
+            nat66_uplink="$(pve_ipv6_uplink_interface)" || return 1
+            validate_interface_value "$nat66_uplink" || return 1
+            if ! ip6tables -t nat -C POSTROUTING -s "$nat_ipv6_subnet" -o "$nat66_uplink" -j MASQUERADE 2>/dev/null; then
+                ip6tables -t nat -A POSTROUTING -s "$nat_ipv6_subnet" -o "$nat66_uplink" -j MASQUERADE || return 1
+            fi
+            command -v netfilter-persistent >/dev/null 2>&1 && netfilter-persistent save || true
+        fi
     fi
     update_sysctl "net.ipv4.ip_forward=1"
     ${sysctl_path} -p
@@ -1515,6 +1854,14 @@ restart_network_services() {
     systemctl restart networking.service
     sleep 3
     ifreload -ad
+    # ifreload may complete successfully before a cloud RA is received. Put
+    # the host's original IPv6 address and default route back immediately so
+    # creating a NAT bridge never strands the provider node.
+    restore_host_ipv6_runtime || {
+        _red "Unable to restore the host IPv6 address/default route after network reload"
+        _red "网络重载后无法恢复宿主机 IPv6 地址或默认路由"
+        return 1
+    }
     if command -v nft >/dev/null 2>&1 && nft list tables >/dev/null 2>&1; then
         printf '#!/usr/sbin/nft -f\nflush ruleset\n' > /etc/nftables.conf
         nft list ruleset >> /etc/nftables.conf
@@ -1607,12 +1954,12 @@ prepare_network_interfaces
 configure_vmbr0
 select_nat_ipv4_subnet || exit 1
 select_nat_ipv6_subnet || exit 1
-configure_vmbr1
-configure_vmbr2
+configure_vmbr1 || exit 1
+configure_vmbr2 || exit 1
 chattr +i /etc/network/interfaces
 rm -rf /usr/local/bin/iface_auto.txt
-setup_firewall
-restart_network_services
+setup_firewall || exit 1
+restart_network_services || exit 1
 setup_ndpresponder
 backup_and_clean_interfaces
 clean_cache_files

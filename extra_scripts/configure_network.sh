@@ -20,16 +20,48 @@ normalize_interface_name() {
     fi
 }
 
+ipv6_probe_interface() {
+    local mode="$1" payload
+    if [ "$mode" = default ]; then
+        payload=$(LC_ALL=C NO_COLOR=1 ip -j -6 route show default) || return 1
+    else
+        payload=$(LC_ALL=C NO_COLOR=1 ip -j -6 addr show scope global) || return 1
+    fi
+    PVE_IP_JSON="$payload" python3 - "$mode" <<'PY'
+import json
+import os
+import re
+import sys
+
+raw = re.sub(r'\x1b\[[0-?]*[ -/]*[@-~]', '', os.environ['PVE_IP_JSON'])
+try:
+    rows = json.loads(raw)
+    if not isinstance(rows, list):
+        raise ValueError('invalid iproute2 JSON')
+    for row in rows:
+        if sys.argv[1] == 'default':
+            if row.get('dst') != 'default':
+                continue
+        elif not any(info.get('family') == 'inet6' and info.get('scope') == 'global'
+                     and not info.get('tentative') and not info.get('dadfailed')
+                     and not {'tentative', 'dadfailed'} & set(info.get('flags') or [])
+                     for info in row.get('addr_info', [])):
+            continue
+        device = row.get('dev' if sys.argv[1] == 'default' else 'ifname', '')
+        if re.fullmatch(r'[A-Za-z0-9_.:-]{1,15}', device) and device != 'lo':
+            print(device)
+            break
+except (KeyError, TypeError, ValueError, json.JSONDecodeError):
+    raise SystemExit(1)
+PY
+}
+
 default_ipv6_interface() {
-    local interface_name
-    interface_name=$(ip -6 route show default 2>/dev/null | awk '{for (i = 1; i <= NF; i++) if ($i == "dev" && i < NF) {print $(i + 1); exit}}')
-    normalize_interface_name "$interface_name"
+    ipv6_probe_interface default
 }
 
 global_ipv6_interface() {
-    local interface_name
-    interface_name=$(ip -o -6 addr show scope global 2>/dev/null | awk '$3 == "inet6" {print $2; exit}')
-    normalize_interface_name "$interface_name"
+    ipv6_probe_interface address
 }
 
 interface_exists() {

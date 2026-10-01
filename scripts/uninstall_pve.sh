@@ -442,6 +442,8 @@ pve_local_files=(
     /usr/local/bin/check-dns.sh
     /usr/local/bin/install_ifupdown2.sh
     /usr/local/bin/clear_interface_route_cache.sh
+    /etc/sysctl.d/99-oneclickvirt-pve-ipv6.conf
+    /etc/network/if-up.d/99-oneclickvirt-ipv6-sysctl
 )
 for f in "${pve_local_files[@]}"; do
     [ -f "$f" ] && rm -f "$f" && _green "Removed $f."

@@ -123,7 +123,6 @@ load_default_config() {
 get_ipv6_info() {
     if [ -f /usr/local/bin/pve_check_ipv6 ]; then
         host_ipv6_address=$(cat /usr/local/bin/pve_check_ipv6)
-        ipv6_address_without_last_segment="${host_ipv6_address%:*}:"
     fi
     if [ -f /usr/local/bin/pve_ipv6_prefixlen ]; then
         ipv6_prefixlen=$(cat /usr/local/bin/pve_ipv6_prefixlen)

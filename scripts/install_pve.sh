@@ -850,9 +850,201 @@ is_private_ipv6() {
     ! is_public_ipv6 "${1:-}"
 }
 
+# Keep IPv6 probes tied to iproute2's JSON fields. Human-readable ip,
+# ifconfig, rdisc6 and sipcalc output can be colored or translated, and a
+# router advertisement does not prove that a host /128 owns the whole /64.
+pve_ipv6_json_probe() {
+    local mode="$1" selected_interface="${2:-}" replacement_interface="${3:-}" payload
+    case "$mode" in
+        addresses|address_bindings|linklocal)
+            if [ "${PVE_IPV6_ADDRESS_JSON_OVERRIDE+x}" = x ]; then
+                payload="$PVE_IPV6_ADDRESS_JSON_OVERRIDE"
+            else
+                payload=$(LC_ALL=C NO_COLOR=1 ip -j -6 addr show) || return 1
+            fi
+            ;;
+        gateway|default_interface|default_routes_restore)
+            if [ "${PVE_IPV6_ROUTE_JSON_OVERRIDE+x}" = x ]; then
+                payload="$PVE_IPV6_ROUTE_JSON_OVERRIDE"
+            else
+                payload=$(LC_ALL=C NO_COLOR=1 ip -j -6 route show default) || return 1
+            fi
+            ;;
+        interfaces) payload=$(LC_ALL=C NO_COLOR=1 ip -d -j link show) || return 1 ;;
+        *) return 1 ;;
+    esac
+    PVE_IPV6_PROBE_JSON="$payload" python3 - "$mode" "$selected_interface" "$replacement_interface" <<'PY'
+import ipaddress
+import json
+import os
+import re
+import sys
+
+mode, selected, replacement = sys.argv[1:]
+raw = re.sub(r'\x1b\[[0-?]*[ -/]*[@-~]', '', os.environ['PVE_IPV6_PROBE_JSON'])
+interface_pattern = re.compile(r'[A-Za-z0-9_.:-]{1,15}')
+
+def route_hops(row):
+    hops = row.get('nexthops') or row.get('multipath')
+    if hops is None:
+        return [row]
+    if not isinstance(hops, list) or not hops:
+        raise ValueError('invalid default route nexthops')
+    return hops
+
+try:
+    rows = json.loads(raw)
+    if not isinstance(rows, list):
+        raise ValueError('invalid iproute2 JSON')
+    if mode in ('gateway', 'default_interface', 'default_routes_restore'):
+        candidates = [row for row in rows if row.get('dst') in (None, '', 'default')]
+        candidates.sort(key=lambda row: row.get('dev') != selected if selected else False)
+        for row in candidates:
+            if mode == 'default_interface':
+                devices = [row.get('dev', '')]
+                devices.extend(hop.get('dev', '') for hop in route_hops(row))
+                device = next((value for value in devices if interface_pattern.fullmatch(value or '')), '')
+                if device:
+                    print(device)
+                    break
+            elif mode == 'gateway':
+                for hop in route_hops(row):
+                    device = hop.get('dev') or row.get('dev', '')
+                    gateway = hop.get('gateway') or row.get('gateway', '')
+                    if selected and device and device != selected:
+                        continue
+                    if gateway:
+                        print(ipaddress.IPv6Address(gateway))
+                        raise SystemExit(0)
+            else:
+                if row.get('type') not in (None, '', 'unicast'):
+                    continue
+                metric = row.get('metric')
+                if metric is not None and (not isinstance(metric, int) or metric < 0):
+                    raise ValueError('invalid default route metric')
+                hops = route_hops(row)
+                tokens = ['-6', 'route', 'replace', 'default']
+                if len(hops) > 1 and metric is not None:
+                    tokens.extend(['metric', str(metric)])
+                for hop in hops:
+                    device = hop.get('dev') or row.get('dev') or selected
+                    if not interface_pattern.fullmatch(device or ''):
+                        raise ValueError('invalid default route interface')
+                    if device == selected and replacement:
+                        device = replacement
+                    if len(hops) > 1:
+                        tokens.append('nexthop')
+                    gateway = hop.get('gateway') or row.get('gateway', '')
+                    gateway_address = ipaddress.IPv6Address(gateway) if gateway else None
+                    if gateway:
+                        tokens.extend(['via', gateway_address.compressed])
+                    tokens.extend(['dev', device])
+                    flags = hop.get('flags') or row.get('flags') or []
+                    if isinstance(flags, str):
+                        flags = [flags]
+                    if len(hops) > 1:
+                        weight = hop.get('weight', 1)
+                        if not isinstance(weight, int) or not 1 <= weight <= 256:
+                            raise ValueError('invalid default route nexthop weight')
+                        tokens.extend(['weight', str(weight)])
+                    if 'onlink' in flags or (gateway_address and gateway_address.is_link_local):
+                        tokens.append('onlink')
+                if len(hops) == 1 and metric is not None:
+                    tokens.extend(['metric', str(metric)])
+                print(' '.join(tokens))
+    elif mode == 'interfaces':
+        for row in rows:
+            device = row.get('ifname', '')
+            kind = (row.get('linkinfo') or {}).get('info_kind', '')
+            if kind in {'bridge', 'veth', 'dummy', 'macvlan', 'ipvlan', 'sit', 'tun', 'tap'}:
+                continue
+            if device != 'lo' and interface_pattern.fullmatch(device):
+                print(device)
+    else:
+        for row in rows:
+            device = row.get('ifname', '')
+            if selected and device != selected:
+                continue
+            for info in row.get('addr_info', []):
+                if info.get('family') != 'inet6' or info.get('tentative') or info.get('dadfailed'):
+                    continue
+                if {'tentative', 'dadfailed'} & set(info.get('flags') or []):
+                    continue
+                address = ipaddress.IPv6Address(info['local'])
+                prefix = info['prefixlen']
+                if not isinstance(prefix, int) or not 0 <= prefix <= 128:
+                    raise ValueError('invalid IPv6 prefix')
+                if mode == 'addresses' and info.get('scope') == 'global' and address.is_global:
+                    print(f'{address}/{prefix}')
+                if mode == 'address_bindings' and info.get('scope') == 'global' and address.is_global:
+                    if not interface_pattern.fullmatch(device):
+                        raise ValueError('invalid interface for global IPv6 address')
+                    print(f'{device}\t{address}/{prefix}')
+                if mode == 'linklocal' and address.is_link_local:
+                    print(f'{address}/{prefix}')
+except (KeyError, TypeError, ValueError, json.JSONDecodeError):
+    raise SystemExit(1)
+PY
+}
+
+# ifupdown2 can temporarily remove the live IPv6 address while a physical NIC
+# is moved under vmbr0. Recover only the exact, validated static configuration
+# for that NIC; never infer a /64 from an address or translated command text.
+pve_configured_ipv6_triplet() {
+    local selected_interface="${1:-}" interfaces_file="${PVE_NETWORK_INTERFACES_FILE:-/etc/network/interfaces}"
+    local interfaces_dir="${PVE_NETWORK_INTERFACES_DIR:-/etc/network/interfaces.d}"
+    validate_interface_value "$selected_interface" || return 1
+    python3 - "$selected_interface" "$interfaces_file" "$interfaces_dir/50-cloud-init" <<'PY'
+import ipaddress
+import pathlib
+import sys
+
+selected = sys.argv[1]
+for filename in sys.argv[2:]:
+    path = pathlib.Path(filename)
+    if not path.is_file():
+        continue
+    active = False
+    address = gateway = prefix = None
+    for raw in list(path.read_text(errors="replace").splitlines()) + ["iface __end__ inet6 manual"]:
+        line = raw.split("#", 1)[0].strip()
+        fields = line.split()
+        if not fields:
+            continue
+        if fields[0] == "iface":
+            if active and address and gateway:
+                try:
+                    candidate = ipaddress.IPv6Interface(address if "/" in address else f"{address}/{prefix}")
+                    next_hop = ipaddress.IPv6Address(gateway)
+                except (ValueError, TypeError):
+                    pass
+                else:
+                    if candidate.ip.is_global and (next_hop.is_global or next_hop.is_link_local):
+                        print(f"{candidate.ip.compressed}\t{candidate.network.prefixlen}\t{next_hop.compressed}")
+                        raise SystemExit(0)
+            active = len(fields) >= 4 and fields[1] == selected and fields[2:4] == ["inet6", "static"]
+            address = gateway = prefix = None
+        elif active and len(fields) == 2:
+            if fields[0] == "address":
+                address = fields[1]
+            elif fields[0] in ("netmask", "prefixlen"):
+                prefix = fields[1]
+            elif fields[0] == "gateway":
+                gateway = fields[1]
+raise SystemExit(1)
+PY
+}
+
 check_ipv6() {
-    local ipv6_list candidate gateway_prefix
-    ipv6_list=$(ip -o -6 addr show scope global 2>/dev/null | awk '$0 !~ / tentative/ {print $4}')
+    local ipv6_list candidate gateway_prefix configured
+    ipv6_list=$(pve_ipv6_json_probe addresses "${interface:-}") || return 1
+    if [ -z "$ipv6_list" ]; then
+        ipv6_list=$(pve_ipv6_json_probe addresses) || return 1
+    fi
+    if [ -z "$ipv6_list" ]; then
+        configured=$(pve_configured_ipv6_triplet "${interface:-}" 2>/dev/null || true)
+        [ -z "$configured" ] || ipv6_list="${configured%%$'\t'*}/$(printf '%s' "$configured" | cut -f2)"
+    fi
     IPV6=""
     while IFS= read -r candidate; do
         candidate=${candidate%/*}
@@ -1115,7 +1307,7 @@ check_interface() {
             interface=${interface_2}
             return
         else
-            interfaces_list=$(ip addr show | awk '/^[0-9]+: [^lo]/ {print $2}' | cut -d ':' -f 1)
+            interfaces_list=$(pve_ipv6_json_probe interfaces) || return 1
             interface=""
             for iface in $interfaces_list; do
                 if [[ "$iface" = "$interface_1" || "$iface" = "$interface_2" ]]; then
@@ -1859,10 +2051,7 @@ build_interface_candidates() {
     add_interface_candidate "$interface_2"
     while IFS= read -r iface; do
         add_interface_candidate "$iface"
-    done < <(lshw -C network 2>/dev/null | awk '/logical name:/{print $3}')
-    while IFS= read -r iface; do
-        add_interface_candidate "$iface"
-    done < <(ip -o link show 2>/dev/null | awk -F': ' '{print $2}' | cut -d@ -f1)
+    done < <(pve_ipv6_json_probe interfaces 2>/dev/null)
 }
 
 sync_selected_network_info() {
@@ -2040,9 +2229,21 @@ confirm_main_network_interface() {
 
 # 检测网络接口和MAC地址
 detect_network_interfaces() {
-    # 检测物理接口
-    interface_1=$(lshw -C network | awk '/logical name:/{print $3}' | sed -n '1p')
-    interface_2=$(lshw -C network | awk '/logical name:/{print $3}' | sed -n '2p')
+    # iproute2 JSON does not depend on lshw's display language or ANSI color.
+    local detected_interfaces preferred_interface candidate
+    detected_interfaces=$(pve_ipv6_json_probe interfaces) || return 1
+    preferred_interface=$(pve_ipv6_json_probe default_interface 2>/dev/null || true)
+    if [ -n "$preferred_interface" ] && ! grep -Fxq "$preferred_interface" <<<"$detected_interfaces"; then
+        preferred_interface=""
+    fi
+    interface_1="${preferred_interface:-$(printf '%s\n' "$detected_interfaces" | head -n 1)}"
+    interface_2=""
+    while IFS= read -r candidate; do
+        if [ -n "$candidate" ] && [ "$candidate" != "$interface_1" ]; then
+            interface_2="$candidate"
+            break
+        fi
+    done <<<"$detected_interfaces"
     check_interface
     confirm_main_network_interface
 
@@ -2071,8 +2272,13 @@ setup_persistent_network_interface() {
 
 # 获取IPV6网关信息
 get_ipv6_gateway() {
+    local configured
     if ! ipv6_gateway=$(read_network_state /usr/local/bin/pve_ipv6_gateway validate_ipv6_value 2>/dev/null) || [[ "$ipv6_gateway" == */* ]]; then
-        ipv6_gateway=$(ip -6 route show | awk '/default via/{print $3; exit}')
+        ipv6_gateway=$(pve_ipv6_json_probe gateway "${interface:-}") || return 1
+        if [ -z "$ipv6_gateway" ]; then
+            configured=$(pve_configured_ipv6_triplet "${interface:-}" 2>/dev/null || true)
+            [ -z "$configured" ] || ipv6_gateway="${configured##*$'\t'}"
+        fi
         if [ -n "$ipv6_gateway" ] && validate_ipv6_value "$ipv6_gateway" && [[ "$ipv6_gateway" != */* ]]; then
             write_network_state_atomic /usr/local/bin/pve_ipv6_gateway "$ipv6_gateway" validate_ipv6_value || return 1
         else
@@ -2085,7 +2291,7 @@ get_ipv6_gateway() {
 # 获取fe80地址
 get_fe80_address() {
     if ! fe80_address=$(read_network_state /usr/local/bin/pve_fe80_address validate_ipv6_value 2>/dev/null); then
-        fe80_address=$(ip -6 addr show dev "$interface" | awk '/inet6 fe80/ {print $2; exit}')
+        fe80_address=$(pve_ipv6_json_probe linklocal "$interface" | head -n 1) || return 1
         if [ -n "$fe80_address" ] && validate_ipv6_value "$fe80_address"; then
             write_network_state_atomic /usr/local/bin/pve_fe80_address "$fe80_address" validate_ipv6_value || return 1
         else
@@ -2097,60 +2303,21 @@ get_fe80_address() {
 
 # 获取IPV6前缀长度
 get_ipv6_prefixlen() {
-    if ! ipv6_prefixlen=$(read_network_state /usr/local/bin/pve_ipv6_prefixlen validate_ipv6_prefixlen_value 2>/dev/null); then
-        ipv6_prefixlen=""
-        output=$(ifconfig ${interface} | grep -oP 'inet6 (?!fe80:).*prefixlen \K\d+')
-        num_lines=$(echo "$output" | wc -l)
-        if [ $num_lines -ge 2 ]; then
-            ipv6_prefixlen=$(echo "$output" | sort -n | head -n 1)
-        else
-            ipv6_prefixlen=$(echo "$output" | head -n 1)
-        fi
-        if command -v rdisc6 >/dev/null 2>&1 && [ ! -f /usr/local/bin/pve_ipv6_real_prefixlen ]; then
-            _blue "Attempting to get real IPv6 prefix from router advertisement..."
-            _green "尝试从路由器通告中获取真实的 IPv6 前缀..."
-            _blue "Using network interface: ${interface}"
-            _green "正在使用网络接口: ${interface}"
-            rdisc6_output=$(timeout 10 rdisc6 ${interface} 2>/dev/null)
-            if [ -n "$rdisc6_output" ]; then
-                real_prefixlen=$(echo "$rdisc6_output" | grep -i "Prefix" | grep -oP '[:：]\s*[0-9a-fA-F:]+/\K\d+' | head -n 1)
-                if [ -n "$real_prefixlen" ] && [ "$real_prefixlen" -gt 0 ] && [ "$real_prefixlen" -le 128 ]; then
-                    _green "Found real IPv6 prefix length from router advertisement: /$real_prefixlen"
-                    _green "从路由器通告中发现真实的 IPv6 前缀长度: /$real_prefixlen"
-                    if [ -n "$ipv6_prefixlen" ] && [ "$ipv6_prefixlen" -gt "$real_prefixlen" ]; then
-                        _yellow "Warning: Current interface prefix /$ipv6_prefixlen is smaller than router advertised /$real_prefixlen"
-                        _yellow "警告: 当前接口前缀 /$ipv6_prefixlen 小于路由器通告的 /$real_prefixlen"
-                        _blue "Using the larger prefix /$real_prefixlen from router advertisement"
-                        _green "将使用路由器通告的更大前缀 /$real_prefixlen"
-                        ipv6_prefixlen="$real_prefixlen"
-                    elif [ -z "$ipv6_prefixlen" ]; then
-                        ipv6_prefixlen="$real_prefixlen"
-                    fi
-                    write_network_state_atomic /usr/local/bin/pve_ipv6_real_prefixlen "$real_prefixlen" validate_ipv6_prefixlen_value || return 1
-                else
-                    _yellow "Could not parse IPv6 prefix length on interface ${interface}"
-                    _yellow "无法从接口 ${interface} 中解析 IPv6 前缀长度"
-                fi
-            else
-                _yellow "Could not get router advertisement response on interface ${interface} (timeout or no response)"
-                _yellow "无法在接口 ${interface} 获取路由器通告响应(超时或无响应)"
-            fi
-        fi
-        
-        if validate_prefixlen_value "$ipv6_prefixlen" 128; then
-            write_network_state_atomic /usr/local/bin/pve_ipv6_prefixlen "$ipv6_prefixlen" validate_ipv6_prefixlen_value || return 1
-        else
-            ipv6_prefixlen=""
-            rm -f /usr/local/bin/pve_ipv6_prefixlen
+    local addresses configured configured_address configured_prefix configured_gateway
+    addresses=$(pve_ipv6_json_probe addresses "${interface:-}") || return 1
+    ipv6_prefixlen=$(printf '%s\n' "$addresses" | awk -F/ -v selected="${ipv6_address:-}" 'NF == 2 && $1 == selected {print $2; exit}')
+    if [ -z "$ipv6_prefixlen" ]; then
+        configured=$(pve_configured_ipv6_triplet "${interface:-}" 2>/dev/null || true)
+        IFS=$'\t' read -r configured_address configured_prefix configured_gateway <<<"$configured"
+        if [ -n "$configured_address" ] && [ "$configured_address" = "${ipv6_address:-}" ]; then
+            ipv6_prefixlen="$configured_prefix"
         fi
     fi
-    if real_prefixlen=$(read_network_state /usr/local/bin/pve_ipv6_real_prefixlen validate_ipv6_prefixlen_value 2>/dev/null); then
-        ipv6_prefixlen="$real_prefixlen"
-        _blue "Using real IPv6 prefix length: /$ipv6_prefixlen"
-        _green "检测到的真实 IPv6 前缀长度: /$ipv6_prefixlen"
+    if [ -n "$ipv6_prefixlen" ]; then
+        validate_ipv6_prefixlen_value "$ipv6_prefixlen" || return 1
         write_network_state_atomic /usr/local/bin/pve_ipv6_prefixlen "$ipv6_prefixlen" validate_ipv6_prefixlen_value || return 1
     else
-        ipv6_prefixlen=$(read_network_state /usr/local/bin/pve_ipv6_prefixlen validate_ipv6_prefixlen_value 2>/dev/null || true)
+        rm -f /usr/local/bin/pve_ipv6_prefixlen /usr/local/bin/pve_ipv6_real_prefixlen
     fi
 }
 
@@ -2211,27 +2378,9 @@ ask_maximum_subnet() {
 
 # 重构IPV6地址
 rebuild_ipv6_address() {
-    if [ ! -f /usr/local/bin/pve_maximum_subset ] || [ $(cat /usr/local/bin/pve_maximum_subset) = true ]; then
-        ipv6_address_without_last_segment="${ipv6_address%:*}:"
-        if [[ $ipv6_address != *:: && $ipv6_address_without_last_segment != *:: ]]; then
-            ipv6_address=$(sipcalc -i ${ipv6_address}/${ipv6_prefixlen} | grep "Subnet prefix (masked)" | cut -d ' ' -f 4 | cut -d '/' -f 1 | sed 's/:0:0:0:0:/::/' | sed 's/:0:0:0:/::/')
-            ipv6_address="${ipv6_address%:*}:1"
-            if [ "$ipv6_address" == "$ipv6_gateway" ]; then
-                ipv6_address="${ipv6_address%:*}:2"
-            fi
-            ipv6_address_without_last_segment="${ipv6_address%:*}:"
-            if ping -c 1 -6 -W 3 $ipv6_address >/dev/null 2>&1; then
-                check_ipv6
-                ipv6_address=$(read_network_state /usr/local/bin/pve_check_ipv6 validate_ipv6_value 2>/dev/null || true)
-            fi
-        elif [[ $ipv6_address == *:: ]]; then
-            ipv6_address="${ipv6_address}1"
-            if [ "$ipv6_address" == "$ipv6_gateway" ]; then
-                ipv6_address="${ipv6_address%:*}:2"
-            fi
-            write_network_state_atomic /usr/local/bin/pve_check_ipv6 "$ipv6_address" validate_ipv6_value || return 1
-        fi
-    fi
+    # Preserve the exact public address assigned to the host. The subnet's
+    # ::1 may belong to another machine, regardless of prefix length.
+    validate_ipv6_value "$ipv6_address"
 }
 
 # 检查并配置cloud-init
@@ -2347,19 +2496,19 @@ install_base_packages
 handle_special_environments
 check_system_requirements
 detect_system_info
-detect_network_interfaces
-get_ipv6_gateway
+detect_network_interfaces || exit 1
+get_ipv6_gateway || exit 1
 if ! ipv6_address=$(read_network_state /usr/local/bin/pve_check_ipv6 validate_ipv6_value 2>/dev/null); then
-    check_ipv6
+    check_ipv6 || exit 1
     ipv6_address=$(read_network_state /usr/local/bin/pve_check_ipv6 validate_ipv6_value 2>/dev/null || true)
 fi
-get_fe80_address
+get_fe80_address || exit 1
 if [[ $ipv6_gateway == fe80* ]]; then
     ipv6_gateway_fe80="Y"
 else
     ipv6_gateway_fe80="N"
 fi
-get_ipv6_prefixlen
+get_ipv6_prefixlen || exit 1
 ipv6_address=$(read_network_state /usr/local/bin/pve_check_ipv6 validate_ipv6_value 2>/dev/null || true)
 ipv6_gateway=$(read_network_state /usr/local/bin/pve_ipv6_gateway validate_ipv6_value 2>/dev/null || true)
 if [ -z "$ipv6_address" ] || [ -z "$ipv6_prefixlen" ] || [ -z "$ipv6_gateway" ]; then
@@ -2368,7 +2517,7 @@ if [ -z "$ipv6_address" ] || [ -z "$ipv6_prefixlen" ] || [ -z "$ipv6_gateway" ];
 else
     check_slaac_status
     ask_maximum_subnet
-    rebuild_ipv6_address
+    rebuild_ipv6_address || exit 1
 fi
 configure_cloud_init
 create_network_interfaces

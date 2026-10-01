@@ -34,6 +34,9 @@ eval "$(extract_function write_network_state_atomic)"
 eval "$(extract_function read_network_state)"
 eval "$(extract_function is_public_ipv6)"
 eval "$(extract_function is_private_ipv6)"
+eval "$(extract_function pve_ipv6_json_probe)"
+eval "$(extract_function pve_ipv6_configured_alias_addresses)"
+eval "$(extract_function pve_he_bridge_cidr)"
 eval "$(extract_function check_ipv6)"
 eval "$(extract_function select_nat_ipv4_subnet)"
 eval "$(extract_function pve_nat_ipv6_candidate_is_safe)"
@@ -42,6 +45,8 @@ eval "$(extract_function pve_save_direct_ipv6_config)"
 eval "$(extract_function pve_vmbr0_owns_interface)"
 eval "$(extract_function pve_ipv6_uplink_interface)"
 eval "$(extract_function pve_direct_ndp_interface)"
+eval "$(extract_function pve_network_bridge_exists)"
+eval "$(extract_function pve_install_ipv6_ifup_hook)"
 eval "$(extract_function configure_ipv6_forwarding)"
 
 _green() { :; }
@@ -55,6 +60,56 @@ assert_eq() {
     fi
 }
 
+# The tunnel address, any other live host address, and unrelated host routes
+# must remain outside the chosen guest bridge subnet. JSON stays parseable
+# when the terminal has colored output or the host language changes.
+he_routes=$'\033[32m[{"type":"local","dst":"local","dev":"lo"},{"type":"multicast","dst":"multicast","dev":"eth0"},{"gateway":"fe80::1","dev":"eth0"},{"dst":"2001:470:1234::/64","dev":"he-ipv6"},{"dst":"2001:470:1234:0:100::/72","dev":"eth1"}]\033[0m'
+assert_eq '2001:470:1234:0:200::1/72' \
+    "$(pve_he_bridge_cidr '2001:470:1234::2/64' '2001:470:1234::1' '2001:470:1234::2/64' "$he_routes")" \
+    'HE /64 skips tunnel host, gateway, and occupied child'
+wide_choice=$(pve_he_bridge_cidr '2a14:7c0:1002:10f8::1/38' '2a14:7c0:1002:10f8::2' \
+    '2a14:7c0:1002:10f8::1/38' '[{"dst":"2a14:7c0:1000::/38","dev":"he-ipv6"}]')
+python3 - "$wide_choice" <<'PY'
+import ipaddress
+import sys
+child = ipaddress.IPv6Interface(sys.argv[1]).network
+assert child.prefixlen == 40
+assert ipaddress.IPv6Address('2a14:7c0:1002:10f8::1') not in child
+PY
+assert_eq '2001:470:1234::101/120' \
+    "$(pve_he_bridge_cidr '2001:470:1234::2/119' '2001:470:1234::1' '2001:470:1234::2/119' \
+        '[{"dst":"2001:470:1234::/119","dev":"he-ipv6"}]')" \
+    'HE /119 uses its other /120 child'
+
+cat >"${tmp_dir}/ipv6-aliases" <<'EOF'
+# control-alias eth0:1
+iface eth0:1 inet6 static
+    address 2a01:4f8:c014:1a63::10/64
+# control-alias eth0:2
+iface eth0:2 inet6 static
+    address 2a14:7c0:1002:10f8::10/38
+# control-alias eth0:3
+iface eth0:3 inet6 static
+    address 2a01:4f8:c014:1a63:1234::10/80
+# control-alias eth0:4
+iface eth0:4 inet6 static
+    address 2a01:4f8:c014:1a63::20/120
+# control-alias eth0:5
+iface eth0:5 inet static
+    address 198.51.100.10/24
+EOF
+assert_eq $'2a01:4f8:c014:1a63::10\n2a14:7c0:1002:10f8::10\n2a01:4f8:c014:1a63:1234::10\n2a01:4f8:c014:1a63::20' \
+    "$(pve_ipv6_configured_alias_addresses "${tmp_dir}/ipv6-aliases")" \
+    'IPv6 alias parser preserves variable prefix lengths and skips IPv4'
+
+for narrow in 120 127 128; do
+    if pve_he_bridge_cidr "2001:470:1234::2/${narrow}" '2001:470:1234::1' \
+        "2001:470:1234::2/${narrow}" '[]' >/dev/null 2>&1; then
+        printf 'FAIL: HE /%s offered an undersized guest bridge\n' "$narrow" >&2
+        exit 1
+    fi
+done
+
 # Avoid touching the test runner network while exercising the real selector.
 ipcalc() {
     [ "${1:-}" = "-c" ] && validate_ipv4_network24_value "${2:-}"
@@ -66,6 +121,26 @@ pve_ipv6_link_interfaces="vmbr0 eth0"
 export PVE_NETWORK_INTERFACES_FILE="${tmp_dir}/interfaces"
 : >"$PVE_NETWORK_INTERFACES_FILE"
 ip() {
+    if [[ "$*" == "-j -6 route show default" ]]; then
+        if [ -n "$pve_default_ipv6_interface" ]; then
+            printf '[{"dst":"default","dev":"%s","gateway":"fe80::1"}]\n' "$pve_default_ipv6_interface"
+        else
+            printf '%s\n' '[]'
+        fi
+        return 0
+    fi
+    if [[ "$*" == "-j -6 addr show" ]]; then
+        if [ -n "$nat_ipv6_addresses" ]; then
+            printf '%s\n' "$nat_ipv6_addresses"
+        else
+            printf '%s\n' '[{"ifname":"eth0","addr_info":[{"family":"inet6","local":"2606:4700::1111","prefixlen":64,"scope":"global"}]}]'
+        fi
+        return 0
+    fi
+    if [[ "$*" == "-j -6 route show table all" ]]; then
+        printf '%s\n' "${nat_ipv6_routes:-[]}"
+        return 0
+    fi
     if [[ "$*" == "-6 route show default" ]]; then
         if [ -n "$pve_default_ipv6_interface" ]; then
             printf 'default via fe80::1 dev %s proto ra metric 1024\n' "$pve_default_ipv6_interface"
@@ -119,8 +194,8 @@ assert_eq "172.16.1.0/24" "$(cat "$PVE_STATE_DIR/pve_nat_subnet")" "polluted sta
 assert_eq "172.16.1.1" "$(cat "$PVE_STATE_DIR/pve_nat_gateway")" "rotated NAT gateway"
 
 unset PVE_NAT_IPV6_SUBNET
-nat_ipv6_addresses='2: eth0    inet6 2605:52c0:2:14b:be24:11ff:fe6e:d967/64 scope global dynamic'
-nat_ipv6_routes=$'2605:52c0:2:14b::/64 dev eth0 proto kernel metric 256\n::/0 via fe80::6016:20ff:fe1a:d6dd dev eth0 metric 1024'
+nat_ipv6_addresses='[{"ifname":"eth0","addr_info":[{"family":"inet6","local":"2605:52c0:2:14b:be24:11ff:fe6e:d967","prefixlen":64,"scope":"global"}]}]'
+nat_ipv6_routes='[{"dst":"2605:52c0:2:14b::/64","dev":"eth0"},{"dst":"default","gateway":"fe80::6016:20ff:fe1a:d6dd","dev":"eth0"}]'
 select_nat_ipv6_subnet
 assert_eq "fd42:5339:296f:1f00::/64" "$(cat "$PVE_STATE_DIR/pve_nat_ipv6_subnet")" "automatic ULA NAT subnet"
 assert_eq "fd42:5339:296f:1f00::1" "$(cat "$PVE_STATE_DIR/pve_nat_ipv6_gateway")" "automatic ULA NAT gateway"
@@ -134,7 +209,7 @@ fi
 assert_eq "$old_ipv6_subnet" "$(cat "$PVE_STATE_DIR/pve_nat_ipv6_subnet")" "rejected public IPv6 prefix preserves state"
 
 export PVE_NAT_IPV6_SUBNET='fd42:beef:1234:100::/64'
-nat_ipv6_routes=$'fd42:beef:1234::/48 dev eth0 proto static\n2605:52c0:2:14b::/64 dev eth0 proto kernel'
+nat_ipv6_routes='[{"dst":"fd42:beef:1234::/48","dev":"eth0"},{"dst":"2605:52c0:2:14b::/64","dev":"eth0"}]'
 if select_nat_ipv6_subnet >/dev/null 2>&1; then
     printf 'FAIL: ULA child of host IPv6 route was accepted for PVE NAT\n' >&2
     exit 1
@@ -142,8 +217,8 @@ fi
 
 unset PVE_NAT_IPV6_SUBNET
 printf '%s\n' 'fd42:5339:296f:1f07::/64' >"$PVE_STATE_DIR/pve_nat_ipv6_subnet"
-nat_ipv6_addresses=$'2: eth0    inet6 2605:52c0:2:14b:be24:11ff:fe6e:d967/64 scope global dynamic\n10: vmbr1    inet6 fd42:5339:296f:1f07::1/64 scope global'
-nat_ipv6_routes=$'2605:52c0:2:14b::/64 dev eth0 proto kernel\nfd42:5339:296f:1f07::/64 dev vmbr1 proto kernel\nlocal fd42:5339:296f:1f07::1 dev vmbr1 table local'
+nat_ipv6_addresses='[{"ifname":"eth0","addr_info":[{"family":"inet6","local":"2605:52c0:2:14b:be24:11ff:fe6e:d967","prefixlen":64,"scope":"global"}]},{"ifname":"vmbr1","addr_info":[{"family":"inet6","local":"fd42:5339:296f:1f07::1","prefixlen":64,"scope":"global"}]}]'
+nat_ipv6_routes='[{"dst":"2605:52c0:2:14b::/64","dev":"eth0"},{"dst":"fd42:5339:296f:1f07::/64","dev":"vmbr1"},{"dst":"fd42:5339:296f:1f07::1","dev":"vmbr1","type":"local"}]'
 select_nat_ipv6_subnet
 assert_eq "fd42:5339:296f:1f07::/64" "$(cat "$PVE_STATE_DIR/pve_nat_ipv6_subnet")" "active vmbr1 ULA subnet remains stable"
 
@@ -219,7 +294,8 @@ for ipv6_script in "$repo_root/scripts/build_nat_network.sh" "$repo_root/scripts
         printf 'FAIL: %s check_ipv6 must not use an external address service\n' "$ipv6_script" >&2
         exit 1
     fi
-    if ! grep -Fq 'ip -o -6 addr show scope global' <<<"$ipv6_check"; then
+    if ! grep -Fq 'ip -o -6 addr show scope global' <<<"$ipv6_check" &&
+       ! { grep -Fq 'pve_ipv6_json_probe addresses' <<<"$ipv6_check" && grep -Fq 'ip -j -6 addr show' "$ipv6_script"; }; then
         printf 'FAIL: %s check_ipv6 must inspect locally bound global IPv6 addresses\n' "$ipv6_script" >&2
         exit 1
     fi
@@ -282,11 +358,22 @@ pve_ipv6_link_interfaces="eth0 vmbr0"
 assert_eq vmbr0 "$(pve_ipv6_uplink_interface)" "bridged IPv6 uplink migration"
 assert_eq vmbr0 "$(pve_direct_ndp_interface bridge)" "bridged NDP uplink migration"
 
+export PVE_IPV6_IFUP_HOOK_FILE="$tmp_dir/if-up.d/99-oneclickvirt-ipv6-sysctl"
+export PVE_IPV6_SYSCTL_CONFIG_FILE="$tmp_dir/sysctl.d/99-oneclickvirt-pve-ipv6.conf"
+export PVE_SYSCTL_LEGACY_FILE="$tmp_dir/no-legacy-sysctl.conf"
+export PVE_IPV6_PROC_CONF_ROOT="$tmp_dir/proc/net/ipv6/conf"
+mkdir -p "$PVE_IPV6_PROC_CONF_ROOT/eth0"
+: >"$PVE_IPV6_PROC_CONF_ROOT/eth0/accept_ra"
 captured_sysctls=()
+sysctl() {
+    captured_sysctls+=("runtime:$*")
+}
 update_sysctl() {
     captured_sysctls+=("$1")
 }
 configure_ipv6_forwarding vmbr2
+assert_eq 'runtime:-w net.ipv6.conf.eth0.accept_ra=2' "${captured_sysctls[0]}" \
+    'first install protects the current physical uplink before forwarding'
 printf '%s\n' "${captured_sysctls[@]}" | grep -Fqx 'net.ipv6.conf.vmbr0.accept_ra=2' || {
     printf 'FAIL: PVE bridged IPv6 migration did not preserve RA on vmbr0\n' >&2
     exit 1
@@ -315,6 +402,45 @@ if printf '%s\n' "${captured_sysctls[@]}" | grep -Fqx 'net.ipv6.conf.vmbr0.accep
     exit 1
 fi
 
+# A bridge configured for the next reload does not yet have a /proc sysctl.
+# Its value must persist and the if-up hook must apply it on first creation.
+cat >>"$PVE_NETWORK_INTERFACES_FILE" <<'EOF'
+auto vmbr0
+iface vmbr0 inet static
+    bridge_ports eth0
+auto vmbr1
+iface vmbr1 inet6 static
+    bridge_ports none
+EOF
+eval "$(extract_function update_sysctl)"
+update_sysctl 'net.ipv6.conf.vmbr0.accept_ra=2'
+update_sysctl 'net.ipv6.conf.vmbr1.proxy_ndp=1'
+printf '%s\n' 'net.ipv6.conf.vmbr0.accept_ra=2' | grep -Fqxf "$PVE_IPV6_SYSCTL_CONFIG_FILE" || {
+    printf 'FAIL: PVE did not persist future vmbr0 router advertisements\n' >&2
+    exit 1
+}
+printf '%s\n' 'net.ipv6.conf.vmbr1.proxy_ndp=1' | grep -Fqxf "$PVE_IPV6_SYSCTL_CONFIG_FILE" || {
+    printf 'FAIL: PVE did not persist future vmbr1 NDP proxying\n' >&2
+    exit 1
+}
+mkdir -p "$tmp_dir/bin"
+cat >"$tmp_dir/bin/sysctl" <<'EOF'
+#!/bin/sh
+printf '%s\n' "$*" >>"$PVE_TEST_APPLIED_SYSCTLS"
+EOF
+chmod +x "$tmp_dir/bin/sysctl"
+export PVE_TEST_APPLIED_SYSCTLS="$tmp_dir/applied-sysctls"
+PATH="$tmp_dir/bin:$PATH" IFACE=vmbr0 "$PVE_IPV6_IFUP_HOOK_FILE"
+PATH="$tmp_dir/bin:$PATH" IFACE=vmbr1 "$PVE_IPV6_IFUP_HOOK_FILE"
+grep -Fqx -- '-q -w net.ipv6.conf.vmbr0.accept_ra=2' "$PVE_TEST_APPLIED_SYSCTLS" || {
+    printf 'FAIL: PVE did not reapply vmbr0 RA on first if-up\n' >&2
+    exit 1
+}
+grep -Fqx -- '-q -w net.ipv6.conf.vmbr1.proxy_ndp=1' "$PVE_TEST_APPLIED_SYSCTLS" || {
+    printf 'FAIL: PVE did not reapply vmbr1 NDP on first if-up\n' >&2
+    exit 1
+}
+
 if ! extract_function configure_ipv6_forwarding | grep -Fq 'pve_ipv6_uplink_interface'; then
     printf 'FAIL: PVE IPv6 forwarding must select the actual IPv6 uplink\n' >&2
     exit 1
@@ -335,6 +461,16 @@ if grep -Fq 'post-down sysctl -w net.ipv6.conf.all.forwarding=0' "$network_scrip
     printf 'FAIL: PVE must not disable host IPv6 forwarding when vmbr1 is stopped\n' >&2
     exit 1
 fi
+if ! extract_function configure_vmbr1 | grep -Fq 'configure_ipv6_forwarding vmbr1 || return 1' ||
+   ! grep -Fq 'configure_vmbr1 || exit 1' "$network_script"; then
+    printf 'FAIL: PVE NAT66 setup can continue without preserving host router advertisements\n' >&2
+    exit 1
+fi
+update_sysctl() { return 1; }
+if configure_ipv6_forwarding vmbr1; then
+    printf 'FAIL: PVE ignored a failed host IPv6 sysctl update\n' >&2
+    exit 1
+fi
 captured_ipv6_path=""
 captured_ipv6_value=""
 write_network_state_atomic() {
@@ -346,6 +482,7 @@ curl() {
     : >"$tmp_dir/external-ipv6-lookup"
     return 1
 }
+nat_ipv6_addresses=""
 check_ipv6
 assert_eq "2606:4700::1111" "$IPV6" "locally bound IPv6 selection"
 assert_eq "/usr/local/bin/pve_check_ipv6" "$captured_ipv6_path" "IPv6 state path"

@@ -111,9 +111,18 @@ download_with_retry() {
 }
 
 load_default_config() {
+    if [ -n "${PVE_DEFAULT_VM_CONFIG:-}" ]; then
+        if [ ! -r "$PVE_DEFAULT_VM_CONFIG" ]; then
+            echo "Local VM configuration is not readable: $PVE_DEFAULT_VM_CONFIG" >&2
+            return 1
+        fi
+        . "$PVE_DEFAULT_VM_CONFIG"
+        return $?
+    fi
     local config_url="${cdn_success_url}https://raw.githubusercontent.com/oneclickvirt/pve/main/scripts/default_vm_config.sh"
     local config_file="default_vm_config.sh"
     if download_with_retry "$config_url" "$config_file"; then
+        downloaded_default_config="$config_file"
         . "./$config_file"
     else
         echo -e "\e[31mUnable to load default configuration, script terminated.\e[0m"
@@ -125,7 +134,6 @@ load_default_config() {
 get_ipv6_info() {
     if [ -f /usr/local/bin/pve_check_ipv6 ]; then
         host_ipv6_address=$(cat /usr/local/bin/pve_check_ipv6)
-        ipv6_address_without_last_segment="${host_ipv6_address%:*}:"
     fi
     if [ -f /usr/local/bin/pve_ipv6_prefixlen ]; then
         ipv6_prefixlen=$(cat /usr/local/bin/pve_ipv6_prefixlen)
@@ -291,4 +299,6 @@ main() {
 }
 
 main "$@"
-rm -rf default_vm_config.sh
+if [ -n "${downloaded_default_config:-}" ]; then
+    rm -f -- "$downloaded_default_config"
+fi

@@ -20,63 +20,55 @@ load_nat_ipv4_config() {
     pve_load_direct_ipv6_config || return 1
 }
 pve_nat_ipv6_candidate_is_safe() {
-    local candidate="${1:-}" host_state
+    local candidate="${1:-}" address_json route_json
     command -v python3 >/dev/null 2>&1 || return 1
-    host_state="$(
-        {
-            ip -o -6 addr show 2>/dev/null || true
-            ip -6 route show table all 2>/dev/null || true
-        }
-    )"
-    python3 - "$candidate" "$host_state" <<'PY' >/dev/null 2>&1
+    address_json=$(LC_ALL=C NO_COLOR=1 ip -j -6 addr show) || return 1
+    route_json=$(LC_ALL=C NO_COLOR=1 ip -j -6 route show table all) || return 1
+    PVE_HOST_IPV6_ADDRESSES="$address_json" PVE_HOST_IPV6_ROUTES="$route_json" \
+        python3 - "$candidate" <<'PYCODE' >/dev/null 2>&1
 import ipaddress
+import json
+import os
+import re
 import sys
 
 try:
     candidate = ipaddress.IPv6Network(sys.argv[1], strict=False)
-except ValueError:
+    if candidate.prefixlen != 64 or not candidate.subnet_of(ipaddress.IPv6Network('fc00::/7')):
+        raise ValueError('not a ULA /64')
+    strip_ansi = lambda raw: re.sub(r'\x1b\[[0-?]*[ -/]*[@-~]', '', raw)
+    addresses = json.loads(strip_ansi(os.environ['PVE_HOST_IPV6_ADDRESSES']))
+    routes = json.loads(strip_ansi(os.environ['PVE_HOST_IPV6_ROUTES']))
+    if not isinstance(addresses, list) or not isinstance(routes, list):
+        raise ValueError('invalid iproute2 JSON')
+    for interface in addresses:
+        device = interface['ifname']
+        for info in interface.get('addr_info', []):
+            if info.get('family') != 'inet6':
+                continue
+            existing = ipaddress.IPv6Interface(f"{info['local']}/{info['prefixlen']}").network
+            if candidate.overlaps(existing) and not (device == 'vmbr1' and existing.subnet_of(candidate)):
+                raise ValueError('host address overlap')
+    for row in routes:
+        destination = row.get('dst', 'default')
+        if not destination or destination == 'default':
+            continue
+        try:
+            existing = ipaddress.IPv6Network(destination, strict=False)
+        except ValueError:
+            if isinstance(destination, str) and destination.split(None, 1)[0] in {
+                'local', 'broadcast', 'multicast', 'unreachable', 'prohibit',
+                'blackhole', 'throw', 'nat', 'cache',
+            }:
+                continue
+            raise
+        if existing.prefixlen == 0:
+            continue
+        if candidate.overlaps(existing) and not (row.get('dev') == 'vmbr1' and existing.subnet_of(candidate)):
+            raise ValueError('host route overlap')
+except (KeyError, TypeError, ValueError, json.JSONDecodeError):
     raise SystemExit(1)
-if candidate.prefixlen != 64 or not candidate.subnet_of(ipaddress.IPv6Network("fc00::/7")):
-    raise SystemExit(1)
-
-def vmbr1_owns(network, device):
-    # The bridge's connected /64 and its local gateway /128 are expected after
-    # installation.  They are not a conflict with the persisted NAT subnet.
-    return device == "vmbr1" and network.subnet_of(candidate)
-
-route_types = {"unreachable", "prohibit", "blackhole", "throw", "local", "broadcast", "anycast", "multicast"}
-for line in sys.argv[2].splitlines():
-    fields = line.split()
-    if not fields:
-        continue
-    if "inet6" in fields:
-        address_index = fields.index("inet6") + 1
-        if address_index >= len(fields):
-            continue
-        device = fields[1].split("@", 1)[0] if len(fields) > 1 else ""
-        token = fields[address_index]
-    else:
-        destination_index = 1 if fields[0] in route_types else 0
-        if destination_index >= len(fields):
-            continue
-        token = fields[destination_index]
-        if token == "default":
-            continue
-        device = ""
-        if "dev" in fields:
-            device_index = fields.index("dev") + 1
-            if device_index < len(fields):
-                device = fields[device_index].split("@", 1)[0]
-    try:
-        existing = ipaddress.IPv6Network(token, strict=False)
-    except ValueError:
-        continue
-    if existing.prefixlen == 0:
-        continue
-    if candidate.overlaps(existing) and not vmbr1_owns(existing, device):
-        raise SystemExit(1)
-raise SystemExit(0)
-PY
+PYCODE
 }
 load_nat_ipv6_config() {
     local state_dir="${PVE_STATE_DIR:-/usr/local/bin}" state_file gateway_file candidate requested index
@@ -223,36 +215,60 @@ PY
 }
 
 pve_direct_ipv6_bridge_cidr() {
-    local value interfaces_file bridge
+    local value interfaces_file bridge payload
     bridge="$(pve_direct_ipv6_bridge)" || return 1
-    value="$(ip -o -6 addr show dev "$bridge" scope global 2>/dev/null | awk '
-        $0 ~ /inet6/ { for (i = 1; i <= NF; i++) if ($i == "inet6") { print $(i + 1); exit } }
-    ' | while IFS= read -r candidate; do
-        if python3 - "$candidate" <<'PY' >/dev/null 2>&1
+    if payload=$(LC_ALL=C NO_COLOR=1 ip -j -6 addr show dev "$bridge" 2>/dev/null); then
+        value=$(PVE_IPV6_BRIDGE_JSON="$payload" python3 - "$bridge" <<'PYCODE'
 import ipaddress
+import json
+import os
+import re
 import sys
+
 try:
-    interface = ipaddress.IPv6Interface(sys.argv[1])
-except ValueError:
+    raw = re.sub(r'\x1b\[[0-?]*[ -/]*[@-~]', '', os.environ['PVE_IPV6_BRIDGE_JSON'])
+    interfaces = json.loads(raw)
+    if not isinstance(interfaces, list):
+        raise ValueError('invalid iproute2 JSON')
+    for row in interfaces:
+        if row.get('ifname') != sys.argv[1]:
+            continue
+        for info in row.get('addr_info', []):
+            if info.get('family') != 'inet6' or info.get('tentative') or info.get('dadfailed'):
+                continue
+            if {'tentative', 'dadfailed'} & set(info.get('flags') or []):
+                continue
+            interface = ipaddress.IPv6Interface(f"{info['local']}/{info['prefixlen']}")
+            if interface.ip.is_global:
+                print(interface)
+                raise SystemExit(0)
+except (KeyError, TypeError, ValueError, json.JSONDecodeError):
     raise SystemExit(1)
-raise SystemExit(0 if interface.ip.is_global else 1)
-PY
-        then
-            printf '%s\n' "$candidate"
-            break
+PYCODE
+        ) || return 1
+        if [ -n "$value" ]; then
+            printf '%s\n' "$value"
+            return 0
         fi
-    done)"
-    if [ -n "$value" ]; then
-        printf '%s\n' "$value"
-        return 0
     fi
     interfaces_file="${PVE_NETWORK_INTERFACES_FILE:-/etc/network/interfaces}"
     [ -r "$interfaces_file" ] || return 1
-    awk -v bridge="$bridge" '
+    value=$(awk -v bridge="$bridge" '
         $1 == "iface" && $2 == bridge && $3 == "inet6" { inside = 1; next }
         $1 == "iface" { inside = 0 }
         inside && $1 == "address" { print $2; exit }
-    ' "$interfaces_file"
+    ' "$interfaces_file")
+    [ -n "$value" ] || return 1
+    python3 - "$value" <<'PYCODE' >/dev/null 2>&1 || return 1
+import ipaddress
+import sys
+try:
+    address = ipaddress.IPv6Interface(sys.argv[1])
+except ValueError:
+    raise SystemExit(1)
+raise SystemExit(0 if address.ip.is_global else 1)
+PYCODE
+    printf '%s\n' "$value"
 }
 
 pve_direct_ipv6_bridge_present() {
@@ -379,17 +395,60 @@ pve_direct_ipv6_ndp_required() {
 }
 
 pve_direct_ipv6_for_id() {
-    local identifier="${1:-}"
+    local identifier="${1:-}" address_json route_json
     command -v python3 >/dev/null 2>&1 || return 1
-    python3 - "${pve_direct_ipv6_prefix:-}" "${pve_direct_ipv6_gateway:-}" "$identifier" <<'PY'
+    address_json=$(LC_ALL=C NO_COLOR=1 ip -j -6 addr show) || return 1
+    route_json=$(LC_ALL=C NO_COLOR=1 ip -j -6 route show table all) || return 1
+    PVE_HOST_IPV6_ADDRESSES="$address_json" PVE_HOST_IPV6_ROUTES="$route_json" python3 - \
+        "${pve_direct_ipv6_prefix:-}" "${pve_direct_ipv6_gateway:-}" "$identifier" <<'PY'
 import ipaddress
+import json
+import os
+import re
 import sys
 
 try:
     network = ipaddress.IPv6Network(sys.argv[1], strict=False)
     gateway = ipaddress.IPv6Address(sys.argv[2])
     identifier = int(sys.argv[3], 10)
-except ValueError:
+    raw = re.sub(r'\x1b\[[0-?]*[ -/]*[@-~]', '', os.environ['PVE_HOST_IPV6_ADDRESSES'])
+    interfaces = json.loads(raw)
+    if not isinstance(interfaces, list):
+        raise ValueError('invalid iproute2 JSON')
+    routes = json.loads(re.sub(r'\x1b\[[0-?]*[ -/]*[@-~]', '', os.environ['PVE_HOST_IPV6_ROUTES']))
+    if not isinstance(routes, list):
+        raise ValueError('invalid iproute2 route JSON')
+    host_addresses = set()
+    for row in interfaces:
+        for info in row.get('addr_info', []):
+            if info.get('family') == 'inet6':
+                host_addresses.add(ipaddress.IPv6Address(info['local']))
+    for route in routes:
+        if route.get('gateway'):
+            host_addresses.add(ipaddress.IPv6Address(route['gateway']))
+        for hop_key in ('nexthops', 'multipath'):
+            hops = route.get(hop_key) or []
+            if not isinstance(hops, list):
+                raise ValueError('invalid route nexthops')
+            for hop in hops:
+                if not isinstance(hop, dict):
+                    raise ValueError('invalid route nexthop')
+                if hop.get('gateway'):
+                    host_addresses.add(ipaddress.IPv6Address(hop['gateway']))
+        destination = route.get('dst', '')
+        if destination and destination != 'default':
+            try:
+                exact = ipaddress.IPv6Network(destination, strict=False)
+            except ValueError:
+                if isinstance(destination, str) and destination.split(None, 1)[0] in {
+                    'local', 'broadcast', 'multicast', 'unreachable', 'prohibit',
+                    'blackhole', 'throw', 'nat', 'cache',
+                }:
+                    continue
+                raise
+            if exact.prefixlen == 128:
+                host_addresses.add(exact.network_address)
+except (KeyError, TypeError, ValueError, json.JSONDecodeError):
     raise SystemExit(1)
 if identifier < 100 or identifier > 256:
     raise SystemExit(1)
@@ -415,6 +474,7 @@ for vm_id in range(100, 257):
         candidate is None
         or candidate == network.network_address
         or candidate == gateway
+        or candidate in host_addresses
         or candidate in assigned_addresses
     ):
         fallback_ids.append(vm_id)
@@ -425,7 +485,7 @@ for vm_id in range(100, 257):
 for vm_id in fallback_ids:
     for offset in range(1, network.num_addresses):
         candidate = ipaddress.IPv6Address(int(network.network_address) + offset)
-        if candidate != gateway and candidate not in assigned_addresses:
+        if candidate != gateway and candidate not in host_addresses and candidate not in assigned_addresses:
             assignments[vm_id] = candidate
             assigned_addresses.add(candidate)
             break
@@ -509,6 +569,37 @@ check_china() {
     fi
 }
 
+# PVE resource JSON keeps guest identity independent of colored or translated
+# qm/pct table headers. A failed probe must never make a busy ID look free.
+pve_existing_guest_type() {
+    local identifier="$1" payload
+    payload=$(LC_ALL=C NO_COLOR=1 pvesh get /cluster/resources --type vm --output-format json) || return 1
+    PVE_RESOURCE_JSON="$payload" python3 - "$identifier" <<'PYCODE'
+import json
+import os
+import re
+import sys
+
+try:
+    raw = re.sub(r'\x1b\[[0-?]*[ -/]*[@-~]', '', os.environ['PVE_RESOURCE_JSON'])
+    resources = json.loads(raw)
+    if not isinstance(resources, list):
+        raise ValueError('invalid PVE resources')
+    identifier = int(sys.argv[1])
+    for resource in resources:
+        guest_type = resource['type']
+        if guest_type not in {'qemu', 'lxc'}:
+            raise ValueError('unknown PVE resource type')
+        if int(resource['vmid']) == identifier:
+            print('vm' if guest_type == 'qemu' else 'ct')
+            break
+    else:
+        print('none')
+except (KeyError, TypeError, ValueError, json.JSONDecodeError):
+    raise SystemExit(1)
+PYCODE
+}
+
 validate_ctid() {
     # 检查 CTID 是否为数字
     if ! [[ "$CTID" =~ ^[0-9]+$ ]]; then
@@ -522,20 +613,75 @@ validate_ctid() {
         _red "错误：CTID 需要在 100 到 256 以内。"
         return 1
     fi
-    # 检查是否已有相同的 VM
-    if qm list | awk '{print $1}' | grep -q "^${CTID}$"; then
-        _red "Error: A VM with vmid ${CTID} already exists."
-        _red "错误：vmid 为 ${CTID} 的虚拟机已存在。"
+    local existing_type
+    existing_type=$(pve_existing_guest_type "${CTID}") || {
+        _red "Cannot verify the PVE guest ID; refusing to create an instance."
+        _red "无法核实 PVE 实例 ID，已停止创建。"
         return 1
-    fi
-    # 检查是否已有相同的 CT
-    if pct list | awk '{print $1}' | grep -q "^${CTID}$"; then
-        _red "Error: A CT with vmid ${CTID} already exists."
-        _red "错误：vmid 为 ${CTID} 的容器已存在。"
-        return 1
-    fi
+    }
+    case "$existing_type" in
+        vm)
+            _red "Error: A VM with vmid ${CTID} already exists."
+            _red "错误：vmid 为 ${CTID} 的虚拟机已存在。"
+            return 1
+            ;;
+        ct)
+            _red "Error: A CT with vmid ${CTID} already exists."
+            _red "错误：vmid 为 ${CTID} 的容器已存在。"
+            return 1
+            ;;
+        none) ;;
+        *) return 1 ;;
+    esac
     _green "CTID is valid and available: $CTID"
     return 0
+}
+
+pve_nat66_ready() {
+    local route_json address_json uplink
+    [ -n "${pve_nat_ipv6_subnet:-}" ] && [ -n "${pve_nat_ipv6_gateway:-}" ] || return 1
+    [ "$(sysctl -n net.ipv6.conf.all.forwarding 2>/dev/null)" = 1 ] || return 1
+    route_json=$(LC_ALL=C NO_COLOR=1 ip -j -6 route show default) || return 1
+    address_json=$(LC_ALL=C NO_COLOR=1 ip -j -6 addr show scope global) || return 1
+    uplink=$(PVE_NAT66_ROUTES="$route_json" PVE_NAT66_ADDRESSES="$address_json" python3 - <<'PY'
+import ipaddress
+import json
+import os
+import re
+
+strip = lambda raw: re.sub(r'\x1b\[[0-?]*[ -/]*[@-~]', '', raw)
+routes = json.loads(strip(os.environ['PVE_NAT66_ROUTES']))
+addresses = json.loads(strip(os.environ['PVE_NAT66_ADDRESSES']))
+for route in routes:
+    if route.get('dst') != 'default':
+        continue
+    name = route.get('dev', '')
+    if not re.fullmatch(r'[A-Za-z0-9_.-]{1,15}', name):
+        continue
+    for interface in addresses:
+        if interface.get('ifname') != name:
+            continue
+        for info in interface.get('addr_info', []):
+            if info.get('family') != 'inet6' or info.get('scope') != 'global':
+                continue
+            if info.get('tentative') or info.get('dadfailed'):
+                continue
+            try:
+                address = ipaddress.IPv6Address(info['local'])
+            except (KeyError, ValueError):
+                continue
+            if address in ipaddress.IPv6Network('2000::/3') and address.is_global:
+                print(name)
+                raise SystemExit(0)
+raise SystemExit(1)
+PY
+) || return 1
+    if command -v nft >/dev/null 2>&1 &&
+       LC_ALL=C NO_COLOR=1 nft list chain ip6 nat postrouting 2>/dev/null |
+           grep -Fq "ip6 saddr ${pve_nat_ipv6_subnet} oifname \"${uplink}\" masquerade"; then
+        return 0
+    fi
+    ip6tables -t nat -C POSTROUTING -s "$pve_nat_ipv6_subnet" -o "$uplink" -j MASQUERADE 2>/dev/null
 }
 
 check_ipv6_setup() {
@@ -556,12 +702,16 @@ check_ipv6_setup() {
             _green "Independent IPv6 direct-assignment mode is available (${pve_direct_ipv6_mode})."
             _green "独立 IPv6 直连分配模式可用（${pve_direct_ipv6_mode}）。"
         else
+            if ! pve_nat66_ready; then
+                _red "IPv6 NAT66 is not ready; refusing to create an IPv4-only container for an IPv6 request"
+                _red "IPv6 NAT66 未就绪；拒绝将 IPv6 请求降级成纯 IPv4 容器"
+                return 1
+            fi
             _yellow "No delegated public IPv6 prefix is available; falling back to IPv6 NAT66."
             _yellow "未检测到已委派的公网 IPv6 前缀，将回退到 IPv6 NAT66。"
         fi
         if [ -f /usr/local/bin/pve_check_ipv6 ]; then
             host_ipv6_address=$(cat /usr/local/bin/pve_check_ipv6)
-            ipv6_address_without_last_segment="${host_ipv6_address%:*}:"
         fi
         if [ -f /usr/local/bin/pve_ipv6_prefixlen ]; then
             ipv6_prefixlen=$(cat /usr/local/bin/pve_ipv6_prefixlen)
@@ -571,20 +721,9 @@ check_ipv6_setup() {
         fi
     else
         if [ -f /usr/local/bin/pve_check_ipv6 ]; then
+            # Preserve the persisted host address. Guest allocation is
+            # performed by pve_direct_ipv6_for_id using the actual prefix.
             ipv6_address=$(cat /usr/local/bin/pve_check_ipv6)
-            IFS="/" read -ra parts <<<"$ipv6_address"
-            part_1="${parts[0]}"
-            part_2="${parts[1]}"
-            IFS=":" read -ra part_1_parts <<<"$part_1"
-            if [ ! -z "${part_1_parts[*]}" ]; then
-                part_1_last="${part_1_parts[-1]}"
-                if [ "$part_1_last" = "$CTID" ]; then
-                    ipv6_address=""
-                else
-                    part_1_head=$(echo "$part_1" | awk -F':' 'BEGIN {OFS=":"} {last=""; for (i=1; i<NF; i++) {last=last $i ":"}; print last}')
-                    ipv6_address="${part_1_head}${CTID}"
-                fi
-            fi
         fi
         if [ -f /usr/local/bin/pve_ipv6_prefixlen ]; then
             ipv6_prefixlen=$(cat /usr/local/bin/pve_ipv6_prefixlen)
@@ -616,7 +755,13 @@ get_available_vmbr1_ipv6() {
         done < "$appended_file"
     fi
     for ip in "${available_ips[@]}"; do
-        if ! grep -q "^$ip$" "$used_ips_file"; then
+        # A stale or hand-edited alias list must never let a container claim
+        # an address already owned by the host. If the live JSON probe fails,
+        # leave the address unallocated instead of changing host reachability.
+        if ! pve_ipv6_external_address_available "$ip"; then
+            continue
+        fi
+        if ! grep -Fxq -- "$ip" "$used_ips_file"; then
             echo "$ip" >> "$used_ips_file"
             echo "$ip"
             return 0
@@ -624,6 +769,62 @@ get_available_vmbr1_ipv6() {
     done
     echo ""
     return 1
+}
+
+pve_ipv6_external_address_available() {
+    local candidate="${1:-}" address_json route_json
+    command -v python3 >/dev/null 2>&1 || return 1
+    address_json=$(LC_ALL=C NO_COLOR=1 ip -j -6 addr show) || return 1
+    route_json=$(LC_ALL=C NO_COLOR=1 ip -j -6 route show table all) || return 1
+    PVE_HOST_IPV6_ADDRESSES="$address_json" PVE_HOST_IPV6_ROUTES="$route_json" python3 - "$candidate" <<'PY'
+import ipaddress
+import json
+import os
+import re
+import sys
+
+try:
+    candidate = ipaddress.IPv6Address(sys.argv[1])
+    strip_color = lambda value: re.sub(r'\x1b\[[0-?]*[ -/]*[@-~]', '', value)
+    interfaces = json.loads(strip_color(os.environ['PVE_HOST_IPV6_ADDRESSES']))
+    routes = json.loads(strip_color(os.environ['PVE_HOST_IPV6_ROUTES']))
+    if not isinstance(interfaces, list) or not isinstance(routes, list):
+        raise ValueError('invalid iproute2 JSON')
+    for interface in interfaces:
+        for address in interface.get('addr_info', []):
+            if address.get('family') == 'inet6' and candidate == ipaddress.IPv6Address(address['local']):
+                raise SystemExit(1)
+    for route in routes:
+        gateways = []
+        if route.get('gateway'):
+            gateways.append(route['gateway'])
+        for hop_key in ('nexthops', 'multipath'):
+            hops = route.get(hop_key) or []
+            if not isinstance(hops, list):
+                raise ValueError('invalid route nexthops')
+            for hop in hops:
+                if not isinstance(hop, dict):
+                    raise ValueError('invalid route nexthop')
+                if hop.get('gateway'):
+                    gateways.append(hop['gateway'])
+        if any(candidate == ipaddress.IPv6Address(gateway) for gateway in gateways):
+            raise SystemExit(1)
+        destination = route.get('dst', '')
+        if destination and destination != 'default':
+            try:
+                prefix = ipaddress.IPv6Network(destination, strict=False)
+            except ValueError:
+                if isinstance(destination, str) and destination.split(None, 1)[0] in {
+                    'local', 'broadcast', 'multicast', 'unreachable', 'prohibit',
+                    'blackhole', 'throw', 'nat', 'cache',
+                }:
+                    continue
+                raise
+            if prefix.prefixlen == 128 and candidate == prefix.network_address:
+                raise SystemExit(1)
+except (KeyError, TypeError, ValueError, json.JSONDecodeError):
+    raise SystemExit(1)
+PY
 }
 
 ########## Firewall abstraction: nftables preferred, iptables fallback ##########
@@ -767,6 +968,10 @@ _fw6_drop_icmpv6_ping() {
 setup_nat_mapping() {
     local ct_internal_ipv6="$1"
     local host_external_ipv6="$2"
+    if ! pve_ipv6_external_address_available "$host_external_ipv6"; then
+        echo "IPv6 mapping address is already owned by the host or cannot be verified" >&2
+        return 1
+    fi
     if _use_nft; then
         if ! nft list chain ip6 nat prerouting 2>/dev/null | grep -q "$host_external_ipv6"; then
             _fw6_add_dnat "$host_external_ipv6" "$ct_internal_ipv6"
@@ -813,6 +1018,19 @@ NATEOF
 }
 
 prepare_system_image() {
+    if [ -n "${PVE_CT_TEMPLATE_FILE:-}" ]; then
+        # Use a preloaded PVE template without contacting a release mirror.
+        # Restrict this override to the local LXC template cache so pct create
+        # receives exactly the file that was checked here.
+        if [[ ! "$PVE_CT_TEMPLATE_FILE" =~ ^/var/lib/vz/template/cache/[A-Za-z0-9._-]+\.tar\.(xz|zst)$ ]] ||
+           [ ! -f "$PVE_CT_TEMPLATE_FILE" ]; then
+            echo "PVE_CT_TEMPLATE_FILE must name an existing .tar.xz or .tar.zst in the local PVE template cache" >&2
+            return 1
+        fi
+        system_name="${PVE_CT_TEMPLATE_FILE##*/}"
+        fixed_system=true
+        return 0
+    fi
     if [ "$system_arch" = "x86" ] || [ "$system_arch" = "x86_64" ]; then
         find_and_download_system_image_x86 || return 1
     elif [ "$system_arch" = "arm" ]; then
