@@ -5,6 +5,9 @@ repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 installer="${repo_root}/scripts/install_pve.sh"
 tmp_dir=$(mktemp -d)
 trap 'rm -rf "$tmp_dir"' EXIT
+# Written by the dynamically loaded network configuration helpers.
+ipv6_prefixlen=""
+ipv6_gateway=""
 
 extract_function() {
     local name="$1"

@@ -27,6 +27,7 @@ if [[ ! "$template_file" =~ ^/var/lib/vz/template/cache/[A-Za-z0-9._-]+\.tar\.(x
     exit 1
 fi
 
+# shellcheck source=/dev/null
 source "$repo_root/scripts/default_ct_config.sh"
 CTID="$ctid"
 existing_type=$(pve_existing_guest_type "$ctid") || exit 1

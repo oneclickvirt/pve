@@ -4,6 +4,8 @@ set -euo pipefail
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 tmp_dir=$(mktemp -d)
 trap 'rm -rf "$tmp_dir"' EXIT
+# Written by the dynamically loaded check_ipv6_setup function.
+independent_ipv6_status=""
 
 extract_function() { sed -n "/^${2}() {/,/^}/p" "$1"; }
 eval "$(extract_function "$repo_root/scripts/default_ct_config.sh" pve_nat66_ready)"

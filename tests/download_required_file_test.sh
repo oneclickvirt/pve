@@ -2,6 +2,7 @@
 set -euo pipefail
 
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+# shellcheck source=/dev/null
 source <(sed -n '/^download_required_file() {/,/^}/p' "$repo_root/scripts/install_pve.sh")
 work=$(mktemp -d)
 trap 'rm -rf -- "$work"' EXIT
@@ -23,5 +24,8 @@ wget() {
 }
 download_required_file https://example.invalid "$target" 755
 [[ "$(<"$target")" == downloaded ]]
-[[ "$(stat -f '%Lp' "$target" 2>/dev/null || stat -c '%a' "$target")" == 755 ]]
+# GNU stat -f prints filesystem data before failing on the BSD format. Keep
+# failed-command output out of the successful permission assertion.
+mode=$(stat -c '%a' "$target" 2>/dev/null) || mode=$(stat -f '%Lp' "$target")
+[[ "$mode" == 755 ]]
 printf '%s\n' 'PVE atomic auxiliary download test passed'

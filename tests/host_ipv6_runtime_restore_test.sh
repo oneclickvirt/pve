@@ -5,6 +5,11 @@ repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 script="$repo_root/scripts/build_nat_network.sh"
 test_dir=$(mktemp -d)
 trap 'rm -rf "$test_dir"' EXIT
+# Written by the functions loaded through eval below.
+host_ipv6_runtime_cidrs=""
+host_ipv6_runtime_address_bindings=""
+host_ipv6_runtime_gateway=""
+host_ipv6_runtime_has_default_route=""
 
 extract_function() {
     sed -n "/^$1() {/,/^}/p" "$script"

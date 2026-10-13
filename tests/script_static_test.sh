@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# The single-quoted grep patterns assert literal source text.
+# shellcheck disable=SC2016
 set -euo pipefail
 
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
