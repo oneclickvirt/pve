@@ -113,9 +113,14 @@ unset PVE_NETWORK_INTERFACES_FILE PVE_NETWORK_INTERFACES_DIR
     PVE_NETWORK_INTERFACES_FILE="$configured_interfaces"
     PVE_NETWORK_INTERFACES_DIR="$configured_dir"
     interface=eth0
+    # These test doubles are called by the dynamically loaded network helpers.
+    # shellcheck disable=SC2317
     pve_ipv6_json_probe() { :; }
+    # shellcheck disable=SC2317
     read_network_state() { return 1; }
+    # shellcheck disable=SC2317
     write_network_state_atomic() { :; }
+    # shellcheck disable=SC2317
     is_private_ipv6() { return 1; }
     for prefix in 38 120; do
         printf 'iface eth0 inet6 static\n    address 2a14:7c0:1002:10f8::1/%s\n    gateway fe80::1\n' "$prefix" >"$configured_interfaces"

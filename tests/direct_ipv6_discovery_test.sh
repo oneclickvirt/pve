@@ -113,6 +113,8 @@ original=$(cat "$PVE_NETWORK_INTERFACES_FILE")
 assert_rejected pve_append_network_config <<<"iface vmbr2 inet6 static"
 assert_eq "$original" "$(cat "$PVE_NETWORK_INTERFACES_FILE")" 'unlock failure preserves file'
 fixture_attributes='-------------------'
+# Called by a dynamically loaded helper; older ShellCheck cannot trace it.
+# shellcheck disable=SC2317
 mv() { return 1; }
 assert_rejected pve_append_network_config <<<"iface vmbr2 inet6 static"
 assert_eq "$original" "$(cat "$PVE_NETWORK_INTERFACES_FILE")" 'failed atomic rename preserves file'

@@ -8,6 +8,8 @@ work=$(mktemp -d)
 trap 'rm -rf -- "$work"' EXIT
 target="$work/service"
 
+# The loaded downloader calls this failure mock indirectly.
+# shellcheck disable=SC2317
 wget() {
     : >"$3"
     return 8
