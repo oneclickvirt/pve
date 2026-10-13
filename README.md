@@ -42,6 +42,22 @@ export noninteractive=true
 
 卸载脚本中 `noninteractive=true` 等同于 `AUTO_CONFIRM=yes`，会跳过卸载确认。
 
+## 配置已委派的 IPv6 前缀 / Configure a delegated IPv6 prefix
+
+静态 IPv6 前缀和已有直连网桥会自动识别。如果服务商单独提供了路由前缀，将下面的前缀（包含 `/长度`）和宿主机网关替换成实际值，再重新运行 `build_nat_network.sh`。
+
+Static IPv6 prefixes and existing direct bridges are detected automatically. If your provider supplies a separate routed prefix, replace the prefix (including its /length) and host gateway below, then rerun `build_nat_network.sh`.
+
+```bash
+export PVE_IPV6_ROUTED_PREFIX='YOUR_DELEGATED_PREFIX_WITH_LENGTH'
+export PVE_IPV6_DIRECT_GATEWAY='YOUR_HOST_IPV6_GATEWAY'
+export PVE_IPV6_DIRECT_MODE=routed
+```
+
+已有网桥会保留，并使用其 IPv6 地址作为容器网关。如需另选网桥或网关，可设置 `PVE_IPV6_DIRECT_BRIDGE` 和 `PVE_IPV6_BRIDGE_GATEWAY`。配置文件只读或无法解锁时，请先解决写入权限后再重试。
+
+Existing bridges are preserved, and their IPv6 address is used as the guest gateway. Use `PVE_IPV6_DIRECT_BRIDGE` and `PVE_IPV6_BRIDGE_GATEWAY` to choose a different bridge or gateway. If the configuration file is read-only or cannot be unlocked, fix its write access before retrying.
+
 自修补虚拟机镜像源：
 
 [https://github.com/oneclickvirt/pve_kvm_images](https://github.com/oneclickvirt/pve_kvm_images)

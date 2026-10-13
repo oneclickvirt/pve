@@ -155,7 +155,7 @@ pve_direct_ipv6_bridge() {
         stored_bridge="$(pve_read_single_line_state "$(pve_ipv6_state_file pve_direct_ipv6_bridge)" 2>/dev/null || true)"
         bridge="${stored_bridge:-vmbr2}"
     fi
-    [[ "$bridge" =~ ^[[:alnum:]_.:-]+$ ]] || return 1
+    [ "${#bridge}" -le 15 ] && [[ "$bridge" =~ ^[A-Za-z0-9_.:-]+$ ]] || return 1
     printf '%s\n' "$bridge"
 }
 
@@ -186,7 +186,7 @@ if (
 ):
     raise SystemExit(1)
 
-if mode == "ndp":
+if mode == "ndp" and preferred_bridge_gateway is None:
     if not upstream_gateway.is_global or upstream_gateway not in network:
         raise SystemExit(1)
     bridge_gateway = upstream_gateway
@@ -204,10 +204,10 @@ else:
         ):
             raise SystemExit(1)
         bridge_gateway = preferred_bridge_gateway
-    elif upstream_gateway.is_global and upstream_gateway in network and upstream_gateway != network.network_address:
-        bridge_gateway = upstream_gateway
     else:
         bridge_gateway = ipaddress.IPv6Address(int(network.network_address) + 1)
+        if bridge_gateway == upstream_gateway:
+            bridge_gateway = ipaddress.IPv6Address(int(network.network_address) + 2)
 
 print(network.with_prefixlen)
 print(bridge_gateway.compressed)
@@ -216,11 +216,112 @@ print(upstream_gateway.compressed)
 PY
 }
 
+pve_interfaces_probe() {
+    local mode="${1:-json}" selected="${2:-}" port="${3:-}"
+    python3 - "${PVE_NETWORK_INTERFACES_FILE:-/etc/network/interfaces}" "$mode" "$selected" "$port" <<'PY'
+import glob
+import ipaddress
+import json
+import pathlib
+import re
+import shlex
+import sys
+
+root, mode, selected, port = sys.argv[1:]
+seen, stanzas = set(), []
+
+def read_config(path):
+    path = pathlib.Path(path).resolve()
+    if path in seen:
+        return
+    if len(seen) >= 256:
+        raise ValueError('too many network configuration files')
+    seen.add(path)
+    current = None
+    text = path.read_text(errors='replace').replace('\\\n', ' ')
+    for line in text.splitlines():
+        fields = line.split()
+        if not fields or fields[0].startswith('#'):
+            continue
+        key = fields[0]
+        if key in {'source', 'source-directory'}:
+            for pattern in shlex.split(line, comments=True)[1:]:
+                pattern = pathlib.Path(pattern)
+                if not pattern.is_absolute():
+                    pattern = path.parent / pattern
+                for match in sorted(glob.glob(str(pattern))):
+                    child = pathlib.Path(match)
+                    if key == 'source-directory' and child.is_dir():
+                        for entry in sorted(child.iterdir()):
+                            if entry.is_file() and re.fullmatch(r'[A-Za-z0-9_-]+', entry.name):
+                                read_config(entry)
+                    elif key == 'source' and child.is_file():
+                        read_config(child)
+            current = None
+        elif key == 'iface':
+            fields = shlex.split(line, comments=True)
+            current = None
+            if len(fields) >= 4:
+                current = dict(name=fields[1], family=fields[2], method=fields[3], options={})
+                stanzas.append(current)
+        elif key in {'auto', 'allow-auto', 'mapping'} or key.startswith('allow-'):
+            current = None
+        elif current is not None and key in {'address', 'netmask', 'gateway', 'bridge_ports'}:
+            current['options'].setdefault(key, []).append(shlex.split(line, comments=True)[1:])
+
+try:
+    read_config(root)
+    for stanza in stanzas:
+        stanza['cidrs'] = []
+        if stanza['family'] != 'inet6' or stanza['method'] != 'static':
+            continue
+        masks = stanza['options'].get('netmask', [])
+        for values in stanza['options'].get('address', []):
+            if not values:
+                continue
+            address = values[0]
+            if '/' not in address:
+                if not masks or not masks[0] or not masks[0][0].isdigit():
+                    continue
+                address += '/' + masks[0][0]
+            try:
+                interface = ipaddress.IPv6Interface(address)
+            except ValueError:
+                continue
+            if interface.ip.is_global and interface.ip in ipaddress.IPv6Network('2000::/3'):
+                stanza['cidrs'].append(str(interface))
+    matches = [row for row in stanzas if row['name'] == selected]
+    if mode == 'json':
+        print(json.dumps(stanzas))
+    elif mode == 'exists':
+        raise SystemExit(0 if matches else 1)
+    elif mode == 'cidr':
+        for row in matches:
+            for cidr in row['cidrs']:
+                print(cidr)
+    elif mode == 'gateway':
+        for row in matches:
+            if row['family'] != 'inet6':
+                continue
+            for values in row['options'].get('gateway', []):
+                if values:
+                    print(ipaddress.IPv6Address(values[0]))
+    elif mode == 'ports':
+        raise SystemExit(0 if any(port in values for row in matches for values in row['options'].get('bridge_ports', [])) else 1)
+    elif mode == 'tunnel':
+        raise SystemExit(0 if any(row['family'] == 'inet6' and row['method'] in {'v4tunnel', 'tunnel'} for row in stanzas) else 1)
+    else:
+        raise ValueError('unknown network configuration probe')
+except (OSError, TypeError, ValueError):
+    raise SystemExit(1)
+PY
+}
+
 pve_direct_ipv6_bridge_cidr() {
-    local value interfaces_file bridge payload
+    local value interfaces_file bridge payload expected_prefix="${1:-}" expected_gateway="${2:-}"
     bridge="$(pve_direct_ipv6_bridge)" || return 1
     if payload=$(LC_ALL=C NO_COLOR=1 ip -j -6 addr show dev "$bridge" 2>/dev/null); then
-        value=$(PVE_IPV6_BRIDGE_JSON="$payload" python3 - "$bridge" <<'PYCODE'
+        value=$(PVE_IPV6_BRIDGE_JSON="$payload" python3 - "$bridge" "$expected_prefix" "$expected_gateway" <<'PYCODE'
 import ipaddress
 import json
 import os
@@ -232,6 +333,7 @@ try:
     interfaces = json.loads(raw)
     if not isinstance(interfaces, list):
         raise ValueError('invalid iproute2 JSON')
+    candidates = []
     for row in interfaces:
         if row.get('ifname') != sys.argv[1]:
             continue
@@ -242,8 +344,16 @@ try:
                 continue
             interface = ipaddress.IPv6Interface(f"{info['local']}/{info['prefixlen']}")
             if interface.ip.is_global:
+                candidates.append(interface)
+    if candidates:
+        for interface in candidates:
+            if not sys.argv[2] or (
+                interface.network == ipaddress.IPv6Network(sys.argv[2], strict=False)
+                and interface.ip == ipaddress.IPv6Address(sys.argv[3])
+            ):
                 print(interface)
                 raise SystemExit(0)
+        raise SystemExit(1)
 except (KeyError, TypeError, ValueError, json.JSONDecodeError):
     raise SystemExit(1)
 PYCODE
@@ -255,11 +365,24 @@ PYCODE
     fi
     interfaces_file="${PVE_NETWORK_INTERFACES_FILE:-/etc/network/interfaces}"
     [ -r "$interfaces_file" ] || return 1
-    value=$(awk -v bridge="$bridge" '
-        $1 == "iface" && $2 == bridge && $3 == "inet6" { inside = 1; next }
-        $1 == "iface" { inside = 0 }
-        inside && $1 == "address" { print $2; exit }
-    ' "$interfaces_file")
+    payload=$(pve_interfaces_probe cidr "$bridge") || return 1
+    value=$(PVE_IPV6_BRIDGE_CIDRS="$payload" python3 - "$expected_prefix" "$expected_gateway" <<'PYCODE'
+import ipaddress
+import os
+import sys
+try:
+    for cidr in os.environ['PVE_IPV6_BRIDGE_CIDRS'].splitlines():
+        interface = ipaddress.IPv6Interface(cidr)
+        if not sys.argv[1] or (
+            interface.network == ipaddress.IPv6Network(sys.argv[1], strict=False)
+            and interface.ip == ipaddress.IPv6Address(sys.argv[2])
+        ):
+            print(interface)
+            break
+except ValueError:
+    raise SystemExit(1)
+PYCODE
+    ) || return 1
     [ -n "$value" ] || return 1
     python3 - "$value" <<'PYCODE' >/dev/null 2>&1 || return 1
 import ipaddress
@@ -279,18 +402,12 @@ pve_direct_ipv6_bridge_present() {
     ip link show "$bridge" >/dev/null 2>&1 && return 0
     local interfaces_file="${PVE_NETWORK_INTERFACES_FILE:-/etc/network/interfaces}"
     [ -r "$interfaces_file" ] || return 1
-    awk -v bridge="$bridge" '
-        $1 == "auto" {
-            for (i = 2; i <= NF; i++) if ($i == bridge) found = 1
-        }
-        $1 == "iface" && $2 == bridge { found = 1 }
-        END { exit found ? 0 : 1 }
-    ' "$interfaces_file"
+    pve_interfaces_probe exists "$bridge"
 }
 
 pve_direct_ipv6_transport() {
     local interfaces_file="${PVE_NETWORK_INTERFACES_FILE:-/etc/network/interfaces}"
-    if [ -r "$interfaces_file" ] && grep -Eiq '(^|[[:space:]])(he-ipv6|sit[0-9]*|6in4)([[:space:]]|$)' "$interfaces_file"; then
+    if pve_interfaces_probe tunnel; then
         printf '%s\n' tunnel
     else
         printf '%s\n' bridge
@@ -300,7 +417,7 @@ pve_direct_ipv6_transport() {
 pve_direct_ipv6_bridge_configured() {
     local bridge_cidr
     [ "${pve_direct_ipv6_available:-false}" = true ] || return 1
-    bridge_cidr="$(pve_direct_ipv6_bridge_cidr)" || return 1
+    bridge_cidr="$(pve_direct_ipv6_bridge_cidr "$pve_direct_ipv6_prefix" "$pve_direct_ipv6_gateway")" || return 1
     command -v python3 >/dev/null 2>&1 || return 1
     python3 - "$bridge_cidr" "$pve_direct_ipv6_prefix" "$pve_direct_ipv6_gateway" <<'PY' >/dev/null 2>&1
 import ipaddress
@@ -386,9 +503,16 @@ pve_load_direct_ipv6_config() {
     pve_direct_ipv6_upstream_gateway="${normalized_values[3]}"
     pve_direct_ipv6_prefixlen="${pve_direct_ipv6_prefix##*/}"
     pve_direct_ipv6_source="$source"
-    pve_direct_ipv6_transport="$(pve_read_single_line_state "$state_transport" 2>/dev/null || true)"
+    pve_direct_ipv6_transport="${PVE_IPV6_DIRECT_TRANSPORT:-}"
+    [ -n "$pve_direct_ipv6_transport" ] || pve_direct_ipv6_transport="$(pve_read_single_line_state "$state_transport" 2>/dev/null || true)"
     [ -n "$pve_direct_ipv6_transport" ] || pve_direct_ipv6_transport="$(pve_direct_ipv6_transport)"
+    case "$pve_direct_ipv6_transport" in bridge | tunnel) ;; *) return 1 ;; esac
     pve_direct_ipv6_available=true
+    if [ "$source" = state ] && ! pve_direct_ipv6_bridge_configured; then
+        pve_direct_ipv6_available=false
+        _yellow "Saved IPv6 prefix does not match the direct bridge; check the bridge configuration"
+        _yellow "保存的 IPv6 前缀与直连网桥不一致，请检查网桥配置"
+    fi
     return 0
 }
 

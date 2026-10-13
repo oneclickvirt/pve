@@ -856,7 +856,7 @@ is_private_ipv6() {
 pve_ipv6_json_probe() {
     local mode="$1" selected_interface="${2:-}" replacement_interface="${3:-}" payload
     case "$mode" in
-        addresses|address_bindings|linklocal)
+        addresses|address_bindings|reserved_addresses|linklocal)
             if [ "${PVE_IPV6_ADDRESS_JSON_OVERRIDE+x}" = x ]; then
                 payload="$PVE_IPV6_ADDRESS_JSON_OVERRIDE"
             else
@@ -966,7 +966,12 @@ try:
             if selected and device != selected:
                 continue
             for info in row.get('addr_info', []):
-                if info.get('family') != 'inet6' or info.get('tentative') or info.get('dadfailed'):
+                if info.get('family') != 'inet6':
+                    continue
+                if mode == 'reserved_addresses':
+                    print(ipaddress.IPv6Address(info['local']))
+                    continue
+                if info.get('tentative') or info.get('dadfailed'):
                     continue
                 if {'tentative', 'dadfailed'} & set(info.get('flags') or []):
                     continue
@@ -3164,7 +3169,7 @@ $(format_ipv4_gateway_config "    " "vmbr0")
     bridge_fd 0
 
 iface vmbr0 inet6 static
-    address ${ipv6_address}/128
+    address ${ipv6_address}/${ipv6_prefixlen}
     gateway ${ipv6_gateway}
 EOF
         fi

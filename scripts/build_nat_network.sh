@@ -386,7 +386,7 @@ global_unicast = ipaddress.IPv6Network("2000::/3")
 if network.prefixlen > 120 or not network.subnet_of(global_unicast) or mode not in {"ndp", "routed"}:
     raise SystemExit(1)
 
-if mode == "ndp":
+if mode == "ndp" and preferred_bridge_gateway is None:
     if not upstream_gateway.is_global or upstream_gateway not in network:
         raise SystemExit(1)
     bridge_gateway = upstream_gateway
@@ -401,10 +401,10 @@ else:
         ):
             raise SystemExit(1)
         bridge_gateway = preferred_bridge_gateway
-    elif upstream_gateway.is_global and upstream_gateway in network and upstream_gateway != network.network_address:
-        bridge_gateway = upstream_gateway
     else:
         bridge_gateway = ipaddress.IPv6Address(int(network.network_address) + 1)
+        if bridge_gateway == upstream_gateway:
+            bridge_gateway = ipaddress.IPv6Address(int(network.network_address) + 2)
 
 print(network.with_prefixlen)
 print(bridge_gateway.compressed)
@@ -421,6 +421,9 @@ pve_direct_ipv6_env_config() {
     [ -n "$prefix" ] && [ -n "$upstream_gateway" ] || return 1
     validate_pve_direct_ipv6_bridge_value "$bridge" || return 1
     validate_pve_direct_ipv6_transport_value "$transport" || return 1
+    if [ -z "$bridge_gateway" ]; then
+        bridge_gateway=$(pve_existing_direct_ipv6_matches "$prefix" "" "$bridge" 2>/dev/null || true)
+    fi
     pve_direct_ipv6_normalize "$prefix" "$upstream_gateway" "$mode" "$bridge_gateway" || return 1
     printf '%s\n' "$bridge" "$transport"
 }
@@ -428,6 +431,134 @@ pve_direct_ipv6_env_config() {
 pve_direct_ipv6_requested() {
     [ -n "${PVE_IPV6_ROUTED_PREFIX:-}" ] || [ -n "${PVE_IPV6_DIRECT_GATEWAY:-}" ] || [ -n "${PVE_IPV6_DIRECT_MODE:-}" ] ||
         [ -n "${PVE_IPV6_BRIDGE_GATEWAY:-}" ] || [ -n "${PVE_IPV6_DIRECT_BRIDGE:-}" ] || [ -n "${PVE_IPV6_DIRECT_TRANSPORT:-}" ]
+}
+
+# Only use a static, currently bound prefix on the default-route interface.
+# A dynamic SLAAC address or a tunnel's transfer network is not a guest pool.
+pve_auto_direct_ipv6_config() {
+    local config addresses routes defaults
+    config=$(pve_interfaces_probe json) || return 1
+    addresses=$(LC_ALL=C NO_COLOR=1 ip -j -6 addr show) || return 1
+    routes=$(LC_ALL=C NO_COLOR=1 ip -j -6 route show table all) || return 1
+    defaults=$(LC_ALL=C NO_COLOR=1 ip -j -6 route show default) || return 1
+    PVE_AUTO_CONFIG="$config" PVE_AUTO_ADDRESSES="$addresses" PVE_AUTO_ROUTES="$routes" PVE_AUTO_DEFAULTS="$defaults" python3 - <<'PY'
+import ipaddress
+import json
+import os
+import re
+
+def payload(name):
+    result = json.loads(re.sub(r'\x1b\[[0-?]*[ -/]*[@-~]', '', os.environ[name]))
+    if not isinstance(result, list):
+        raise ValueError('invalid network JSON')
+    return result
+
+try:
+    config, addresses, routes, defaults = map(payload, (
+        'PVE_AUTO_CONFIG', 'PVE_AUTO_ADDRESSES', 'PVE_AUTO_ROUTES', 'PVE_AUTO_DEFAULTS'))
+    uplinks, gateways = [], set()
+    for row in defaults:
+        if row.get('dst') not in (None, '', 'default') or row.get('type') not in (None, '', 'unicast'):
+            continue
+        for hop in row.get('nexthops') or row.get('multipath') or [row]:
+            device = hop.get('dev') or row.get('dev')
+            gateway = hop.get('gateway') or row.get('gateway')
+            if device and gateway:
+                uplinks.append((device, ipaddress.IPv6Address(gateway)))
+    occupied, bindings, tunnel_interfaces = set(), {}, set()
+    for row in addresses:
+        device = row.get('ifname')
+        if (row.get('linkinfo') or {}).get('info_kind') in {'sit', 'ip6tnl', 'tun', 'wireguard', 'gre', 'ip6gre'}:
+            tunnel_interfaces.add(device)
+        for info in row.get('addr_info', []):
+            if info.get('family') != 'inet6':
+                continue
+            address = ipaddress.IPv6Address(info['local'])
+            occupied.add(address)
+            flags = set(info.get('flags') or [])
+            if info.get('tentative') or info.get('dadfailed') or flags & {'tentative', 'dadfailed', 'dynamic', 'temporary'} or info.get('dynamic') or info.get('temporary'):
+                continue
+            bindings.setdefault(device, set()).add(str(ipaddress.IPv6Interface(f"{address}/{info['prefixlen']}")))
+    parsed_routes = []
+    for row in routes:
+        for hop in row.get('nexthops') or row.get('multipath') or [row]:
+            if hop.get('gateway'):
+                occupied.add(ipaddress.IPv6Address(hop['gateway']))
+        destination = row.get('dst')
+        if destination in (None, '', 'default') or row.get('type') == 'multicast':
+            continue
+        try:
+            network = ipaddress.IPv6Network(destination, strict=False)
+        except ValueError:
+            if destination in {'local', 'multicast', 'broadcast', 'unreachable', 'blackhole', 'prohibit', 'throw'}:
+                continue
+            raise
+        parsed_routes.append((network, row))
+    for device, upstream in uplinks:
+        if device in tunnel_interfaces or device == 'he-ipv6':
+            continue
+        candidates = [cidr for row in config if row['name'] == device for cidr in row['cidrs']]
+        for cidr in candidates:
+            if cidr not in bindings.get(device, set()):
+                continue
+            parent = ipaddress.IPv6Interface(cidr).network
+            if not parent.subnet_of(ipaddress.IPv6Network('2000::/3')):
+                continue
+            target = min(((parent.prefixlen // 8) + 1) * 8, 118)
+            if target <= parent.prefixlen:
+                target = parent.prefixlen + 1
+            if target > 120:
+                continue
+            conflicts = [network for network, row in parsed_routes if not (
+                network == parent and row.get('dev') == device and not row.get('gateway')
+                and row.get('type') in (None, '', 'unicast')
+                and not row.get('nexthops') and not row.get('multipath'))]
+            for child in parent.subnets(new_prefix=target):
+                if any(address in child for address in occupied | {upstream}):
+                    continue
+                if any(child.overlaps(network) for network in conflicts):
+                    continue
+                gateway = ipaddress.IPv6Address(int(child.network_address) + 1)
+                print('\n'.join((child.with_prefixlen, str(gateway), 'ndp', str(upstream), 'vmbr2', 'bridge')))
+                raise SystemExit(0)
+    raise SystemExit(1)
+except (KeyError, TypeError, ValueError):
+    raise SystemExit(1)
+PY
+}
+
+# Test the actual open operation: root's -w check alone does not detect a
+# read-only filesystem. Only remove an immutable flag when it is present.
+pve_require_writable_network_file() {
+    local path="${1:-${PVE_NETWORK_INTERFACES_FILE:-/etc/network/interfaces}}" attributes
+    path=$(readlink -f "$path") || return 1
+    [ -f "$path" ] || return 1
+    attributes=$(LC_ALL=C lsattr -d "$path" 2>/dev/null | awk 'NR == 1 {print $1}')
+    if [[ "$attributes" == *i* ]]; then
+        if ! chattr -i "$path"; then
+            _red "Unable to unlock $path; network configuration was not changed"
+            _red "无法解锁 ${path}，未修改网络配置"
+            return 1
+        fi
+    fi
+    if ! { : >>"$path"; } 2>/dev/null; then
+        _red "Cannot write $path; check filesystem permissions and read-only mounts"
+        _red "无法写入 ${path}，请检查文件权限及文件系统是否只读"
+        return 1
+    fi
+}
+
+pve_append_network_config() {
+    local path="${PVE_NETWORK_INTERFACES_FILE:-/etc/network/interfaces}" temporary
+    # Follow a network-config symlink without replacing the symlink itself.
+    path=$(readlink -f "$path") || return 1
+    pve_require_writable_network_file "$path" || return 1
+    temporary=$(mktemp "${path}.tmp.XXXXXX") || return 1
+    if ! cp -p "$path" "$temporary" || ! printf '\n' >>"$temporary" ||
+       ! cat >>"$temporary" || ! mv -f "$temporary" "$path"; then
+        rm -f "$temporary"
+        return 1
+    fi
 }
 
 pve_direct_ipv6_state_file() {
@@ -450,18 +581,134 @@ pve_save_direct_ipv6_config() {
     write_network_state_atomic "$(pve_direct_ipv6_state_file pve_direct_ipv6_transport)" "$transport" validate_pve_direct_ipv6_transport_value
 }
 
+pve_interfaces_probe() {
+    local mode="${1:-json}" selected="${2:-}" port="${3:-}"
+    python3 - "${PVE_NETWORK_INTERFACES_FILE:-/etc/network/interfaces}" "$mode" "$selected" "$port" <<'PY'
+import glob
+import ipaddress
+import json
+import pathlib
+import re
+import shlex
+import sys
+
+root, mode, selected, port = sys.argv[1:]
+seen, stanzas = set(), []
+
+def read_config(path):
+    path = pathlib.Path(path).resolve()
+    if path in seen:
+        return
+    if len(seen) >= 256:
+        raise ValueError('too many network configuration files')
+    seen.add(path)
+    current = None
+    text = path.read_text(errors='replace').replace('\\\n', ' ')
+    for line in text.splitlines():
+        fields = line.split()
+        if not fields or fields[0].startswith('#'):
+            continue
+        key = fields[0]
+        if key in {'source', 'source-directory'}:
+            for pattern in shlex.split(line, comments=True)[1:]:
+                pattern = pathlib.Path(pattern)
+                if not pattern.is_absolute():
+                    pattern = path.parent / pattern
+                for match in sorted(glob.glob(str(pattern))):
+                    child = pathlib.Path(match)
+                    if key == 'source-directory' and child.is_dir():
+                        for entry in sorted(child.iterdir()):
+                            if entry.is_file() and re.fullmatch(r'[A-Za-z0-9_-]+', entry.name):
+                                read_config(entry)
+                    elif key == 'source' and child.is_file():
+                        read_config(child)
+            current = None
+        elif key == 'iface':
+            fields = shlex.split(line, comments=True)
+            current = None
+            if len(fields) >= 4:
+                current = dict(name=fields[1], family=fields[2], method=fields[3], options={})
+                stanzas.append(current)
+        elif key in {'auto', 'allow-auto', 'mapping'} or key.startswith('allow-'):
+            current = None
+        elif current is not None and key in {'address', 'netmask', 'gateway', 'bridge_ports'}:
+            current['options'].setdefault(key, []).append(shlex.split(line, comments=True)[1:])
+
+try:
+    read_config(root)
+    for stanza in stanzas:
+        stanza['cidrs'] = []
+        if stanza['family'] != 'inet6' or stanza['method'] != 'static':
+            continue
+        masks = stanza['options'].get('netmask', [])
+        for values in stanza['options'].get('address', []):
+            if not values:
+                continue
+            address = values[0]
+            if '/' not in address:
+                if not masks or not masks[0] or not masks[0][0].isdigit():
+                    continue
+                address += '/' + masks[0][0]
+            try:
+                interface = ipaddress.IPv6Interface(address)
+            except ValueError:
+                continue
+            if interface.ip.is_global and interface.ip in ipaddress.IPv6Network('2000::/3'):
+                stanza['cidrs'].append(str(interface))
+    matches = [row for row in stanzas if row['name'] == selected]
+    if mode == 'json':
+        print(json.dumps(stanzas))
+    elif mode == 'exists':
+        raise SystemExit(0 if matches else 1)
+    elif mode == 'cidr':
+        for row in matches:
+            for cidr in row['cidrs']:
+                print(cidr)
+    elif mode == 'gateway':
+        for row in matches:
+            if row['family'] != 'inet6':
+                continue
+            for values in row['options'].get('gateway', []):
+                if values:
+                    print(ipaddress.IPv6Address(values[0]))
+    elif mode == 'ports':
+        raise SystemExit(0 if any(port in values for row in matches for values in row['options'].get('bridge_ports', [])) else 1)
+    elif mode == 'tunnel':
+        raise SystemExit(0 if any(row['family'] == 'inet6' and row['method'] in {'v4tunnel', 'tunnel'} for row in stanzas) else 1)
+    else:
+        raise ValueError('unknown network configuration probe')
+except (OSError, TypeError, ValueError):
+    raise SystemExit(1)
+PY
+}
+
 pve_network_bridge_exists() {
     local bridge="$1" interfaces_file="${PVE_NETWORK_INTERFACES_FILE:-/etc/network/interfaces}"
     validate_pve_direct_ipv6_bridge_value "$bridge" || return 1
     ip link show "$bridge" >/dev/null 2>&1 && return 0
-    [ -r "$interfaces_file" ] || return 1
-    awk -v bridge="$bridge" '
-        $1 == "auto" {
-            for (i = 2; i <= NF; i++) if ($i == bridge) found = 1
-        }
-        $1 == "iface" && $2 == bridge { found = 1 }
-        END { exit found ? 0 : 1 }
-    ' "$interfaces_file"
+    pve_interfaces_probe exists "$bridge"
+}
+
+pve_existing_direct_ipv6_matches() {
+    local prefix="$1" gateway="$2" bridge="$3" candidates
+    candidates=$(pve_ipv6_json_probe addresses "$bridge") || return 1
+    [ -n "$candidates" ] || candidates=$(pve_interfaces_probe cidr "$bridge") || return 1
+    python3 - "$prefix" "$gateway" "$candidates" <<'PY'
+import ipaddress
+import sys
+try:
+    network = ipaddress.IPv6Network(sys.argv[1], strict=False)
+    gateway = ipaddress.IPv6Address(sys.argv[2]) if sys.argv[2] else None
+    for value in sys.argv[3].splitlines():
+        interface = ipaddress.IPv6Interface(value)
+        if interface.network == network and (gateway is None or interface.ip == gateway):
+            if gateway is None:
+                print(interface.ip)
+            raise SystemExit(0)
+except ValueError:
+    pass
+raise SystemExit(1)
+PY
 }
 
 # A PVE installation may still have its IPv6 default route on a physical NIC
@@ -471,22 +718,7 @@ pve_vmbr0_owns_interface() {
     local candidate="$1" interfaces_file
     validate_interface_value "$candidate" || return 1
     interfaces_file="${PVE_NETWORK_INTERFACES_FILE:-/etc/network/interfaces}"
-    [ -r "$interfaces_file" ] || return 1
-    awk -v candidate="$candidate" '
-        $1 == "iface" {
-            in_vmbr0 = ($2 == "vmbr0")
-            next
-        }
-        in_vmbr0 && $1 == "bridge_ports" {
-            for (i = 2; i <= NF; i++) {
-                if ($i == candidate) {
-                    found = 1
-                    exit
-                }
-            }
-        }
-        END { exit(found ? 0 : 1) }
-    ' "$interfaces_file"
+    pve_interfaces_probe ports vmbr0 "$candidate"
 }
 
 # The IPv6 uplink is not necessarily vmbr0. Bare-metal hosts, cloud guests,
@@ -568,7 +800,7 @@ read_network_state() {
 pve_ipv6_json_probe() {
     local mode="$1" selected_interface="${2:-}" replacement_interface="${3:-}" payload
     case "$mode" in
-        addresses|address_bindings|linklocal)
+        addresses|address_bindings|reserved_addresses|linklocal)
             if [ "${PVE_IPV6_ADDRESS_JSON_OVERRIDE+x}" = x ]; then
                 payload="$PVE_IPV6_ADDRESS_JSON_OVERRIDE"
             else
@@ -678,7 +910,12 @@ try:
             if selected and device != selected:
                 continue
             for info in row.get('addr_info', []):
-                if info.get('family') != 'inet6' or info.get('tentative') or info.get('dadfailed'):
+                if info.get('family') != 'inet6':
+                    continue
+                if mode == 'reserved_addresses':
+                    print(ipaddress.IPv6Address(info['local']))
+                    continue
+                if info.get('tentative') or info.get('dadfailed'):
                     continue
                 if {'tentative', 'dadfailed'} & set(info.get('flags') or []):
                     continue
@@ -905,7 +1142,8 @@ PY
 detect_he_tunnel() {
     status_he=false
     pve_capture_host_ipv6_runtime || return 1
-    if grep -q "he-ipv6" /etc/network/interfaces; then
+    if pve_interfaces_probe exists he-ipv6; then
+        pve_require_writable_network_file || return 1
         local covert_tmp
         covert_tmp=$(mktemp /root/covert.sh.tmp.XXXXXX) || return 1
         if ! wget "${cdn_success_url}https://raw.githubusercontent.com/oneclickvirt/6in4/main/covert.sh" -O "$covert_tmp" || [ ! -s "$covert_tmp" ] || ! chmod 755 "$covert_tmp" || ! mv -f -- "$covert_tmp" /root/covert.sh; then
@@ -914,15 +1152,14 @@ detect_he_tunnel() {
             _red "下载 HE 隧道辅助脚本失败"
             return 1
         fi
-        /root/covert.sh
+        /root/covert.sh || return 1
         sleep 1
-        temp_config=$(awk '/auto he-ipv6/{flag=1; print $0; next} flag && flag++<10' /etc/network/interfaces)
         local tunnel_cidr host_cidrs route_json
         tunnel_cidr=$(pve_ipv6_json_probe addresses he-ipv6 | head -n 1) || return 1
         [ -n "$tunnel_cidr" ] || return 1
         ipv6_address="${tunnel_cidr%/*}"
         ipv6_prefixlen="${tunnel_cidr##*/}"
-        ipv6_gateway=$(printf '%s\n' "$temp_config" | awk '$1 == "gateway" {print $2; exit}')
+        ipv6_gateway=$(pve_interfaces_probe gateway he-ipv6 | head -n 1) || return 1
         validate_ipv6_value "$ipv6_address" || return 1
         validate_ipv6_value "$ipv6_gateway" && [[ "$ipv6_gateway" != */* ]] || return 1
         validate_ipv6_prefixlen_value "$ipv6_prefixlen" || return 1
@@ -940,12 +1177,11 @@ detect_he_tunnel() {
         write_network_state_atomic /usr/local/bin/pve_ipv6_prefixlen "$target_mask" validate_ipv6_prefixlen_value || return 1
         write_network_state_atomic /usr/local/bin/pve_check_ipv6 "$ipv6_address" validate_ipv6_value || return 1
         write_network_state_atomic /usr/local/bin/pve_ipv6_gateway "$ipv6_gateway" validate_ipv6_value || return 1
-        chattr -i /etc/network/interfaces
-        sed -i '/^auto he-ipv6/,/^$/d' /etc/network/interfaces
-        chattr +i /etc/network/interfaces
+        # Keep the working tunnel in its original file, including sourced
+        # interfaces.d files. A later bridge failure must not remove it.
         status_he=true
     else
-        detect_existing_ipv6_config
+        detect_existing_ipv6_config || return 1
     fi
 
     check_fe80_gateway
@@ -956,12 +1192,12 @@ detect_existing_ipv6_config() {
     local preferred_interface live_cidrs persisted_cidr candidate
     pve_capture_host_ipv6_runtime || return 1
     preferred_interface="$host_ipv6_runtime_interface"
-    live_cidrs="$host_ipv6_runtime_cidrs"
-    if [ -n "$preferred_interface" ] && [ -z "$live_cidrs" ]; then
-        live_cidrs=$(pve_ipv6_json_probe addresses "$preferred_interface") || return 1
+    live_cidrs=""
+    if [ -n "$preferred_interface" ]; then
+        live_cidrs=$(printf '%s\n' "$host_ipv6_runtime_address_bindings" | awk -F '\t' -v selected="$preferred_interface" '$1 == selected {print $2}')
     fi
     if [ -z "$live_cidrs" ]; then
-        live_cidrs=$(pve_ipv6_json_probe addresses) || return 1
+        live_cidrs="$host_ipv6_runtime_cidrs"
     fi
     ipv6_address=$(read_network_state /usr/local/bin/pve_check_ipv6 validate_ipv6_value 2>/dev/null || true)
     persisted_cidr=""
@@ -1052,6 +1288,10 @@ download_with_retry() {
 
 # 配置ndpresponder守护进程
 install_ndpresponder() {
+    # Preserve a working installation and its custom uplink/prefix settings.
+    if [ -x /usr/local/bin/ndpresponder ] && [ -s /etc/systemd/system/ndpresponder.service ]; then
+        return 0
+    fi
     appended_file="/usr/local/bin/pve_appended_content.txt"
     if [ -n "$ipv6_address" ] && [ -n "$ipv6_prefixlen" ] && [ -n "$ipv6_gateway" ] && [ ! -s "$appended_file" ]; then
         if [ -f /usr/local/bin/pve_maximum_subset ] && [ "$(cat /usr/local/bin/pve_maximum_subset)" = false ]; then
@@ -1125,15 +1365,16 @@ detect_ipv4_info() {
 
 # 备份和修复网络配置文件
 prepare_network_interfaces() {
+    pve_require_writable_network_file || return 1
     if [ ! -f /etc/network/interfaces.bak ]; then
-        cp /etc/network/interfaces /etc/network/interfaces.bak
+        cp /etc/network/interfaces /etc/network/interfaces.bak || return 1
     fi
     # 修正部分网络设置重复的错误
     if [[ -f "/etc/network/interfaces.d/50-cloud-init" && -f "/etc/network/interfaces" ]]; then
         if grep -q "auto lo" "/etc/network/interfaces.d/50-cloud-init" && grep -q "iface lo inet loopback" "/etc/network/interfaces.d/50-cloud-init" && grep -q "auto lo" "/etc/network/interfaces" && grep -q "iface lo inet loopback" "/etc/network/interfaces"; then
-            chattr -i /etc/network/interfaces.d/50-cloud-init
-            sed -i '/auto lo/d' "/etc/network/interfaces.d/50-cloud-init"
-            sed -i '/iface lo inet loopback/d' "/etc/network/interfaces.d/50-cloud-init"
+            pve_require_writable_network_file /etc/network/interfaces.d/50-cloud-init || return 1
+            sed -i '/auto lo/d' "/etc/network/interfaces.d/50-cloud-init" || return 1
+            sed -i '/iface lo inet loopback/d' "/etc/network/interfaces.d/50-cloud-init" || return 1
             chattr +i /etc/network/interfaces.d/50-cloud-init
         fi
     fi
@@ -1147,40 +1388,36 @@ prepare_network_interfaces() {
 
 # 检查回环接口配置
 check_loopback_config() {
-    if ! grep -q "auto lo" /etc/network/interfaces; then
-        _blue "Can not find 'auto lo' in /etc/network/interfaces"
-        exit 1
-    fi
-    if ! grep -q "iface lo inet loopback" /etc/network/interfaces; then
+    if ! pve_interfaces_probe exists lo; then
         _blue "Can not find 'iface lo inet loopback' in /etc/network/interfaces"
-        exit 1
+        return 1
     fi
 }
 
 # 配置vmbr0网桥
 configure_vmbr0() {
-    chattr -i /etc/network/interfaces
-    if grep -q "vmbr0" "/etc/network/interfaces"; then
+    pve_require_writable_network_file || return 1
+    if pve_interfaces_probe exists vmbr0; then
         _blue "vmbr0 already exists in /etc/network/interfaces"
         _blue "vmbr0 已存在在 /etc/network/interfaces"
     else
         # 根据不同情况添加vmbr0配置
         if [ -z "$ipv6_address" ] || [ -z "$ipv6_prefixlen" ] || [ -z "$ipv6_gateway" ] && [ ! -f /usr/local/bin/pve_last_ipv6 ]; then
             # 无IPV6地址情况
-            add_vmbr0_ipv4_only
+            add_vmbr0_ipv4_only || return 1
         elif [ -f /usr/local/bin/pve_slaac_status ] && [ $(cat /usr/local/bin/pve_maximum_subset) = false ] && [ ! -f /usr/local/bin/pve_last_ipv6 ]; then
             # 有IPV6地址，只有一个IPV6地址且后续仅使用一个IPV6地址，存在slaac机制
-            add_vmbr0_with_slaac
+            add_vmbr0_with_slaac || return 1
         elif [ -f /usr/local/bin/pve_last_ipv6 ]; then
             # 有IPV6地址，不只一个IPV6地址，一个用作网关，一个用作实际地址
-            add_vmbr0_with_dual_ipv6
+            add_vmbr0_with_dual_ipv6 || return 1
         else
             # 有IPV6地址，只有一个IPV6地址，但后续使用最大IPV6子网范围
-            add_vmbr0_with_single_ipv6
+            add_vmbr0_with_single_ipv6 || return 1
         fi
     fi
     # 如果不是fe80类型网关，添加fe80地址删除命令
-    if [[ "${ipv6_gateway_fe80}" == "N" ]]; then
+    if [[ "${ipv6_gateway_fe80}" == "N" ]] && [ -n "${fe80_address:-}" ]; then
         chattr -i /etc/network/interfaces
         echo "    up ip addr del $fe80_address dev $interface" >>/etc/network/interfaces
         remove_duplicate_lines "/etc/network/interfaces"
@@ -1259,7 +1496,7 @@ iface vmbr0 inet static
     bridge_fd 0
 
 iface vmbr0 inet6 static
-    address ${ipv6_address}/128
+    address ${ipv6_address}/${ipv6_prefixlen}
     gateway ${ipv6_gateway}
 EOF
 }
@@ -1442,16 +1679,16 @@ PY
 
 # 配置vmbr1网桥
 configure_vmbr1() {
-    chattr -i /etc/network/interfaces
-    if grep -q "vmbr1" /etc/network/interfaces; then
+    pve_require_writable_network_file || return 1
+    if pve_interfaces_probe exists vmbr1; then
         _blue "vmbr1 already exists in /etc/network/interfaces"
         _blue "vmbr1 已存在在 /etc/network/interfaces"
     elif [ -f "/usr/local/bin/iface_auto.txt" ]; then
-        add_vmbr1_with_accept_ra
-    elif [ -z "$ipv6_address" ] || [ -z "$ipv6_prefixlen" ] || [ -z "$ipv6_gateway" ] || [ "$status_he" = true ]; then
-        add_vmbr1_ipv4_only
+        add_vmbr1_with_accept_ra || return 1
+    elif [ -z "$ipv6_address" ] || [ -z "$ipv6_prefixlen" ] || [ -z "$ipv6_gateway" ]; then
+        add_vmbr1_ipv4_only || return 1
     else
-        add_vmbr1_with_ipv6
+        add_vmbr1_with_ipv6 || return 1
     fi
     # NAT66 also enables forwarding. Preserve router advertisements on the
     # actual uplink even when no direct IPv6 vmbr2 is configured.
@@ -1574,7 +1811,6 @@ EOF
 configure_vmbr2() {
     local appended_file direct_config direct_bridge alias_addresses ip delay
     local -a direct_values
-    chattr -i /etc/network/interfaces
     appended_file="/usr/local/bin/pve_appended_content.txt"
     if [ -s "$appended_file" ]; then
         tmp_script="/usr/local/bin/check_ipv6.sh"
@@ -1604,13 +1840,22 @@ configure_vmbr2() {
         [ "${#direct_values[@]}" -eq 6 ] || return 1
         direct_bridge="${direct_values[4]}"
         if pve_network_bridge_exists "$direct_bridge"; then
+            if ! pve_existing_direct_ipv6_matches "${direct_values[0]}" "${direct_values[1]}" "$direct_bridge"; then
+                _red "Existing ${direct_bridge} IPv6 does not match the requested prefix/gateway; check the values"
+                _red "已有 ${direct_bridge} 的 IPv6 与所填前缀或网关不一致，请检查输入"
+                return 1
+            fi
+            pve_save_direct_ipv6_config "${direct_values[@]}" || return 1
             _blue "${direct_bridge} already exists; preserving the existing direct IPv6 bridge"
             _blue "${direct_bridge} 已存在；保留已有直连 IPv6 网桥"
-        elif [ -f /usr/local/bin/pve_maximum_subset ] && [ "$(cat /usr/local/bin/pve_maximum_subset)" = false ]; then
-            _blue "No set ${direct_bridge}"
         else
+            # A supplied delegated prefix is an explicit choice, even if an
+            # earlier installation disabled host-derived subnet allocation.
             configure_vmbr2_with_explicit_ipv6_prefix "${direct_values[@]}" || return 1
         fi
+    elif direct_bridge=$(read_network_state "$(pve_direct_ipv6_state_file pve_direct_ipv6_bridge)" validate_pve_direct_ipv6_bridge_value 2>/dev/null) && pve_network_bridge_exists "$direct_bridge"; then
+        _blue "${direct_bridge} already exists; preserving the existing direct IPv6 bridge"
+        _blue "${direct_bridge} 已存在；保留已有直连 IPv6 网桥"
     elif pve_network_bridge_exists vmbr2; then
         # Preserve historical NDP bridges, including a working /64 or non-nibble
         # delegated prefix. Their presence is stronger evidence than a host-only
@@ -1620,8 +1865,22 @@ configure_vmbr2() {
     elif [ "$status_he" = true ]; then
         if [ -f /usr/local/bin/pve_maximum_subset ] && [ "$(cat /usr/local/bin/pve_maximum_subset)" = false ]; then
             _blue "No set vmbr2"
+        elif [ ! -x /usr/local/bin/ndpresponder ] || [ ! -s /etc/systemd/system/ndpresponder.service ]; then
+            _yellow "NDP responder is unavailable; using IPv6 NAT66"
+            _yellow "NDP 服务未安装成功，使用 IPv6 NAT66"
         else
             configure_vmbr2_with_he_tunnel || return 1
+        fi
+    elif [ -n "${pve_detected_direct_ipv6_config:-}" ]; then
+        mapfile -t direct_values <<<"$pve_detected_direct_ipv6_config"
+        [ "${#direct_values[@]}" -eq 6 ] || return 1
+        if [ -f /usr/local/bin/pve_maximum_subset ] && [ "$(cat /usr/local/bin/pve_maximum_subset)" = false ]; then
+            _blue "No set ${direct_values[4]}"
+        elif [ ! -x /usr/local/bin/ndpresponder ] || [ ! -s /etc/systemd/system/ndpresponder.service ]; then
+            _yellow "NDP responder is unavailable; using IPv6 NAT66"
+            _yellow "NDP 服务未安装成功，使用 IPv6 NAT66"
+        else
+            configure_vmbr2_with_explicit_ipv6_prefix "${direct_values[@]}" || return 1
         fi
     else
         # A regular SLAAC /64 or /128 is not a delegation. Keep NAT66 for new
@@ -1634,12 +1893,7 @@ configure_vmbr2() {
 
 # 为HE隧道配置vmbr2
 configure_vmbr2_with_he_tunnel() {
-    chattr -i /etc/network/interfaces
-    sudo tee -a /etc/network/interfaces <<EOF
-
-${temp_config}
-EOF
-    cat <<EOF | sudo tee -a /etc/network/interfaces
+    pve_append_network_config <<EOF || return 1
 
 auto vmbr2
 iface vmbr2 inet6 static
@@ -1651,7 +1905,10 @@ EOF
     if [ -f "/usr/local/bin/ndpresponder" ]; then
         new_exec_start="ExecStart=/usr/local/bin/ndpresponder -i he-ipv6 -n ${new_subnet}"
         file_path="/etc/systemd/system/ndpresponder.service"
-        sed -i "s|^ExecStart=.*|${new_exec_start}|" "$file_path"
+        if ! grep -Fxq "$new_exec_start" "$file_path"; then
+            sed -i "s|^ExecStart=.*|${new_exec_start}|" "$file_path" || return 1
+            pve_ndpresponder_config_changed=true
+        fi
     fi
     pve_save_direct_ipv6_config "$new_subnet" "${new_subnet%/*}" routed "$ipv6_gateway" vmbr2 tunnel || return 1
     configure_ipv6_forwarding vmbr2
@@ -1661,8 +1918,26 @@ EOF
 configure_vmbr2_with_explicit_ipv6_prefix() {
     local direct_prefix="$1" direct_gateway="$2" direct_mode="$3" direct_upstream_gateway="$4"
     local direct_bridge="$5" direct_transport="$6" ndp_interface new_exec_start file_path
-    chattr -i /etc/network/interfaces
-    cat <<EOF | sudo tee -a /etc/network/interfaces
+    local normalized
+    local -a normalized_values
+    normalized=$(pve_direct_ipv6_normalize "$direct_prefix" "$direct_upstream_gateway" "$direct_mode" "$direct_gateway") || return 1
+    mapfile -t normalized_values <<<"$normalized"
+    [ "${#normalized_values[@]}" -eq 4 ] || return 1
+    direct_prefix="${normalized_values[0]}"
+    direct_gateway="${normalized_values[1]}"
+    direct_mode="${normalized_values[2]}"
+    direct_upstream_gateway="${normalized_values[3]}"
+    validate_pve_direct_ipv6_bridge_value "$direct_bridge" || return 1
+    validate_pve_direct_ipv6_transport_value "$direct_transport" || return 1
+    local host_addresses upstream_gateway
+    host_addresses=$(pve_ipv6_json_probe reserved_addresses) || return 1
+    upstream_gateway=$(pve_ipv6_json_probe gateway) || return 1
+    if [ "$direct_gateway" = "$upstream_gateway" ] || printf '%s\n' "$host_addresses" | grep -Fxq "$direct_gateway"; then
+        _red "Bridge gateway is already used by the host or upstream router; set PVE_IPV6_BRIDGE_GATEWAY to an unused address"
+        _red "网桥网关已被宿主机或上游路由器使用，请用 PVE_IPV6_BRIDGE_GATEWAY 指定空闲地址"
+        return 1
+    fi
+    pve_append_network_config <<EOF || return 1
 auto ${direct_bridge}
 iface ${direct_bridge} inet6 static
     address ${direct_gateway}/${direct_prefix##*/}
@@ -1676,7 +1951,10 @@ EOF
         if [ -f "/usr/local/bin/ndpresponder" ] && [ -f "/etc/systemd/system/ndpresponder.service" ]; then
             new_exec_start="ExecStart=/usr/local/bin/ndpresponder -i ${ndp_interface} -n ${direct_prefix}"
             file_path="/etc/systemd/system/ndpresponder.service"
-            sed -i "s|^ExecStart=.*|${new_exec_start}|" "$file_path"
+            if ! grep -Fxq "$new_exec_start" "$file_path"; then
+                sed -i "s|^ExecStart=.*|${new_exec_start}|" "$file_path" || return 1
+                pve_ndpresponder_config_changed=true
+            fi
         fi
     else
         disable_ndpresponder
@@ -1871,12 +2149,26 @@ restart_network_services() {
 }
 
 setup_ndpresponder() {
+    local mode transport bridge
+    mode=$(read_network_state "$(pve_direct_ipv6_state_file pve_direct_ipv6_mode)" validate_pve_direct_ipv6_mode_value 2>/dev/null || true)
+    transport=$(read_network_state "$(pve_direct_ipv6_state_file pve_direct_ipv6_transport)" validate_pve_direct_ipv6_transport_value 2>/dev/null || true)
+    bridge=$(read_network_state "$(pve_direct_ipv6_state_file pve_direct_ipv6_bridge)" validate_pve_direct_ipv6_bridge_value 2>/dev/null || true)
+    if [ "$mode" = routed ] && [ "$transport" = bridge ] && pve_network_bridge_exists "$bridge"; then
+        _green "Direct routed IPv6 bridge is configured"
+        _green "已配置路由 IPv6 网桥"
+        return 0
+    fi
     if [ -f "/usr/local/bin/ndpresponder" ] && [ -f "/etc/systemd/system/ndpresponder.service" ]; then
         echo "Found ndpresponder binary and service file, setting up..."
         echo "已找到 ndpresponder 二进制文件和服务文件，正在配置..."
         systemctl daemon-reload
         systemctl enable ndpresponder.service
-        systemctl start ndpresponder.service
+        if [ "${pve_ndpresponder_config_changed:-false}" = true ]; then
+            systemctl restart ndpresponder.service || return 1
+            pve_ndpresponder_config_changed=false
+        else
+            systemctl start ndpresponder.service || return 1
+        fi
         systemctl status ndpresponder.service 2>/dev/null
         return 0
     else
@@ -1887,28 +2179,43 @@ setup_ndpresponder() {
 }
 
 backup_and_clean_interfaces() {
-    if [ ! -f /etc/network/interfaces_nat.bak ]; then
-        cp /etc/network/interfaces /etc/network/interfaces_nat.bak
-        chattr -i /etc/network/interfaces
-        input_file="/etc/network/interfaces"
-        output_file="/etc/network/interfaces.tmp"
-        start_pattern="iface lo inet loopback"
-        end_pattern="auto vmbr0"
-        delete_lines=0
-        while IFS= read -r line; do
-            if [[ $line == *"$start_pattern"* ]]; then
-                delete_lines=1
-            fi
-            if [ $delete_lines -eq 0 ] || [[ $line == *"$start_pattern"* ]] || [[ $line == *"$end_pattern"* ]]; then
-                echo "$line" >>"$output_file"
-            fi
-            if [[ $line == *"$end_pattern"* ]]; then
-                delete_lines=0
-            fi
-        done <"$input_file"
-        mv "$output_file" "$input_file"
-        chattr +i /etc/network/interfaces
+    local path="${PVE_NETWORK_INTERFACES_FILE:-/etc/network/interfaces}" temporary
+    path=$(readlink -f "$path") || return 1
+    [ -f "${path}_nat.bak" ] && return 0
+    cp -p "$path" "${path}_nat.bak" || return 1
+    # Older cleanup removed every line between lo and vmbr0, including
+    # source directives, other NICs and tunnels. Only remove the migrated
+    # physical uplink's stanzas from this file; retain all other topology.
+    pve_vmbr0_owns_interface "${interface:-}" || return 0
+    pve_require_writable_network_file "$path" || return 1
+    temporary=$(mktemp "${path}.tmp.XXXXXX") || return 1
+    if ! python3 - "$path" "$interface" >"$temporary" <<'PYCODE'
+import pathlib
+import sys
+lines = pathlib.Path(sys.argv[1]).read_text().splitlines(keepends=True)
+selected, dropping = sys.argv[2], False
+for line in lines:
+    fields = line.split()
+    if fields and not line[0].isspace() and not fields[0].startswith('#'):
+        dropping = fields[0] == 'iface' and len(fields) > 1 and fields[1] == selected
+        if fields[0] in {'auto', 'allow-hotplug'} and selected in fields[1:]:
+            remaining = [name for name in fields[1:] if name != selected]
+            if remaining:
+                print(fields[0] + ' ' + ' '.join(remaining))
+            continue
+    if not dropping:
+        print(line, end='')
+PYCODE
+    then
+        rm -f "$temporary"
+        return 1
     fi
+    if ! chmod --reference="$path" "$temporary" || ! chown --reference="$path" "$temporary" ||
+       ! mv -f "$temporary" "$path"; then
+        rm -f "$temporary"
+        return 1
+    fi
+    chattr +i "$path" 2>/dev/null || true
 }
 
 clean_cache_files() {
@@ -1919,6 +2226,15 @@ clean_cache_files() {
 }
 
 check_ndpresponder_status() {
+    local mode transport bridge
+    mode=$(read_network_state "$(pve_direct_ipv6_state_file pve_direct_ipv6_mode)" validate_pve_direct_ipv6_mode_value 2>/dev/null || true)
+    transport=$(read_network_state "$(pve_direct_ipv6_state_file pve_direct_ipv6_transport)" validate_pve_direct_ipv6_transport_value 2>/dev/null || true)
+    bridge=$(read_network_state "$(pve_direct_ipv6_state_file pve_direct_ipv6_bridge)" validate_pve_direct_ipv6_bridge_value 2>/dev/null || true)
+    if [ "$mode" = routed ] && [ "$transport" = bridge ] && pve_network_bridge_exists "$bridge"; then
+        _green "Direct routed IPv6 bridge is configured"
+        _green "已配置路由 IPv6 网桥"
+        return 0
+    fi
     appended_file="/usr/local/bin/pve_appended_content.txt"
     if [ ! -s "$appended_file" ]; then
         service_status=$(systemctl is-active ndpresponder.service)
@@ -1946,12 +2262,20 @@ cdn_urls=("https://cdn0.spiritlhl.top/" "http://cdn3.spiritlhl.net/" "http://cdn
 check_cdn_file
 get_system_arch
 sysctl_path=$(which sysctl)
+pve_interfaces_probe json >/dev/null || {
+    _red "Unable to read network configuration; check interfaces and its source files"
+    _red "无法读取网络配置，请检查 interfaces 及其引用的配置文件"
+    exit 1
+}
+pve_require_writable_network_file || exit 1
 detect_network_interfaces || exit 1
 detect_he_tunnel || exit 1
+# Discover before vmbr0 migration changes a physical uplink stanza to /128.
+pve_detected_direct_ipv6_config=$(pve_auto_direct_ipv6_config 2>/dev/null || true)
 install_ndpresponder
 detect_ipv4_info || exit 1
-prepare_network_interfaces
-configure_vmbr0
+prepare_network_interfaces || exit 1
+configure_vmbr0 || exit 1
 select_nat_ipv4_subnet || exit 1
 select_nat_ipv6_subnet || exit 1
 configure_vmbr1 || exit 1
@@ -1961,7 +2285,7 @@ rm -rf /usr/local/bin/iface_auto.txt
 setup_firewall || exit 1
 restart_network_services || exit 1
 setup_ndpresponder
-backup_and_clean_interfaces
+backup_and_clean_interfaces || exit 1
 clean_cache_files
 systemctl start check-dns.service
 sleep 3
