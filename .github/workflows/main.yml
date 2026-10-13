@@ -1,23 +1,11 @@
 name: Build and Upload ndpresponder
-
-on:
-  repository_dispatch:
-    types:
-      - ndpresponder_update
-  schedule:
-    - cron: '0 12 * * *'
-  workflow_dispatch:
-
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-
 permissions:
   contents: write
-
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
-
 jobs:
   build-and-upload:
     name: Build, Upload ndpresponder, and Push Docker Image
@@ -26,43 +14,48 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        architecture: [amd64, arm64]
+        architecture:
+        - amd64
+        - arm64
     steps:
-      - name: Checkout ndpresponder repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          repository: oneclickvirt/ndpresponder
-
-      - name: Set up Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version-file: go.mod
-
-      - name: Build ndpresponder
-        run: |
-          mkdir -p build
-          CGO_ENABLED=0 GOARCH=${{ matrix.architecture }} GOOS=linux go build -o build/ndpresponder .
-
-      - name: Upload to GitHub Releases
-        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
-        with:
-          files: build/ndpresponder
-          tag_name: ${{ matrix.architecture == 'amd64' && 'ndpresponder_x86' || 'ndpresponder_aarch64' }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Build Docker Image
-        run: |
-          arch_suffix=$([[ "${{ matrix.architecture }}" == "amd64" ]] && echo "x86" || echo "aarch64")
-          docker build -t "spiritlhl/ndpresponder_${arch_suffix}:latest" .
-
-      - name: Log in to Docker Hub
-        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
-        with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_PASSWORD }}
-
-      - name: Push Docker Image
-        run: |
-          arch_suffix=$([[ "${{ matrix.architecture }}" == "amd64" ]] && echo "x86" || echo "aarch64")
-          docker push "spiritlhl/ndpresponder_${arch_suffix}:latest"
+    - name: Checkout ndpresponder repository
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        repository: oneclickvirt/ndpresponder
+    - name: Set up Go
+      uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+      with:
+        go-version-file: go.mod
+    - name: Build ndpresponder
+      run: |
+        mkdir -p build
+        CGO_ENABLED=0 GOARCH=${{ matrix.architecture }} GOOS=linux go build -o build/ndpresponder .
+    - name: Upload to GitHub Releases
+      uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
+      with:
+        files: build/ndpresponder
+        tag_name: ${{ matrix.architecture == 'amd64' && 'ndpresponder_x86' || 'ndpresponder_aarch64' }}
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    - name: Build Docker Image
+      run: |
+        arch_suffix=$([[ "${{ matrix.architecture }}" == "amd64" ]] && echo "x86" || echo "aarch64")
+        docker build -t "spiritlhl/ndpresponder_${arch_suffix}:latest" .
+    - name: Log in to Docker Hub
+      uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+      with:
+        username: ${{ secrets.DOCKER_USERNAME }}
+        password: ${{ secrets.DOCKER_PASSWORD }}
+    - name: Push Docker Image
+      run: |
+        arch_suffix=$([[ "${{ matrix.architecture }}" == "amd64" ]] && echo "x86" || echo "aarch64")
+        docker push "spiritlhl/ndpresponder_${arch_suffix}:latest"
+    env:
+      GOPROXY: https://proxy.golang.org|direct
+'on':
+  repository_dispatch:
+    types:
+    - ndpresponder_update
+  schedule:
+  - cron: 0 12 * * *
+  workflow_dispatch: null
