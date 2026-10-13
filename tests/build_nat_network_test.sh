@@ -415,7 +415,10 @@ iface vmbr1 inet6 static
     bridge_ports none
 EOF
 eval "$(extract_function update_sysctl)"
+# The real function was restored dynamically above; the later definition is a failure mock.
+# shellcheck disable=SC2218
 update_sysctl 'net.ipv6.conf.vmbr0.accept_ra=2'
+# shellcheck disable=SC2218
 update_sysctl 'net.ipv6.conf.vmbr1.proxy_ndp=1'
 printf '%s\n' 'net.ipv6.conf.vmbr0.accept_ra=2' | grep -Fqxf "$PVE_IPV6_SYSCTL_CONFIG_FILE" || {
     printf 'FAIL: PVE did not persist future vmbr0 router advertisements\n' >&2
