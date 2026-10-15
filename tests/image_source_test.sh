@@ -10,6 +10,8 @@ _blue() { :; }; _red() { :; }; _yellow() { :; }
 assert_eq() { [[ "$1" == "$2" ]] || { printf 'mismatch: %s != %s\n' "$1" "$2" >&2; exit 1; }; }
 # Save the real atomic downloader before stubbing selection I/O.
 eval "$(declare -f _download_with_retry | sed '1s/_download_with_retry/real_download/')"
+# Called indirectly by the sourced selector; older ShellCheck cannot see it.
+# shellcheck disable=SC2317
 _download_with_retry() { calls+=("$1"); [[ "$1" == "$accepted" ]]; }
 cdn_success_url=""; file_path="$work_dir/image"; system=ubuntu22; sys_family=ubuntu
 sys_tag_images=(ubuntu2204); new_images=(ubuntu22); calls=()
