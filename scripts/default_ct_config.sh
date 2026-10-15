@@ -1174,19 +1174,29 @@ _download_with_retry() {
     local max_attempts=5
     local attempt=1
     local wait_time=1
+    local tmp
     while ((attempt <= max_attempts)); do
-        curl -Lk --connect-timeout 10 --retry 0 -o "$output" "$url"
-        if [ $? -eq 0 ]; then
+        tmp=$(mktemp "${output}.tmp.XXXXXX") || return 1
+        if curl -fL --connect-timeout 10 --max-time 600 --retry 0 -o "$tmp" "$url" && [ -s "$tmp" ] && mv -f -- "$tmp" "$output"; then
             return 0
         else
+            rm -f -- "$tmp"
+            if [[ -n "${cdn_success_url:-}" && "$url" == "${cdn_success_url}https://"* ]]; then
+                tmp=$(mktemp "${output}.tmp.XXXXXX") || return 1
+                if curl -fL --connect-timeout 10 --max-time 600 --retry 0 -o "$tmp" "${url#"$cdn_success_url"}" && [ -s "$tmp" ] && mv -f -- "$tmp" "$output"; then
+                    return 0
+                fi
+                rm -f -- "$tmp"
+            fi
             _yellow "Download attempt $attempt failed. Retrying in $wait_time seconds..."
-            sleep $wait_time
+            sleep "$wait_time"
             wait_time=$((wait_time * 2))
             ((attempt++))
         fi
     done
     return 1
 }
+
 
 _fetch_list_with_retry() {
     local url="$1"
@@ -1195,7 +1205,7 @@ _fetch_list_with_retry() {
     local delay=1
     fetch_list_response=""
     while ((attempts < max_attempts)); do
-        response=$(curl -slk -m 6 "${url}")
+        response=$(curl -fsSL --connect-timeout 5 --max-time 15 "${url}")
         if [[ $? -eq 0 && -n "$response" ]]; then
             fetch_list_response="$response"
             return 0
@@ -1222,7 +1232,19 @@ find_and_download_system_image_arm() {
     debian_versions=("10" "11" "12" "13")
     debian_names=("buster" "bullseye" "bookworm" "trixie")
     version=""
-    if [ "$en_system" = "ubuntu" ]; then
+    # Prefer current release metadata, including new Ubuntu codenames and
+    # equivalent arm64/aarch64 asset names.
+    local candidate
+    for candidate in "${system_names[@]}"; do
+        if [[ "$candidate" == "${en_system}_${num_system}_"* &&
+              ( "$candidate" == *_arm64_cloud.tar.xz || "$candidate" == *_aarch64_cloud.tar.xz ) ]]; then
+            system_name="$candidate"
+            break
+        fi
+    done
+    if [ -n "$system_name" ]; then
+        :
+    elif [ "$en_system" = "ubuntu" ]; then
         for ((i = 0; i < ${#ubuntu_versions[@]}; i++)); do
             if [ "${ubuntu_versions[$i]}" = "$num_system" ]; then
                 version="${ubuntu_names[$i]}"

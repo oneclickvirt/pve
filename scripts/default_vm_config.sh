@@ -1110,7 +1110,7 @@ get_new_images() {
     local max_attempts=5
     local delay=1
     while ((attempts < max_attempts)); do
-        images_output=$(curl -s https://api.github.com/repos/oneclickvirt/pve_kvm_images/releases/tags/images 2>/dev/null |
+        images_output=$(curl -fsSL --connect-timeout 5 --max-time 20 https://api.github.com/repos/oneclickvirt/pve_kvm_images/releases/tags/images 2>/dev/null |
             jq -r '.assets[].name' 2>/dev/null | sed -n '/qcow2$/s/.qcow2$//p')
         if [[ -n "$images_output" ]] && [[ "$images_output" != *"error"* ]] && [[ "$images_output" != *"failed"* ]]; then
             return 0
@@ -1130,7 +1130,7 @@ get_system_tag_images() {
     local delay=1
     system_tag_output=""
     while ((attempts < max_attempts)); do
-        system_tag_output=$(curl -s "https://api.github.com/repos/oneclickvirt/pve_kvm_images/releases/tags/${sys_tag}" 2>/dev/null |
+        system_tag_output=$(curl -fsSL --connect-timeout 5 --max-time 20 "https://api.github.com/repos/oneclickvirt/pve_kvm_images/releases/tags/${sys_tag}" 2>/dev/null |
             jq -r '.assets[].name' 2>/dev/null | sed -n '/qcow2$/s/.qcow2$//p')
         if [[ -n "$system_tag_output" ]] && [[ "$system_tag_output" != *"error"* ]] && [[ "$system_tag_output" != *"message"* ]]; then
             return 0
@@ -1151,8 +1151,10 @@ prepare_x86_image() {
     if get_new_images; then
         mapfile -t new_images <<< "$images_output"
     fi
-    # 提取系统族名（去掉末尾数字及连字符），用于查询按系统分类的 release tag
-    sys_family=$(echo "$system" | sed 's/[0-9]*$//' | sed 's/-$//')
+    # The family is the alphabetic prefix, including CentOS Stream aliases.
+    sys_family="${system%%[0-9]*}"
+    sys_family="${sys_family%-}"
+    [[ "$sys_family" == "alpinelinux_"* ]] && sys_family="alpine"
     sys_tag_images=()
     if get_system_tag_images "$sys_family"; then
         mapfile -t sys_tag_images <<< "$system_tag_output"
@@ -1180,7 +1182,7 @@ prepare_x86_image() {
         fi
     fi
     if [ ! -f "$file_path" ]; then
-        download_x86_image
+        download_x86_image || return 1
     fi
     return 0
 }
@@ -1194,10 +1196,17 @@ _download_with_retry() {
     local tmp
     while ((attempt <= max_attempts)); do
         tmp=$(mktemp "${output}.tmp.XXXXXX") || return 1
-        if curl -fLk --connect-timeout 10 --retry 0 -o "$tmp" "$url" && [ -s "$tmp" ] && mv -f -- "$tmp" "$output"; then
+        if curl -fL --connect-timeout 10 --max-time 600 --retry 0 -o "$tmp" "$url" && [ -s "$tmp" ] && mv -f -- "$tmp" "$output"; then
             return 0
         else
             rm -f -- "$tmp"
+            if [[ -n "${cdn_success_url:-}" && "$url" == "${cdn_success_url}https://"* ]]; then
+                tmp=$(mktemp "${output}.tmp.XXXXXX") || return 1
+                if curl -fL --connect-timeout 10 --max-time 600 --retry 0 -o "$tmp" "${url#"$cdn_success_url"}" && [ -s "$tmp" ] && mv -f -- "$tmp" "$output"; then
+                    return 0
+                fi
+                rm -f -- "$tmp"
+            fi
             _yellow "Download attempt $attempt failed. Retrying in $wait_time seconds..."
             sleep "$wait_time"
             wait_time=$((wait_time * 2))
@@ -1207,15 +1216,78 @@ _download_with_retry() {
     return 1
 }
 
+# Map CLI aliases to the current asset, without changing the selected OS.
+_maintained_image_name() {
+    case "$1" in
+        ubuntu[0-9][0-9]) printf '%s04\n' "$1" ;;
+        centos8-stream) printf 'centos8\n' ;;
+        centos9-stream) printf 'centos9\n' ;;
+        *) printf '%s\n' "$1" ;;
+    esac
+}
+
+_image_matches_requested_system() {
+    local image="${1%.qcow2}" requested
+    requested=$(_maintained_image_name "$system")
+    [[ "$image" == "$requested" || "$image" == "${requested}_"* ||
+       "$image" == "$system" || "$image" == "${system}_"* ]]
+}
+
 download_x86_image() {
     ver=""
     selected_image=""
     selected_tag_image=""
+    # 尝试使用 pve_kvm_images 中按系统族分类的 release tag 镜像
+    if [[ -z "$ver" ]] && [[ ${#sys_tag_images[@]} -gt 0 ]]; then
+        matched_tag_images=()
+        for image in "${sys_tag_images[@]}"; do
+            if _image_matches_requested_system "$image"; then
+                matched_tag_images+=("$image")
+            fi
+        done
+        if [[ ${#matched_tag_images[@]} -gt 0 ]]; then
+            sorted_tag_images=$(printf "%s\n" "${matched_tag_images[@]}" | sort -r)
+            selected_tag_image=""
+            for img in $sorted_tag_images; do
+                if [[ "$img" == *cloud* ]]; then
+                    selected_tag_image="$img"
+                    break
+                fi
+            done
+            if [[ -z "$selected_tag_image" ]]; then
+                selected_tag_image=$(echo "$sorted_tag_images" | head -n1)
+            fi
+            if [[ -n "$selected_tag_image" ]]; then
+                url="${cdn_success_url}https://github.com/oneclickvirt/pve_kvm_images/releases/download/${sys_family}/${selected_tag_image}.qcow2"
+                echo "$url"
+                if ! _download_with_retry "$url" "$file_path"; then
+                    _red "Failed to download $file_path from system tag release"
+                    rm -rf "$file_path"
+                else
+                    ver="system_tag"
+                    _blue "Use system-tag image: ${selected_tag_image}"
+                    return 0
+                fi
+            fi
+        fi
+    fi
+    # API 查询列表失败时，仍直接按系统族 tag 构造 URL 尝试下载
+    if [[ -z "$ver" ]] && [[ -n "$sys_family" ]] && [[ ${#sys_tag_images[@]} -eq 0 ]]; then
+        url="${cdn_success_url}https://github.com/oneclickvirt/pve_kvm_images/releases/download/${sys_family}/$(_maintained_image_name "$system").qcow2"
+        echo "$url"
+        if _download_with_retry "$url" "$file_path"; then
+            ver="system_tag_fallback"
+            _blue "Use system-tag fallback image: ${system}"
+            return 0
+        else
+            rm -rf "$file_path"
+        fi
+    fi
     # 尝试使用新镜像
     if [[ ${#new_images[@]} -gt 0 ]]; then
         matched_images=()
         for image in "${new_images[@]}"; do
-            if [[ "$image" == $system* ]]; then
+            if _image_matches_requested_system "$image"; then
                 matched_images+=("$image")
             fi
         done
@@ -1249,52 +1321,6 @@ download_x86_image() {
             fi
         fi
     fi
-    # 尝试使用 pve_kvm_images 中按系统族分类的 release tag 镜像
-    if [[ -z "$ver" ]] && [[ ${#sys_tag_images[@]} -gt 0 ]]; then
-        matched_tag_images=()
-        for image in "${sys_tag_images[@]}"; do
-            if [[ "$image" == $system* ]]; then
-                matched_tag_images+=("$image")
-            fi
-        done
-        if [[ ${#matched_tag_images[@]} -gt 0 ]]; then
-            sorted_tag_images=$(printf "%s\n" "${matched_tag_images[@]}" | sort -r)
-            selected_tag_image=""
-            for img in $sorted_tag_images; do
-                if [[ "$img" == *cloud* ]]; then
-                    selected_tag_image="$img"
-                    break
-                fi
-            done
-            if [[ -z "$selected_tag_image" ]]; then
-                selected_tag_image=$(echo "$sorted_tag_images" | head -n1)
-            fi
-            if [[ -n "$selected_tag_image" ]]; then
-                url="${cdn_success_url}https://github.com/oneclickvirt/pve_kvm_images/releases/download/${sys_family}/${selected_tag_image}.qcow2"
-                echo "$url"
-                if ! _download_with_retry "$url" "$file_path"; then
-                    _red "Failed to download $file_path from system tag release"
-                    rm -rf "$file_path"
-                else
-                    ver="system_tag"
-                    _blue "Use system-tag image: ${selected_tag_image}"
-                    return 0
-                fi
-            fi
-        fi
-    fi
-    # API 查询列表失败时，仍直接按系统族 tag 构造 URL 尝试下载
-    if [[ -z "$ver" ]] && [[ -n "$sys_family" ]] && [[ ${#sys_tag_images[@]} -eq 0 ]]; then
-        url="${cdn_success_url}https://github.com/oneclickvirt/pve_kvm_images/releases/download/${sys_family}/${system}.qcow2"
-        echo "$url"
-        if _download_with_retry "$url" "$file_path"; then
-            ver="system_tag_fallback"
-            _blue "Use system-tag fallback image: ${system}"
-            return 0
-        else
-            rm -rf "$file_path"
-        fi
-    fi
     # 如果新镜像不可用，使用旧镜像
     if [[ -z "$ver" ]]; then
         v20=("fedora34" "almalinux8" "debian11" "debian12" "ubuntu18" "ubuntu20" "ubuntu22" "centos7" "alpinelinux_edge" "alpinelinux_stable" "rockylinux8")
@@ -1302,12 +1328,12 @@ download_x86_image() {
         v10=("almalinux8" "archlinux" "fedora33" "opensuse-leap-15" "ubuntu18" "ubuntu20" "ubuntu22" "debian10" "debian11")
         ver_list=(v20 v11 v10)
         ver_name_list=("v2.0" "v1.1" "v1.0")
-        for ver in "${ver_list[@]}"; do
-            array_name="${ver}[@]"
+        for candidate_ver in "${ver_list[@]}"; do
+            array_name="${candidate_ver}[@]"
             array=("${!array_name}")
             if [[ " ${array[*]} " == *" $system "* ]]; then
                 for index in "${!ver_list[@]}"; do
-                    if [[ "${ver_list[$index]}" == "$ver" ]]; then
+                    if [[ "${ver_list[$index]}" == "$candidate_ver" ]]; then
                         ver="${ver_name_list[$index]}"
                         break
                     fi
