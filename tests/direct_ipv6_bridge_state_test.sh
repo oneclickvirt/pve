@@ -130,6 +130,7 @@ formatter=$(sed -n '/^configure_vmbr0_bridge() {/,/^}/p' "$repo_root/scripts/ins
 formatter=${formatter//\/etc\/network\/interfaces/$PVE_NETWORK_INTERFACES_FILE}
 formatter=${formatter//\/usr\/local\/bin/$PVE_STATE_DIR}
 eval "$formatter"
+eval "$(sed -n '/^pve_installer_network_topology() {/,/^}/p' "$repo_root/scripts/install_pve.sh")"
 get_ipv4_address_cidr() { printf '%s\n' '192.0.2.2/24'; }
 format_ipv4_gateway_config() { printf '%s\n' '    gateway 192.0.2.1'; }
 sudo() { "$@"; }

@@ -41,11 +41,12 @@ init_params() {
     storage="${13:-local}"
     independent_ipv6="${14:-N}"
     validate_storage_name "$storage"
+    pve_validate_guest_metadata vm "$vm_num" || return 1
     independent_ipv6=$(echo "$independent_ipv6" | tr '[:upper:]' '[:lower:]')
+    [[ "$independent_ipv6" == y || "$independent_ipv6" == n ]] || return 1
     if [ ! -d "qcow" ]; then
         mkdir qcow
     fi
-    rm -rf "vm$vm_num"
 }
 
 check_cdn() {
@@ -121,13 +122,13 @@ load_default_config() {
 }
 
 create_vm() {
-    appended_file="/usr/local/bin/pve_appended_content.txt"
+    appended_file="${PVE_IPV6_MAPPING_FILE:-/usr/local/bin/pve_appended_content.txt}"
     if [ "$independent_ipv6" == "n" ]; then
         qm create $vm_num --agent 1 --scsihw virtio-scsi-single --serial0 socket \
             --cores $core --sockets 1 --cpu $cpu_type \
             --net0 virtio,bridge=vmbr1,firewall=0 \
             --ostype l26 \
-            ${kvm_flag}
+            ${kvm_flag} || return 1
     else
         if [ -s "$appended_file" ] || [ "${pve_direct_ipv6_available:-false}" != true ]; then
             net1_bridge="vmbr1"
@@ -139,13 +140,13 @@ create_vm() {
             --net0 virtio,bridge=vmbr1,firewall=0 \
             --net1 virtio,bridge="$net1_bridge",firewall=0 \
             --ostype l26 \
-            ${kvm_flag}
+            ${kvm_flag} || return 1
     fi
     if [ "$system_arch" = "x86" ] || [ "$system_arch" = "x86_64" ]; then
-        qm importdisk $vm_num /root/qcow/${system}.qcow2 ${storage}
+        qm importdisk $vm_num /root/qcow/${system}.qcow2 ${storage} || return 1
     else
-        qm set $vm_num --bios ovmf
-        qm importdisk $vm_num /root/qcow/${system}.${ext} ${storage}
+        qm set $vm_num --bios ovmf || return 1
+        qm importdisk $vm_num /root/qcow/${system}.${ext} ${storage} || return 1
     fi
     sleep 3
     volid=$(pvesm list "$storage" | awk -v vmid="${vm_num}" '$5 == vmid && $1 ~ /\.raw$/ {print $1}' | tail -n 1)
@@ -159,146 +160,65 @@ create_vm() {
         echo "错误：在存储 '${storage}' 中未找到 VM ID '${vm_num}' 对应的磁盘文件"
         return 1
     fi
-    file_path=$(pvesm path ${volid})
-    if [ $? -ne 0 ] || [ -z "$file_path" ]; then
-        echo "Error: Failed to resolve path for volume '${volid}'"
-        echo "错误：无法解析卷 '${volid}' 对应的路径"
-        return 1
-    fi
-    file_name=$(basename "$file_path")
-    echo "Found file: $file_name"
-    echo "已找到磁盘文件：$file_name"
-    echo "Attempting to set SCSI hardware with virtio-scsi-pci for VM $vm_num..."
-    echo "正在尝试为 VM $vm_num 设置 virtio-scsi-pci SCSI 硬件..."
-    qm set $vm_num --scsihw virtio-scsi-pci --scsi0 ${storage}:${vm_num}/vm-${vm_num}-disk-0.raw
-    if [ $? -ne 0 ]; then
-        echo "Failed to set SCSI hardware with vm-${vm_num}-disk-0.raw. Trying alternative disk file..."
-        echo "使用 vm-${vm_num}-disk-0.raw 设置 SCSI 硬件失败，正在尝试其他磁盘文件..."
-        qm set $vm_num --scsihw virtio-scsi-pci --scsi0 ${storage}:${vm_num}/$file_name
-        if [ $? -ne 0 ]; then
-            echo "Failed to set SCSI hardware with $file_name for VM $vm_num. Trying fallback file..."
-            echo "使用 $file_name 为 VM $vm_num 设置 SCSI 硬件失败，正在尝试回退文件..."
-            qm set $vm_num --scsihw virtio-scsi-pci --scsi0 ${storage}:$file_name
-            if [ $? -ne 0 ]; then
-                echo "All attempts failed. Exiting..."
-                echo "所有尝试均失败，脚本退出..."
-                return 1
-            fi
-        fi
-    fi
-    qm set $vm_num --bootdisk scsi0
-    qm set $vm_num --boot order=scsi0
-    qm set $vm_num --memory $memory
+    qm set "$vm_num" --scsihw virtio-scsi-pci --scsi0 "$volid" || return 1
+    qm set $vm_num --bootdisk scsi0 || return 1
+    qm set $vm_num --boot order=scsi0 || return 1
+    qm set $vm_num --memory $memory || return 1
     # --swap 256
     if [[ "$system_arch" == "arm" ]]; then
-        qm set $vm_num --scsi1 ${storage}:cloudinit
+        qm set $vm_num --scsi1 ${storage}:cloudinit || return 1
     else
-        qm set $vm_num --ide1 ${storage}:cloudinit
+        qm set $vm_num --ide1 ${storage}:cloudinit || return 1
     fi
-    configure_network
-    qm resize $vm_num scsi0 ${disk}G
-    if [ $? -ne 0 ]; then
-        if [[ $disk =~ ^[0-9]+G$ ]]; then
-            dnum=${disk::-1}
-            disk_m=$((dnum * 1024))
-            qm resize $vm_num scsi0 ${disk_m}M
-        fi
-    fi
-    qm start $vm_num
+    configure_network || return 1
+    pve_resize_vm_disk || return 1
+    qm start "$vm_num" || return 1
     return 0
 }
 
 configure_network() {
     user_ip="${pve_nat_prefix}.${vm_num}"
-    if [ "$independent_ipv6" == "y" ]; then
-        if [ "${pve_direct_ipv6_available:-false}" = true ] || [ -s /usr/local/bin/pve_appended_content.txt ]; then
-            qm set $vm_num --ipconfig0 ip=${user_ip}/24,gw=${pve_nat_gateway}
-            appended_file="/usr/local/bin/pve_appended_content.txt"
-            if [ -s "$appended_file" ]; then
-                # 使用 vmbr1 网桥和 NAT 映射
-                vm_internal_ipv6="$(pve_nat_ipv6_for_id "$vm_num")"
-                qm set $vm_num --ipconfig1 ip6="${vm_internal_ipv6}/64",gw6="${pve_nat_ipv6_gateway}"
-                host_external_ipv6=$(get_available_vmbr1_ipv6)
-                if [ -z "$host_external_ipv6" ]; then
-                    echo -e "\e[31mNo available IPv6 address found for NAT mapping\e[0m"
-                    echo -e "\e[31m没有可用的IPv6地址用于NAT映射\e[0m"
-                    independent_ipv6_status="N"
-                else
-                    setup_nat_mapping "$vm_internal_ipv6" "$host_external_ipv6"
-                    vm_external_ipv6="$host_external_ipv6"
-                    echo "VM configured with NAT mapping: $vm_internal_ipv6 -> $host_external_ipv6"
-                    echo "虚拟机已配置NAT映射：$vm_internal_ipv6 -> $host_external_ipv6"
-                    independent_ipv6_status="Y"
-                fi
-            elif [ "${pve_direct_ipv6_available:-false}" = true ]; then
-                # 使用已确认的委派前缀直接分配 IPv6 地址
-                if vm_external_ipv6="$(pve_direct_ipv6_for_id "$vm_num")"; then
-                    qm set $vm_num --ipconfig1 ip6="${vm_external_ipv6}/128",gw6="${pve_direct_ipv6_gateway}"
-                    independent_ipv6_status="Y"
-                    _fw6_drop_icmpv6_ping "${vm_external_ipv6}" "${pve_direct_ipv6_prefix}"
-                    _fw_save
-                else
-                    independent_ipv6_status="N"
-                    vm_external_ipv6=""
-                fi
-            else
-                independent_ipv6_status="N"
-            fi
-            qm set $vm_num --nameserver "1.1.1.1 2606:4700:4700::1111" || qm set $vm_num --nameserver 1.1.1.1
-            qm set $vm_num --searchdomain local
-        else
-            independent_ipv6_status="N"
-        fi
+    qm set "$vm_num" --ipconfig0 "ip=${user_ip}/24,gw=${pve_nat_gateway}" || return 1
+    independent_ipv6_status=N
+    if [ "$independent_ipv6" == y ]; then
+        pve_configure_vm_ipv6 1 || return 1
+        qm set "$vm_num" --nameserver '1.1.1.1 2606:4700:4700::1111' || return 1
     else
-        independent_ipv6_status="N"
+        qm set "$vm_num" --nameserver 1.1.1.1 || return 1
     fi
-    if [ "$independent_ipv6_status" == "N" ]; then
-        qm set $vm_num --ipconfig0 ip=${user_ip}/24,gw=${pve_nat_gateway}
-        qm set $vm_num --nameserver 8.8.8.8
-        # qm set $vm_num --nameserver 8.8.4.4
-        qm set $vm_num --searchdomain local
-    fi
-    qm set $vm_num --cipassword $password --ciuser $user
-    sleep 5
+    qm set "$vm_num" --searchdomain local || return 1
+    qm set "$vm_num" --cipassword="$password" --ciuser="$user" || return 1
 }
 
 setup_port_forwarding() {
     user_ip="${pve_nat_prefix}.${vm_num}"
-    _fw_add_dnat "vmbr0" "tcp" "${sshn}" "${user_ip}:22"
+    _fw_add_dnat "vmbr0" "tcp" "${sshn}" "${user_ip}:22" || return 1
     if [ "${web1_port}" -ne 0 ]; then
-        _fw_add_dnat "vmbr0" "tcp" "${web1_port}" "${user_ip}:80"
+        _fw_add_dnat "vmbr0" "tcp" "${web1_port}" "${user_ip}:80" || return 1
     fi
     if [ "${web2_port}" -ne 0 ]; then
-        _fw_add_dnat "vmbr0" "tcp" "${web2_port}" "${user_ip}:443"
+        _fw_add_dnat "vmbr0" "tcp" "${web2_port}" "${user_ip}:443" || return 1
     fi
     if [ "${port_first}" -ne 0 ] && [ "${port_last}" -ne 0 ]; then
-        _fw_add_dnat_range "vmbr0" "tcp" "${port_first}-${port_last}" "${user_ip}:${port_first}-${port_last}"
-        _fw_add_dnat_range "vmbr0" "udp" "${port_first}-${port_last}" "${user_ip}:${port_first}-${port_last}"
+        _fw_add_dnat_range "vmbr0" "tcp" "${port_first}-${port_last}" "${user_ip}:${port_first}-${port_last}" || return 1
+        _fw_add_dnat_range "vmbr0" "udp" "${port_first}-${port_last}" "${user_ip}:${port_first}-${port_last}" || return 1
     fi
-    _fw_save
+    _fw_save || return 1
 }
 
 save_vm_info() {
-    if [ "$independent_ipv6_status" == "Y" ]; then
-        echo "$vm_num $user $password $core $memory $disk $sshn $web1_port $web2_port $port_first $port_last $system $storage $vm_external_ipv6" >>"vm${vm_num}"
+    if [ "$independent_ipv6_status" != "N" ]; then
+        metadata_values="$vm_num $user $password $core $memory $disk $sshn $web1_port $web2_port $port_first $port_last $system $storage $vm_external_ipv6"
         data=$(echo " VMID 用户名-username 密码-password CPU核数-CPU 内存-memory 硬盘-disk SSH端口 80端口 443端口 外网端口起-port-start 外网端口止-port-end 系统-system 存储盘-storage 独立IPV6地址-ipv6_address")
     else
-        echo "$vm_num $user $password $core $memory $disk $sshn $web1_port $web2_port $port_first $port_last $system $storage" >>"vm${vm_num}"
+        metadata_values="$vm_num $user $password $core $memory $disk $sshn $web1_port $web2_port $port_first $port_last $system $storage"
         data=$(echo " VMID 用户名-username 密码-password CPU核数-CPU 内存-memory 硬盘-disk SSH端口 80端口 443端口 外网端口起-port-start 外网端口止-port-end 系统-system 存储盘-storage")
     fi
-    values=$(cat "vm${vm_num}")
-    IFS=' ' read -ra data_array <<<"$data"
-    IFS=' ' read -ra values_array <<<"$values"
-    length=${#data_array[@]}
-    for ((i = 0; i < $length; i++)); do
-        echo "${data_array[$i]} ${values_array[$i]}"
-        echo ""
-    done >"/tmp/temp${vm_num}.txt"
-    sed -i 's/^/# /' "/tmp/temp${vm_num}.txt"
-    cat "/etc/pve/qemu-server/${vm_num}.conf" >>"/tmp/temp${vm_num}.txt"
-    cp "/tmp/temp${vm_num}.txt" "/etc/pve/qemu-server/${vm_num}.conf"
-    rm -rf "/tmp/temp${vm_num}.txt"
-    cat "vm${vm_num}"
+    if [ "$independent_ipv6_status" = NAT66 ]; then
+        data="${data//独立IPV6地址-ipv6_address/共享NAT66地址-ipv6_address}"
+        data="${data//外网IPV6-ipv6/共享NAT66地址-ipv6}"
+    fi
+    pve_save_guest_record vm "$vm_num" "$metadata_values" "$data" || return 1
 }
 
 main() {
@@ -307,15 +227,16 @@ main() {
     load_default_config || exit 1
     load_nat_ipv4_config || exit 1
     setup_locale
-    init_params "$@"
+    init_params "$@" || exit 1
     validate_vm_num || exit 1
+    pve_nat_ipv4_for_id "$vm_num" >/dev/null || exit 1
     get_system_arch || exit 1
     check_kvm_support
     prepare_system_image || exit 1
     check_ipv6_config || exit 1
     create_vm || exit 1
-    setup_port_forwarding
-    save_vm_info
+    setup_port_forwarding || exit 1
+    save_vm_info || exit 1
 }
 
 main "$@"

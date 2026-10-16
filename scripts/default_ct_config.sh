@@ -810,7 +810,7 @@ PY
 
 check_ipv6_setup() {
     if [ "$independent_ipv6" == "y" ]; then
-        appended_file="/usr/local/bin/pve_appended_content.txt"
+        appended_file="${PVE_IPV6_MAPPING_FILE:-/usr/local/bin/pve_appended_content.txt}"
         if [ -s "$appended_file" ]; then
             _green "Additional IPv6 addresses exist for mapping by NAT, and the host can open services with separate IPV6 addresses."
             _green "存在额外的IPv6地址可供NAT进行映射，宿主机可开设带独立IPV6地址的服务。"
@@ -859,8 +859,8 @@ check_ipv6_setup() {
 }
 
 get_available_vmbr1_ipv6() {
-    local appended_file="/usr/local/bin/pve_appended_content.txt"
-    local used_ips_file="/usr/local/bin/pve_used_vmbr1_ips.txt"
+    local appended_file="${PVE_IPV6_MAPPING_FILE:-/usr/local/bin/pve_appended_content.txt}"
+    local used_ips_file="${PVE_IPV6_USED_FILE:-/usr/local/bin/pve_used_vmbr1_ips.txt}"
     if [ ! -f "$used_ips_file" ]; then
         touch "$used_ips_file"
     fi
@@ -1031,9 +1031,12 @@ _fw_add_snat() {
     local src_ip="$1" oif="$2" snat_ip="$3"
     if _use_nft; then
         _nft_init
-        nft add rule ip nat postrouting ip saddr "$src_ip" oifname "$oif" snat to "$snat_ip"
+        nft list chain ip nat ocv_snat >/dev/null 2>&1 ||
+            nft 'add chain ip nat ocv_snat { type nat hook postrouting priority 90; policy accept; }' || return 1
+        nft insert rule ip nat ocv_snat ip saddr "$src_ip" oifname "$oif" snat to "$snat_ip"
     else
-        iptables -t nat -A POSTROUTING -s "$src_ip" -o "$oif" -j SNAT --to-source "$snat_ip"
+        iptables -t nat -C POSTROUTING -s "$src_ip" -o "$oif" -j SNAT --to-source "$snat_ip" 2>/dev/null ||
+            iptables -t nat -I POSTROUTING 1 -s "$src_ip" -o "$oif" -j SNAT --to-source "$snat_ip"
     fi
 }
 
@@ -1052,10 +1055,13 @@ _fw6_add_snat() {
     local src_int="$1" src_ext="$2"
     if _use_nft; then
         _nft_init
-        nft add rule ip6 nat postrouting ip6 saddr "$src_int" snat to "$src_ext"
+        nft list chain ip6 nat ocv_snat >/dev/null 2>&1 ||
+            nft 'add chain ip6 nat ocv_snat { type nat hook postrouting priority 90; policy accept; }' || return 1
+        nft insert rule ip6 nat ocv_snat ip6 saddr "$src_int" snat to "$src_ext"
     else
         _ip6tables_ensure_modules
-        ip6tables -t nat -A POSTROUTING -s "$src_int" -j SNAT --to-source "$src_ext"
+        ip6tables -t nat -C POSTROUTING -s "$src_int" -j SNAT --to-source "$src_ext" 2>/dev/null ||
+            ip6tables -t nat -I POSTROUTING 1 -s "$src_int" -j SNAT --to-source "$src_ext"
     fi
 }
 
@@ -1098,8 +1104,8 @@ setup_nat_mapping() {
     fi
     if _use_nft; then
         if ! nft list chain ip6 nat prerouting 2>/dev/null | grep -q "$host_external_ipv6"; then
-            _fw6_add_dnat "$host_external_ipv6" "$ct_internal_ipv6"
-            _fw6_add_snat "$ct_internal_ipv6" "$host_external_ipv6"
+            _fw6_add_dnat "$host_external_ipv6" "$ct_internal_ipv6" || return 1
+            _fw6_add_snat "$ct_internal_ipv6" "$host_external_ipv6" || return 1
         fi
         _fw_save
     else
@@ -1111,9 +1117,9 @@ setup_nat_mapping() {
         fi
         if ! grep -q "$host_external_ipv6" "$rules_file"; then
             ip6tables -t nat -A PREROUTING -d "$host_external_ipv6" -j DNAT --to-destination "$ct_internal_ipv6"
-            ip6tables -t nat -A POSTROUTING -s "$ct_internal_ipv6" -j SNAT --to-source "$host_external_ipv6"
+            _fw6_add_snat "$ct_internal_ipv6" "$host_external_ipv6" || return 1
             echo "ip6tables -t nat -A PREROUTING -d $host_external_ipv6 -j DNAT --to-destination $ct_internal_ipv6" >> "$rules_file"
-            echo "ip6tables -t nat -A POSTROUTING -s $ct_internal_ipv6 -j SNAT --to-source $host_external_ipv6" >> "$rules_file"
+            echo "ip6tables -t nat -C POSTROUTING -s $ct_internal_ipv6 -j SNAT --to-source $host_external_ipv6 2>/dev/null || ip6tables -t nat -I POSTROUTING 1 -s $ct_internal_ipv6 -j SNAT --to-source $host_external_ipv6" >> "$rules_file"
         fi
         if [ ! -f "$service_file" ]; then
             cat > "$service_file" << 'NATEOF'
@@ -1139,6 +1145,21 @@ NATEOF
         fi
         _fw_save
     fi
+}
+
+pve_prepare_ct_template() {
+    local helper="${PVE_CT_TEMPLATE_HELPER_FILE:-}" local_helper
+    if [ -z "$helper" ]; then
+        local_helper="$(dirname "${BASH_SOURCE[0]}")/../extra_scripts/prepare_ct_template.py"
+        if [ -f "$local_helper" ]; then
+            helper="$local_helper"
+        else
+            helper=/usr/local/lib/oneclickvirt/prepare_ct_template.py
+            mkdir -p "${helper%/*}" || return 1
+            _download_with_retry "${cdn_success_url:-}https://raw.githubusercontent.com/oneclickvirt/pve/main/extra_scripts/prepare_ct_template.py" "$helper" || return 1
+        fi
+    fi
+    python3 "$helper" "/var/lib/vz/template/cache/${system_name}" || return 1
 }
 
 prepare_system_image() {
@@ -1440,4 +1461,76 @@ find_and_download_system_image_x86() {
         fi
     fi
     return 0
+}
+
+# Metadata contains credentials for local administration only. Never overwrite
+# an existing guest record or copy a password into shared PVE configuration.
+pve_validate_guest_metadata() {
+    local kind="$1" identifier="$2" directory
+    [[ "$kind" == ct || "$kind" == vm ]] || return 1
+    [[ "$identifier" =~ ^[0-9]+$ ]] && ((identifier >= 100 && identifier <= 256)) || return 1
+    directory="${PVE_GUEST_METADATA_DIR:-/root}"
+    [ "$kind" != ct ] || directory="${PVE_CT_METADATA_DIR:-$directory}"
+    if [ -e "$directory/${kind}${identifier}" ] || [ -L "$directory/${kind}${identifier}" ]; then
+        echo "Refusing to replace existing guest metadata: $directory/${kind}${identifier}" >&2
+        return 1
+    fi
+}
+
+pve_save_guest_record() {
+    local kind="$1" identifier="$2" record="$3" labels="$4" directory target temporary notes config index
+    local -a record_values record_labels
+    pve_validate_guest_metadata "$kind" "$identifier" || return 1
+    directory="${PVE_GUEST_METADATA_DIR:-/root}"
+    [ "$kind" != ct ] || directory="${PVE_CT_METADATA_DIR:-$directory}"
+    mkdir -p "$directory" || return 1
+    target="$directory/${kind}${identifier}"
+    temporary=$(mktemp "$directory/.${kind}${identifier}.XXXXXX") || return 1
+    if ! printf '%s\n' "$record" >"$temporary" || ! chmod 600 "$temporary" || ! ln -- "$temporary" "$target"; then
+        rm -f -- "$temporary"
+        return 1
+    fi
+    rm -f -- "$temporary"
+    config="${PVE_VM_CONFIG_DIR:-/etc/pve/qemu-server}/${identifier}.conf"
+    [ "$kind" != ct ] || config="${PVE_CT_CONFIG_DIR:-/etc/pve/lxc}/${identifier}.conf"
+    if [ -f "$config" ]; then
+        notes=$(mktemp "$directory/.${kind}${identifier}.notes.XXXXXX") || return 1
+        IFS=' ' read -r -a record_values <<<"$record"
+        IFS=' ' read -r -a record_labels <<<"$labels"
+        for index in "${!record_labels[@]}"; do
+            case "${record_labels[$index]}" in *password*|*密码*) continue;; esac
+            printf '# %s %s\n\n' "${record_labels[$index]}" "${record_values[$index]:-}"
+        done >"$notes"
+        cat "$config" >>"$notes" && cp "$notes" "$config" || { rm -f -- "$notes"; return 1; }
+        rm -f -- "$notes"
+    fi
+    printf '%s %s created; private metadata: %s\n' "$kind" "$identifier" "$target"
+}
+
+# NAT addressing uses the last IPv4 octet; reject 255/256 before creating a guest.
+pve_nat_ipv4_for_id() {
+    python3 - "${pve_nat_prefix:-}" "$1" <<'PYCODE'
+import ipaddress
+import sys
+identifier = int(sys.argv[2])
+if not 2 <= identifier <= 254:
+    raise SystemExit('NAT guest ID must fit a usable IPv4 last octet (2..254)')
+print(ipaddress.IPv4Address(sys.argv[1] + '.' + str(identifier)))
+PYCODE
+}
+
+# Apply DNS inside fresh guests too: older templates may ignore PVE's resolver
+# property through /etc/.pve-ignore.resolv.conf.
+pve_configure_ct_dns() {
+    local family="$1" resolvers
+    local -a dns_servers
+    case "$family" in
+        4) resolvers='1.1.1.1 8.8.8.8';;
+        6) resolvers='2606:4700:4700::1111 2001:4860:4860::8888';;
+        46) resolvers='1.1.1.1 8.8.8.8 2606:4700:4700::1111 2001:4860:4860::8888';;
+        *) return 1;;
+    esac
+    pct set "$CTID" --nameserver "$resolvers" || return 1
+    read -r -a dns_servers <<< "$resolvers"
+    pct exec "$CTID" -- sh -c 'for resolver do printf "nameserver %s\n" "$resolver"; done > /etc/resolv.conf' sh "${dns_servers[@]}"
 }

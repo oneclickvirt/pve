@@ -127,15 +127,18 @@ load_default_config() {
 }
 
 create_container() {
-    local ct_conf="/etc/pve/lxc/${CTID}.conf"
+    pve_prepare_ct_template || return 1
+    local ct_conf="${PVE_CT_CONFIG_DIR:-/etc/pve/lxc}/${CTID}.conf"
     local retry=0
     local max_retry=7
     local wait_interval=3
     user_ip="${pve_nat_prefix}.${CTID}"
+    # lxc-usernsexec needs traversable mountpoints even when the caller uses umask 077.
+    # Keep the caller mask and private credential records unchanged.
     if [ "$fixed_system" = true ]; then
-        pct create $CTID /var/lib/vz/template/cache/${system_name} -cores $core -cpuunits 1024 -memory $memory -swap 128 -rootfs ${storage}:${disk} -onboot 1 -password $password -features nesting=1
+        (umask 022; pct create "$CTID" "/var/lib/vz/template/cache/${system_name}" -cores "$core" -cpuunits 1024 -memory "$memory" -swap 128 -rootfs "${storage}:${disk}" -onboot 1 --password="$password" -features nesting=1)
     else
-        pct create $CTID ${storage}:vztmpl/${system_name} -cores $core -cpuunits 1024 -memory $memory -swap 128 -rootfs ${storage}:${disk} -onboot 1 -password $password -features nesting=1
+        (umask 022; pct create "$CTID" "${storage}:vztmpl/${system_name}" -cores "$core" -cpuunits 1024 -memory "$memory" -swap 128 -rootfs "${storage}:${disk}" -onboot 1 --password="$password" -features nesting=1)
     fi
     if [ $? -ne 0 ]; then
         echo -e "\e[31mpct create failed for CT ${CTID}, container will not be started\e[0m"
@@ -171,14 +174,17 @@ start_container() {
         echo -e "\e[31mCT ${CTID} 启动失败\e[0m"
         exit 1
     fi
+    local dns_family=4
+    [ "${independent_ipv6_status:-N}" = N ] || dns_family=46
+    pve_configure_ct_dns "$dns_family" || return 1
     sleep 5
 }
 
 configure_networking() {
     independent_ipv6_status="N"
     if [ "$independent_ipv6" == "y" ]; then
-        if [ "${pve_direct_ipv6_available:-false}" = true ] || [ -s /usr/local/bin/pve_appended_content.txt ]; then
-            appended_file="/usr/local/bin/pve_appended_content.txt"
+        if [ "${pve_direct_ipv6_available:-false}" = true ] || [ -s "${PVE_IPV6_MAPPING_FILE:-/usr/local/bin/pve_appended_content.txt}" ]; then
+            appended_file="${PVE_IPV6_MAPPING_FILE:-/usr/local/bin/pve_appended_content.txt}"
             if [ -s "$appended_file" ]; then
                 # 使用 vmbr1 网桥和 NAT 映射
                 ct_internal_ipv6="$(pve_nat_ipv6_for_id "$CTID")" || return 1
@@ -205,7 +211,7 @@ configure_networking() {
                 pct set "$CTID" --net0 "name=eth0,ip=${user_ip}/24,bridge=vmbr1,gw=${pve_nat_gateway}" || return 1
                 if ct_external_ipv6="$(pve_direct_ipv6_for_id "$CTID")"; then
                     direct_ipv6_bridge="$(pve_direct_ipv6_bridge)" || return 1
-                    pct set "$CTID" --net1 "name=eth1,ip6=${ct_external_ipv6}/128,bridge=${direct_ipv6_bridge},gw6=${pve_direct_ipv6_gateway}" || return 1
+                    pct set "$CTID" --net1 "name=eth1,ip6=${ct_external_ipv6}/${pve_direct_ipv6_prefix##*/},bridge=${direct_ipv6_bridge},gw6=${pve_direct_ipv6_gateway}" || return 1
                     pct set "$CTID" --nameserver 1.1.1.1 || return 1
                     pct set "$CTID" --searchdomain local || return 1
                     independent_ipv6_status="Y"
@@ -367,9 +373,6 @@ configure_os() {
 }
 
 configure_container_extras() {
-    if [ "$independent_ipv6_status" == "Y" ]; then
-        pct exec $CTID -- echo '*/1 * * * * curl -m 6 -s ipv6.ip.sb && curl -m 6 -s ipv6.ip.sb' | crontab -
-    fi
     pct exec $CTID -- rm -rf /etc/network/.pve-ignore.interfaces
     pct exec $CTID -- touch /etc/.pve-ignore.resolv.conf
     pct exec $CTID -- touch /etc/.pve-ignore.hosts
@@ -465,11 +468,12 @@ main() {
     check_china
     init "$@" || exit 1
     validate_ctid || exit 1
+    pve_nat_ipv4_for_id "$CTID" >/dev/null || exit 1
     check_ipv6_setup || exit 1
     prepare_system_image || exit 1
-    create_container
+    create_container || exit 1
     configure_networking || exit 1
-    start_container
+    start_container || exit 1
     configure_os || exit 1
     configure_container_extras
     setup_port_forwarding

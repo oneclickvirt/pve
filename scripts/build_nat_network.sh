@@ -497,7 +497,11 @@ try:
     for device, upstream in uplinks:
         if device in tunnel_interfaces or device == 'he-ipv6':
             continue
-        candidates = [cidr for row in config if row['name'] == device for cidr in row['cidrs']]
+        # On the first PVE pass, the pending bridge already owns the static
+        # stanza while the live address/default route still use its port.
+        owners = {device} | {row['name'] for row in config
+            if any(device in ports for ports in row['options'].get('bridge_ports', []))}
+        candidates = [cidr for row in config if row['name'] in owners for cidr in row['cidrs']]
         for cidr in candidates:
             if cidr not in bindings.get(device, set()):
                 continue
@@ -658,6 +662,11 @@ try:
     matches = [row for row in stanzas if row['name'] == selected]
     if mode == 'json':
         print(json.dumps(stanzas))
+    elif mode == 'files':
+        for path in sorted(seen):
+            if '\n' in str(path):
+                raise ValueError('invalid network configuration path')
+            print(path)
     elif mode == 'exists':
         raise SystemExit(0 if matches else 1)
     elif mode == 'cidr':
@@ -1073,7 +1082,9 @@ setup_persistent_net_link() {
         echo "" >>/etc/systemd/network/10-persistent-net.link
         echo '[Link]' >>/etc/systemd/network/10-persistent-net.link
         echo "Name=${interface}" >>/etc/systemd/network/10-persistent-net.link
-        /etc/init.d/udev force-reload
+        if command -v udevadm >/dev/null 2>&1; then
+            udevadm control --reload || return 1
+        fi
     fi
 }
 
@@ -1416,13 +1427,8 @@ configure_vmbr0() {
             add_vmbr0_with_single_ipv6 || return 1
         fi
     fi
-    # 如果不是fe80类型网关，添加fe80地址删除命令
-    if [[ "${ipv6_gateway_fe80}" == "N" ]] && [ -n "${fe80_address:-}" ]; then
-        chattr -i /etc/network/interfaces
-        echo "    up ip addr del $fe80_address dev $interface" >>/etc/network/interfaces
-        remove_duplicate_lines "/etc/network/interfaces"
-        chattr +i /etc/network/interfaces
-    fi
+    # A global upstream gateway still needs NDP. Never delete the physical
+    # port's link-local address as a supposed IPv6/MAC whitelist workaround.
     # 如果IPV6地址是写死附加上的，这块附加回vmbr0，方便后续使用ip6tables进行转发
     appended_file="/usr/local/bin/pve_appended_content.txt"
     if [ -s "$appended_file" ]; then
@@ -1443,7 +1449,7 @@ iface vmbr0 inet static
     gateway $ipv4_gateway
     bridge_ports $interface
     bridge_stp off
-    bridge_fd 0
+    bridge_fd 2
 EOF
 }
 
@@ -1456,7 +1462,7 @@ iface vmbr0 inet static
     gateway $ipv4_gateway
     bridge_ports $interface
     bridge_stp off
-    bridge_fd 0
+    bridge_fd 2
 
 iface vmbr0 inet6 auto
     bridge_ports $interface
@@ -1473,7 +1479,7 @@ iface vmbr0 inet static
     gateway $ipv4_gateway
     bridge_ports $interface
     bridge_stp off
-    bridge_fd 0
+    bridge_fd 2
 
 iface vmbr0 inet6 static
     address ${last_ipv6}
@@ -1493,7 +1499,7 @@ iface vmbr0 inet static
     gateway $ipv4_gateway
     bridge_ports $interface
     bridge_stp off
-    bridge_fd 0
+    bridge_fd 2
 
 iface vmbr0 inet6 static
     address ${ipv6_address}/${ipv6_prefixlen}
@@ -1707,7 +1713,7 @@ iface vmbr1 inet static
     netmask 255.255.255.0
     bridge_ports none
     bridge_stp off
-    bridge_fd 0
+    bridge_fd 2
     post-up echo 1 > /proc/sys/net/ipv4/ip_forward
     post-up echo 1 > /proc/sys/net/ipv4/conf/vmbr1/proxy_arp
     post-up nft -f /etc/nftables.conf 2>/dev/null || true
@@ -1720,7 +1726,7 @@ iface vmbr1 inet static
     netmask 255.255.255.0
     bridge_ports none
     bridge_stp off
-    bridge_fd 0
+    bridge_fd 2
     post-up echo 1 > /proc/sys/net/ipv4/ip_forward
     post-up echo 1 > /proc/sys/net/ipv4/conf/vmbr1/proxy_arp
     post-up iptables -t nat -A POSTROUTING -s '${nat_ipv4_subnet}' -o vmbr0 -j MASQUERADE
@@ -1739,7 +1745,7 @@ iface vmbr1 inet static
     netmask 255.255.255.0
     bridge_ports none
     bridge_stp off
-    bridge_fd 0
+    bridge_fd 2
     post-up echo 1 > /proc/sys/net/ipv4/ip_forward
     post-up echo 1 > /proc/sys/net/ipv4/conf/vmbr1/proxy_arp
     post-up nft -f /etc/nftables.conf 2>/dev/null || true
@@ -1752,7 +1758,7 @@ iface vmbr1 inet static
     netmask 255.255.255.0
     bridge_ports none
     bridge_stp off
-    bridge_fd 0
+    bridge_fd 2
     post-up echo 1 > /proc/sys/net/ipv4/ip_forward
     post-up echo 1 > /proc/sys/net/ipv4/conf/vmbr1/proxy_arp
     post-up iptables -t nat -A POSTROUTING -s '${nat_ipv4_subnet}' -o vmbr0 -j MASQUERADE
@@ -1775,7 +1781,7 @@ iface vmbr1 inet static
     netmask 255.255.255.0
     bridge_ports none
     bridge_stp off
-    bridge_fd 0
+    bridge_fd 2
     post-up echo 1 > /proc/sys/net/ipv4/ip_forward
     post-up echo 1 > /proc/sys/net/ipv4/conf/vmbr1/proxy_arp
     post-up nft -f /etc/nftables.conf 2>/dev/null || true
@@ -1792,7 +1798,7 @@ iface vmbr1 inet static
     netmask 255.255.255.0
     bridge_ports none
     bridge_stp off
-    bridge_fd 0
+    bridge_fd 2
     post-up echo 1 > /proc/sys/net/ipv4/ip_forward
     post-up echo 1 > /proc/sys/net/ipv4/conf/vmbr1/proxy_arp
     post-up iptables -t nat -A POSTROUTING -s '${nat_ipv4_subnet}' -o vmbr0 -j MASQUERADE
@@ -1900,7 +1906,7 @@ iface vmbr2 inet6 static
     address ${new_subnet}
     bridge_ports none
     bridge_stp off
-    bridge_fd 0
+    bridge_fd 2
 EOF
     if [ -f "/usr/local/bin/ndpresponder" ]; then
         new_exec_start="ExecStart=/usr/local/bin/ndpresponder -i he-ipv6 -n ${new_subnet}"
@@ -1943,7 +1949,7 @@ iface ${direct_bridge} inet6 static
     address ${direct_gateway}/${direct_prefix##*/}
     bridge_ports none
     bridge_stp off
-    bridge_fd 0
+    bridge_fd 2
 EOF
     if [ "$direct_mode" = ndp ] || [ "$direct_transport" = tunnel ]; then
         ndp_interface="$(pve_direct_ndp_interface "$direct_transport")" || return 1
@@ -2123,15 +2129,239 @@ setup_firewall() {
             command -v netfilter-persistent >/dev/null 2>&1 && netfilter-persistent save || true
         fi
     fi
+    # update_sysctl applies the exact key immediately and persists it under
+    # sysctl.d. Debian 13 need not have the legacy /etc/sysctl.conf at all.
     update_sysctl "net.ipv4.ip_forward=1"
-    ${sysctl_path} -p
+}
+
+# Keep a per-run copy of every recursively sourced file. The rollback timer
+# runs independently of SSH, so a lost connection cannot leave it unexecuted.
+pve_configure_ufw_forwarding() {
+    command -v ufw >/dev/null 2>&1 || return 0
+    LC_ALL=C ufw status 2>/dev/null | grep -q '^Status: active$' || return 0
+    local uplink direct_bridge direct_prefix
+    uplink=$(pve_ipv6_uplink_interface) || return 1
+    validate_interface_value "$uplink" || return 1
+    ufw route allow in on vmbr1 out on vmbr0 from "$nat_ipv4_subnet" || return 1
+    ufw route allow in on vmbr0 out on vmbr1 to "$nat_ipv4_subnet" || return 1
+    if [ -n "${nat_ipv6_subnet:-}" ]; then
+        ufw route allow in on vmbr1 out on "$uplink" from "$nat_ipv6_subnet" || return 1
+        ufw route allow in on "$uplink" out on vmbr1 to "$nat_ipv6_subnet" || return 1
+    fi
+    direct_bridge=$(read_network_state "$(pve_direct_ipv6_state_file pve_direct_ipv6_bridge)" validate_pve_direct_ipv6_bridge_value 2>/dev/null || true)
+    direct_prefix=$(read_network_state "$(pve_direct_ipv6_state_file pve_direct_ipv6_prefix)" is_single_network_value 2>/dev/null || true)
+    if [ -n "$direct_bridge" ] && [ -n "$direct_prefix" ]; then
+        is_public_ipv6 "${direct_prefix%/*}" || return 1
+        python3 - "$direct_prefix" <<'PY' || return 1
+import ipaddress, sys
+network = ipaddress.IPv6Network(sys.argv[1], strict=True)
+raise SystemExit(0 if network.prefixlen <= 120 else 1)
+PY
+        ufw route allow in on "$direct_bridge" out on "$uplink" from "$direct_prefix" || return 1
+        ufw route allow in on "$uplink" out on "$direct_bridge" to "$direct_prefix" || return 1
+    fi
+}
+
+pve_network_transaction_files() {
+    local state_dir="${PVE_STATE_DIR:-/usr/local/bin}" name
+    for name in pve_main_interface pve_mac_address pve_check_ipv6 pve_ipv6_gateway \
+        pve_ipv6_prefixlen pve_ipv6_real_prefixlen pve_ipv4_address pve_ipv4_gateway \
+        pve_ipv4_subnet pve_nat_subnet pve_nat_gateway pve_nat_ipv6_subnet \
+        pve_nat_ipv6_gateway pve_direct_ipv6_prefix pve_direct_ipv6_gateway \
+        pve_direct_ipv6_mode pve_direct_ipv6_upstream_gateway pve_direct_ipv6_bridge \
+        pve_direct_ipv6_transport; do
+        printf '%s/%s\n' "$state_dir" "$name"
+    done
+    printf '%s\n' "${PVE_SYSCTL_LEGACY_FILE:-/etc/sysctl.conf}" \
+        "${PVE_SYSCTL_CONFIG_FILE:-/etc/sysctl.d/99-custom.conf}" \
+        "${PVE_IPV6_SYSCTL_CONFIG_FILE:-/etc/sysctl.d/99-oneclickvirt-pve-ipv6.conf}" \
+        "${PVE_IPV6_IFUP_HOOK_FILE:-/etc/network/if-up.d/99-oneclickvirt-ipv6-sysctl}" \
+        "${PVE_NFTABLES_CONF:-/etc/nftables.conf}" \
+        /etc/ufw/user.rules /etc/ufw/user6.rules \
+        /etc/systemd/system/ndpresponder.service
+}
+
+pve_capture_network_runtime() {
+    sysctl -a -r '^net\.(ipv4\.ip_forward|ipv6\.conf\..*\.(forwarding|accept_ra|proxy_ndp))$' \
+        >"$pve_network_snapshot/sysctl" 2>/dev/null || return 1
+    if command -v nft >/dev/null 2>&1 && nft list ruleset >"$pve_network_snapshot/rules.nft" 2>/dev/null; then
+        sed -i '1i flush ruleset' "$pve_network_snapshot/rules.nft"
+    else
+        rm -f "$pve_network_snapshot/rules.nft"
+        iptables-save >"$pve_network_snapshot/rules.v4" || return 1
+        ip6tables-save >"$pve_network_snapshot/rules.v6" || return 1
+    fi
+    systemctl is-active --quiet ndpresponder.service && touch "$pve_network_snapshot/ndp-active"
+    systemctl is-enabled --quiet ndpresponder.service && touch "$pve_network_snapshot/ndp-enabled"
+    return 0
+}
+
+pve_begin_network_transaction() {
+    local root="${PVE_NETWORK_BACKUP_ROOT:-/var/lib/oneclickvirt/network-backups}" file
+    install -d -m 700 "$root" || return 1
+    pve_network_snapshot=$(mktemp -d "$root/change.XXXXXXXX") || return 1
+    pve_interfaces_probe files >"$pve_network_snapshot/files" || return 1
+    : >"$pve_network_snapshot/absent"
+    while IFS= read -r file; do
+        if [ -e "$file" ] || [ -L "$file" ]; then
+            printf '%s\n' "$file" >>"$pve_network_snapshot/files"
+        else
+            printf '%s\n' "$file" >>"$pve_network_snapshot/absent"
+        fi
+    done < <(pve_network_transaction_files)
+    tar -cPf "$pve_network_snapshot/config.tar" --verbatim-files-from -T "$pve_network_snapshot/files" || return 1
+    pve_capture_network_runtime || return 1
+    pve_network_rollback_unit="pve-network-rollback-${BASHPID}"
+    {
+        printf '#!/bin/bash\nset -eu\nsnapshot=%q\n' "$pve_network_snapshot"
+        cat <<'ROLLBACK'
+exec 8>"$snapshot/lock"
+flock 8
+[ ! -e "$snapshot/committed" ] || exit 0
+systemctl stop ndpresponder.service 2>/dev/null || true
+while IFS= read -r file; do
+    chattr -i "$file" 2>/dev/null || true
+done <"$snapshot/files"
+tar -xPf "$snapshot/config.tar"
+while IFS= read -r file; do
+    rm -f -- "$file"
+done <"$snapshot/absent"
+systemctl daemon-reload
+if [ -e "$snapshot/ndp-enabled" ]; then
+    systemctl enable ndpresponder.service
+else
+    systemctl disable ndpresponder.service 2>/dev/null || true
+fi
+[ ! -s "$snapshot/sysctl" ] || sysctl -q -p "$snapshot/sysctl" 2>/dev/null || true
+if [ -e "$snapshot/reload-armed" ]; then
+    ifreload -a
+fi
+if [ -f "$snapshot/rules.nft" ]; then
+    nft -f "$snapshot/rules.nft"
+elif [ -f "$snapshot/rules.v4" ]; then
+    iptables-restore <"$snapshot/rules.v4"
+    ip6tables-restore <"$snapshot/rules.v6"
+fi
+if [ -e "$snapshot/ndp-active" ]; then
+    systemctl start ndpresponder.service
+fi
+touch "$snapshot/rolled-back"
+ROLLBACK
+    } >"$pve_network_snapshot/rollback.sh" || return 1
+    chmod 700 "$pve_network_snapshot/rollback.sh" || return 1
+    trap 'pve_abort_network_transaction' EXIT
+}
+
+pve_abort_network_transaction() {
+    [ -n "${pve_network_snapshot:-}" ] || return 0
+    [ ! -e "$pve_network_snapshot/committed" ] || return 0
+    [ ! -e "$pve_network_snapshot/rolled-back" ] || return 0
+    _yellow "Restoring the previous network configuration from $pve_network_snapshot"
+    _yellow "正在从 ${pve_network_snapshot} 恢复此前的网络配置"
+    bash "$pve_network_snapshot/rollback.sh" || return 1
+    systemctl stop "${pve_network_rollback_unit}.timer" >/dev/null 2>&1 || true
+}
+
+pve_commit_network_transaction() {
+    [ -n "${pve_network_snapshot:-}" ] || return 0
+    (
+        flock 8 || exit 1
+        [ ! -e "$pve_network_snapshot/rolled-back" ] || exit 1
+        touch "$pve_network_snapshot/committed"
+    ) 8>"$pve_network_snapshot/lock" || return 1
+    systemctl stop "${pve_network_rollback_unit}.timer" >/dev/null 2>&1 || true
+}
+
+pve_wait_host_address_ready() {
+    local family="$1" address="$2" attempt snapshot
+    for attempt in {1..12}; do
+        snapshot=$(LC_ALL=C NO_COLOR=1 ip -j "-$family" addr show) || return 1
+        if python3 - "$address" "$snapshot" <<'PY'
+import ipaddress
+import json
+import sys
+try:
+    target = ipaddress.ip_address(sys.argv[1])
+    ready = any(ipaddress.ip_address(info['local']) == target
+        and not info.get('tentative') and not info.get('dadfailed')
+        and not set(info.get('flags', [])) & {'tentative', 'dadfailed'}
+        for row in json.loads(sys.argv[2]) for info in row.get('addr_info', [])
+        if info.get('family') in {'inet', 'inet6'})
+except (KeyError, TypeError, ValueError):
+    ready = False
+raise SystemExit(0 if ready else 1)
+PY
+        then
+            return 0
+        fi
+        sleep 1
+    done
+    return 1
+}
+
+pve_verify_host_connectivity() {
+    local ipv4="${ipv4_address%%/*}" ipv6="${ipv6_address:-}"
+    local url family source connected
+    local -a urls=("https://www.debian.org/" "https://www.cloudflare.com/")
+    [ -z "${PVE_NETWORK_PROBE_URL:-}" ] || urls=("$PVE_NETWORK_PROBE_URL")
+    for family in 4 6; do
+        if [ "$family" = 6 ]; then
+            [ "${host_ipv6_runtime_has_default_route:-false}" = true ] && [ -n "$ipv6" ] || continue
+            source="${ipv6%%/*}"
+        else
+            source="$ipv4"
+        fi
+        # IPv6 DAD completes asynchronously after the bridge migration.
+        # Binding curl before it finishes returns EADDRNOTAVAIL immediately.
+        pve_wait_host_address_ready "$family" "$source" || return 1
+        connected=false
+        for url in "${urls[@]}"; do
+            if curl "-$family" --interface "$source" -fsS -o /dev/null --connect-timeout 5 --max-time 12 "$url"; then
+                connected=true
+                break
+            fi
+        done
+        [ "$connected" = true ] || return 1
+    done
+    return 0
+}
+
+pve_normalize_bridge_forward_delay() {
+    # ifupdown2 3.3 rejects the historical fd=0 at syntax-check time even
+    # with STP disabled. With STP off, fd=2 has the same forwarding behavior.
+    local file
+    while IFS= read -r file; do
+        pve_require_writable_network_file "$file" || return 1
+        python3 - "$file" <<'PY'
+import pathlib
+import re
+import sys
+path = pathlib.Path(sys.argv[1])
+text = path.read_text()
+blocks = re.split(r'(?=^iface\s)', text, flags=re.M)
+for index, block in enumerate(blocks):
+    if re.search(r'^\s*bridge[-_]stp\s+off\s*$', block, re.M):
+        blocks[index] = re.sub(r'^(\s*bridge[-_]fd\s+)0([ \t]*)$', r'\g<1>2\2', block, flags=re.M)
+updated = ''.join(blocks)
+if updated != text:
+    path.write_text(updated)
+PY
+        [ "$?" -eq 0 ] || return 1
+    done < <(pve_interfaces_probe files)
 }
 
 restart_network_services() {
-    service networking restart
-    systemctl restart networking.service
-    sleep 3
-    ifreload -ad
+    # ifupdown2 can migrate a live physical uplink to a bridge. Restarting
+    # networking first tears down the working route and defeats that support.
+    command -v ifreload >/dev/null 2>&1 || return 1
+    pve_normalize_bridge_forward_delay || return 1
+    ifreload -a -s || return 1
+    if [ -n "${pve_network_snapshot:-}" ]; then
+        touch "$pve_network_snapshot/reload-armed" || return 1
+        systemd-run --unit="$pve_network_rollback_unit" --on-active=180s \
+            --timer-property=AccuracySec=1s /bin/bash "$pve_network_snapshot/rollback.sh" || return 1
+    fi
+    ifreload -a || return 1
     # ifreload may complete successfully before a cloud RA is received. Put
     # the host's original IPv6 address and default route back immediately so
     # creating a NAT bridge never strands the provider node.
@@ -2140,6 +2370,10 @@ restart_network_services() {
         _red "网络重载后无法恢复宿主机 IPv6 地址或默认路由"
         return 1
     }
+    pve_configure_ufw_forwarding || return 1
+    if [ -n "${pve_network_snapshot:-}" ]; then
+        pve_verify_host_connectivity || return 1
+    fi
     if command -v nft >/dev/null 2>&1 && nft list tables >/dev/null 2>&1; then
         printf '#!/usr/sbin/nft -f\nflush ruleset\n' > /etc/nftables.conf
         nft list ruleset >> /etc/nftables.conf
@@ -2158,18 +2392,22 @@ setup_ndpresponder() {
         _green "已配置路由 IPv6 网桥"
         return 0
     fi
+    if [ -z "$mode" ] && ! pve_network_bridge_exists vmbr2 && [ "$transport" != tunnel ]; then
+        # NAT66-only installations need no NDP responder.
+        return 0
+    fi
     if [ -f "/usr/local/bin/ndpresponder" ] && [ -f "/etc/systemd/system/ndpresponder.service" ]; then
         echo "Found ndpresponder binary and service file, setting up..."
         echo "已找到 ndpresponder 二进制文件和服务文件，正在配置..."
         systemctl daemon-reload
-        systemctl enable ndpresponder.service
+        systemctl enable ndpresponder.service || return 1
         if [ "${pve_ndpresponder_config_changed:-false}" = true ]; then
             systemctl restart ndpresponder.service || return 1
             pve_ndpresponder_config_changed=false
         else
             systemctl start ndpresponder.service || return 1
         fi
-        systemctl status ndpresponder.service 2>/dev/null
+        systemctl is-active --quiet ndpresponder.service || return 1
         return 0
     else
         echo "ndpresponder binary or service file not found."
@@ -2261,12 +2499,12 @@ request_ipv6
 cdn_urls=("https://cdn0.spiritlhl.top/" "http://cdn3.spiritlhl.net/" "http://cdn1.spiritlhl.net/" "https://ghproxy.com/" "http://cdn2.spiritlhl.net/")
 check_cdn_file
 get_system_arch
-sysctl_path=$(which sysctl)
 pve_interfaces_probe json >/dev/null || {
     _red "Unable to read network configuration; check interfaces and its source files"
     _red "无法读取网络配置，请检查 interfaces 及其引用的配置文件"
     exit 1
 }
+pve_begin_network_transaction || exit 1
 pve_require_writable_network_file || exit 1
 detect_network_interfaces || exit 1
 detect_he_tunnel || exit 1
@@ -2280,12 +2518,13 @@ select_nat_ipv4_subnet || exit 1
 select_nat_ipv6_subnet || exit 1
 configure_vmbr1 || exit 1
 configure_vmbr2 || exit 1
+backup_and_clean_interfaces || exit 1
 chattr +i /etc/network/interfaces
 rm -rf /usr/local/bin/iface_auto.txt
 setup_firewall || exit 1
 restart_network_services || exit 1
-setup_ndpresponder
-backup_and_clean_interfaces || exit 1
+setup_ndpresponder || exit 1
+pve_commit_network_transaction || exit 1
 clean_cache_files
 systemctl start check-dns.service
 sleep 3

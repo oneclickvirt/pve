@@ -18,6 +18,7 @@
 # PVE_HOSTNAME=<name>  - 直接设定 PVE 主机名，跳过交互输入（只能包含英文字母和数字）
 # PVE_INSTALL_CEPH=true - 安装核心包时允许安装推荐依赖（可能包含 ceph 相关组件）
 #                        默认不设置时将使用最小化安装（--no-install-recommends）
+# PVE_REPAIR_EXISTING=true - 检查并修复已有 PVE 安装（保留客体和现有内核）
 #
 # 示例（一键无交互安装）:
 #   export noninteractive=true
@@ -71,9 +72,11 @@ command -v pct &>/dev/null
 pct_status=$?
 command -v qm &>/dev/null
 qm_status=$?
-if [ $pct_status -eq 0 ] && [ $qm_status -eq 0 ]; then
+if [ $pct_status -eq 0 ] && [ $qm_status -eq 0 ] && [[ "${PVE_REPAIR_EXISTING:-false}" != true ]]; then
     _green "Proxmox VE is already installed and does not need to be reinstalled."
     _green "Proxmox VE已经安装，无需重复安装。"
+    _yellow "To repair an incomplete installation, run with PVE_REPAIR_EXISTING=true."
+    _yellow "如需修复未完成的安装，请使用 PVE_REPAIR_EXISTING=true 重新运行。"
     exit 0
 fi
 if [ ! -d /usr/local/bin ]; then
@@ -139,13 +142,15 @@ fi
 ########## 定义部分需要使用的函数
 
 remove_duplicate_lines() {
-    chattr -i "$1"
-    # 预处理：去除行尾空格和制表符
-    sed -i 's/[ \t]*$//' "$1"
-    # 去除重复行并跳过空行和注释行
-    if [ -f "$1" ]; then
-        awk '{ line = $0; gsub(/^[ \t]+/, "", line); gsub(/[ \t]+/, " ", line); if (!NF || !seen[line]++) print $0 }' "$1" >"$1.tmp" && mv -f "$1.tmp" "$1"
-    fi
+    # Repeated options in different stanzas are required configuration, not
+    # duplicates. Only normalize trailing whitespace without deleting lines.
+    chattr -i "$1" || return 1
+    python3 - "$1" <<'PY' || return 1
+import pathlib
+import sys
+path = pathlib.Path(sys.argv[1])
+path.write_text(''.join(line.rstrip() + '\n' for line in path.read_text().splitlines()))
+PY
     chattr +i "$1"
 }
 
@@ -317,13 +322,79 @@ prepare_grub_noninteractive() {
 }
 
 rollback_failed_pve_install() {
-    local pve_packages=(proxmox-ve pve-manager qemu-server pve-cluster pveproxy pvedaemon pvestatd)
-    _yellow "PVE installation verification failed, cleaning up partial packages for a safe retry"
-    _yellow "PVE 安装校验失败，正在清理半安装状态，便于后续重试"
-    DEBIAN_FRONTEND=noninteractive apt-get purge -y "${pve_packages[@]}" >/dev/null 2>&1 || true
-    DEBIAN_FRONTEND=noninteractive apt-get autoremove -y >/dev/null 2>&1 || true
-    DEBIAN_FRONTEND=noninteractive apt-get --fix-broken install -y >/dev/null 2>&1 || true
-    dpkg --configure -a >/dev/null 2>&1 || true
+    # A failed check is not evidence that installed packages are disposable.
+    # In particular, PVE 8/9 kernels use proxmox-kernel-*; the old name-only
+    # check reached this path after a successful install and autoremove could
+    # then remove the new kernel together with the PVE meta package.
+    _yellow "PVE installation verification failed; installed kernels and packages were preserved"
+    _yellow "PVE 安装校验失败；已保留现有内核和软件包，请修复后重试，暂勿重启"
+    dpkg --audit || true
+}
+
+preserve_boot_kernels() {
+    local package_name
+    local -a kernels=()
+    while read -r package_name; do
+        [ -n "$package_name" ] && kernels+=("$package_name")
+    done < <(dpkg-query -W -f='${db:Status-Abbrev} ${binary:Package}\n' \
+        'linux-image-[0-9]*' 'pve-kernel-[0-9]*' 'proxmox-kernel-[0-9]*' 2>/dev/null |
+        awk '$1 == "ii" {print $2}')
+    if [ "${#kernels[@]}" -gt 0 ]; then
+        apt-mark manual "${kernels[@]}" || return 1
+    fi
+}
+
+installed_pve_kernel_versions() {
+    local status package_name version
+    while read -r status package_name; do
+        [ "$status" = ii ] || continue
+        package_name="${package_name%%:*}"
+        if [[ "$package_name" =~ ^(pve-kernel|proxmox-kernel)-[0-9].*-pve(-signed)?$ ]]; then
+            version="${package_name#*-kernel-}"
+            printf '%s\n' "${version%-signed}"
+        fi
+    done < <(dpkg-query -W -f='${db:Status-Abbrev} ${binary:Package}\n' \
+        'pve-kernel-*' 'proxmox-kernel-*' 2>/dev/null)
+}
+
+verify_pve_kernel_boot_files() {
+    local version
+    local boot_dir="${PVE_BOOT_DIR:-/boot}" modules_dir="${PVE_MODULES_DIR:-/lib/modules}"
+    # GRUB normally boots the newest installed kernel. A working old kernel
+    # must not hide missing initramfs/modules for the newly installed one.
+    version=$(installed_pve_kernel_versions | sort -V | tail -n 1)
+    [ -n "$version" ] || return 1
+    [ -s "$boot_dir/vmlinuz-$version" ] &&
+        [ -s "$boot_dir/initrd.img-$version" ] &&
+        [ -s "$modules_dir/$version/modules.dep" ] || return 1
+    if command -v lsinitramfs >/dev/null 2>&1; then
+        lsinitramfs "$boot_dir/initrd.img-$version" >/dev/null 2>&1 || return 1
+    fi
+    return 0
+}
+
+finalize_pve_kernel_installation() {
+    # /proxmox_install_mode also suppresses the kernel postinst, not just the
+    # ifupdown2 reload. Replay the normal hooks after removing our marker so
+    # an installed kernel cannot be left without its initramfs/boot entries.
+    local version
+    local boot_dir="${PVE_BOOT_DIR:-/boot}" modules_dir="${PVE_MODULES_DIR:-/lib/modules}"
+    if [ -e "${PROXMOX_INSTALL_MODE_FILE:-/proxmox_install_mode}" ]; then
+        _red "An external Proxmox installer still owns the install-mode marker; kernel finalization must wait"
+        _red "外部安装器仍持有安装标记；请等待其完成后重试内核初始化"
+        return 1
+    fi
+    while read -r version; do
+        [ -n "$version" ] || continue
+        [ -s "$boot_dir/vmlinuz-$version" ] && [ -d "$modules_dir/$version" ] || return 1
+        if [ "${1:-}" != replay ] && [ -s "$boot_dir/initrd.img-$version" ] &&
+           lsinitramfs "$boot_dir/initrd.img-$version" >/dev/null 2>&1; then
+            continue
+        fi
+        depmod "$version" || return 1
+        run-parts --verbose --exit-on-error --arg="$version" \
+            --arg="$boot_dir/vmlinuz-$version" /etc/kernel/postinst.d || return 1
+    done < <(installed_pve_kernel_versions | sort -Vu)
 }
 
 verify_pve_installation() {
@@ -349,12 +420,12 @@ verify_pve_installation() {
     if [ "$system_arch" = "riscv64" ]; then
         require_pve_kernel=false
     fi
-    if [ "$require_pve_kernel" = true ] && ! dpkg-query -W 'pve-kernel-*' 2>/dev/null | grep -q '^pve-kernel-'; then
-        _red "No pve-kernel package was detected after installation"
-        _red "安装完成后未检测到 pve-kernel 软件包"
+    if [ "$require_pve_kernel" = true ] && ! verify_pve_kernel_boot_files; then
+        _red "No fully installed PVE kernel with a readable image, initramfs and modules was detected"
+        _red "未检测到完整安装的 PVE 内核、可读引导镜像及模块，暂勿重启"
         return 1
     fi
-    if [ "$require_pve_kernel" = false ] && ! dpkg-query -W 'pve-kernel-*' 2>/dev/null | grep -q '^pve-kernel-'; then
+    if [ "$require_pve_kernel" = false ] && ! verify_pve_kernel_boot_files; then
         _yellow "No pve-kernel package was detected; riscv64 PXVIRT can run in user-space on the distribution kernel"
         _yellow "未检测到 pve-kernel 软件包；riscv64 的 PXVIRT 可在发行版内核上运行用户态组件"
     fi
@@ -380,8 +451,6 @@ cleanup_ceph_service_packages() {
     local ceph_service_packages=(
         ceph
         ceph-base
-        ceph-common
-        ceph-fuse
         ceph-mon
         ceph-osd
         ceph-mds
@@ -390,7 +459,7 @@ cleanup_ceph_service_packages() {
     )
     local installed=()
     local pkg
-    if [[ "${PVE_INSTALL_CEPH^^}" == "TRUE" ]]; then
+    if [[ "${PVE_INSTALL_CEPH^^}" == "TRUE" || "${PVE_REPAIR_EXISTING:-false}" == true ]]; then
         return 0
     fi
     for pkg in "${ceph_service_packages[@]}"; do
@@ -402,7 +471,6 @@ cleanup_ceph_service_packages() {
         _yellow "Removing Ceph service packages to keep minimal host install: ${installed[*]}"
         _yellow "为保持宿主最小化安装，正在移除 Ceph 服务包：${installed[*]}"
         DEBIAN_FRONTEND=noninteractive apt-get purge -y "${installed[@]}" >/dev/null 2>&1 || true
-        DEBIAN_FRONTEND=noninteractive apt-get autoremove -y >/dev/null 2>&1 || true
     fi
 }
 
@@ -533,225 +601,116 @@ rebuild_cloud_init() {
     touch /etc/cloud/cloud-init.disabled
 }
 
-remove_source_input() {
-    # 去除引用
-    if [ -f "/etc/network/interfaces" ]; then
-        chattr -i /etc/network/interfaces
-        if ! grep -q '^#source \/etc\/network\/interfaces\.d\/' "/etc/network/interfaces"; then
-            sed -i '/^source \/etc\/network\/interfaces\.d\// { /^#/! s/^/#/ }' "/etc/network/interfaces"
-        fi
-        if ! grep -q '^#source-directory \/etc\/network\/interfaces\.d' "/etc/network/interfaces"; then
-            sed -i 's/^source-directory \/etc\/network\/interfaces\.d/#source-directory \/etc\/network\/interfaces.d/' "/etc/network/interfaces"
-        fi
-        chattr +i /etc/network/interfaces
-    fi
-    if [ -f "/etc/network/interfaces.new" ]; then
-        chattr -i /etc/network/interfaces.new
-        if ! grep -q '^#source \/etc\/network\/interfaces\.d\/' "/etc/network/interfaces.new"; then
-            sed -i '/^source \/etc\/network\/interfaces\.d\// { /^#/! s/^/#/ }' "/etc/network/interfaces.new"
-        fi
-        if ! grep -q '^#source-directory \/etc\/network\/interfaces\.d' "/etc/network/interfaces.new"; then
-            sed -i 's/^source-directory \/etc\/network\/interfaces\.d/#source-directory \/etc\/network\/interfaces.d/' "/etc/network/interfaces.new"
-        fi
-        chattr +i /etc/network/interfaces.new
-    fi
+# Inspect only active source references; never delete or flatten source files.
+pve_installer_network_topology() {
+    python3 - "${PVE_NETWORK_INTERFACES_FILE:-/etc/network/interfaces}" "$1" "${2:-}" <<'PYCODE'
+import glob
+import pathlib
+import re
+import shlex
+import sys
+root, mode, selected = sys.argv[1:]
+files, stanzas = {}, []
+def visit(name):
+    path = pathlib.Path(name).resolve()
+    if path in files:
+        return
+    if len(files) >= 256:
+        raise ValueError('too many network files')
+    text = path.read_text()
+    files[path] = text
+    current = None
+    for line in text.replace('\\\n', ' ').splitlines():
+        fields = shlex.split(line, comments=True)
+        if not fields:
+            continue
+        key = fields[0]
+        if key in {'source', 'source-directory'}:
+            current = None
+            for pattern in fields[1:]:
+                pattern = pathlib.Path(pattern)
+                if not pattern.is_absolute():
+                    pattern = path.parent / pattern
+                for match in sorted(glob.glob(str(pattern))):
+                    child = pathlib.Path(match)
+                    if key == 'source-directory' and child.is_dir():
+                        for entry in sorted(child.iterdir()):
+                            if entry.is_file() and re.fullmatch(r'[A-Za-z0-9_-]+', entry.name):
+                                visit(entry)
+                    elif key == 'source' and child.is_file():
+                        visit(child)
+        elif key == 'iface' and len(fields) >= 4:
+            current = {'name': fields[1], 'ports': []}
+            stanzas.append(current)
+        elif key in {'auto', 'mapping'} or key.startswith('allow-'):
+            current = None
+        elif current is not None and key in {'bridge_ports', 'bridge-ports'}:
+            current['ports'].extend(fields[1:])
+try:
+    visit(root)
+    if mode == 'files':
+        for path in files:
+            if '\n' in str(path):
+                raise ValueError('invalid network path')
+            print(path)
+    elif mode == 'has-interface':
+        raise SystemExit(0 if any(row['name'] == selected for row in stanzas) else 1)
+    elif mode == 'owns-uplink':
+        raise SystemExit(0 if any(row['name'] == selected or selected in row['ports'] for row in stanzas) else 1)
+    elif mode == 'clean-uplink':
+        for path, text in files.items():
+            result, dropping = [], False
+            for line in text.splitlines(keepends=True):
+                fields = line.split()
+                if fields and not line[0].isspace() and not fields[0].startswith('#'):
+                    dropping = fields[0] == 'iface' and len(fields) > 1 and fields[1] == selected
+                    if fields[0] in {'auto', 'allow-auto', 'allow-hotplug'} and selected in fields[1:]:
+                        names = [name for name in fields[1:] if name != selected]
+                        if names:
+                            result.append(fields[0] + ' ' + ' '.join(names) + '\n')
+                        continue
+                if not dropping:
+                    result.append(line)
+            updated = ''.join(result)
+            if updated != text:
+                path.write_text(updated)
+    else:
+        raise ValueError('unknown network operation')
+except (OSError, ValueError):
+    raise SystemExit(1)
+PYCODE
 }
 
 rebuild_interfaces() {
-    # 修复部分网络加载没实时加载
-    if [[ -f "/etc/network/interfaces.new" && -f "/etc/network/interfaces" ]]; then
-        chattr -i /etc/network/interfaces
-        cp -f /etc/network/interfaces.new /etc/network/interfaces
-        chattr +i /etc/network/interfaces
+    local path="${PVE_NETWORK_INTERFACES_FILE:-/etc/network/interfaces}"
+    if [[ -f "${path}.new" && -f "$path" ]]; then
+        chattr -i "$path" || return 1
+        cp -p "${path}.new" "$path" || return 1
     fi
-    # 检测回环是否存在，不存在则插入文件的第一第二行
-    if ! grep -q "auto lo" "/etc/network/interfaces"; then
-        chattr -i /etc/network/interfaces
-        sed -i '1s/^/auto lo\n/' "/etc/network/interfaces"
-        chattr +i /etc/network/interfaces
-        _blue "Can not find 'auto lo' in /etc/network/interfaces, add it"
-        _blue "未在 /etc/network/interfaces 中找到 'auto lo'，已自动添加"
+    pve_installer_network_topology files >/dev/null || return 1
+    chattr -i "$path" || return 1
+    if ! pve_installer_network_topology has-interface lo; then
+        printf '\nauto lo\niface lo inet loopback\n' >>"$path" || return 1
     fi
-    if ! grep -q "iface lo inet loopback" "/etc/network/interfaces"; then
-        chattr -i /etc/network/interfaces
-        sed -i '2s/^/iface lo inet loopback\n/' "/etc/network/interfaces"
-        chattr +i /etc/network/interfaces
-        _blue "Can not find 'iface lo inet loopback' in /etc/network/interfaces, add it"
-        _blue "未在 /etc/network/interfaces 中找到 'iface lo inet loopback'，已自动添加"
+    # The physical port may already be owned by a pending or active bridge.
+    # Do not add a duplicate L3 stanza in that case.
+    if ! pve_installer_network_topology owns-uplink "$interface"; then
+        {
+            printf '\nauto %s\niface %s inet static\n' "$interface" "$interface"
+            printf '    address %s\n' "$(get_ipv4_address_cidr)"
+            format_ipv4_gateway_config '    ' "$interface"
+        } >>"$path" || return 1
     fi
-    # 检查是否存在网络接口配置
-    interface_configured=false
-    # 检查主接口是否已配置（包括 auto 和 allow-hotplug）
-    if (grep -q "auto ${interface}" /etc/network/interfaces || grep -q "allow-hotplug ${interface}" /etc/network/interfaces) && \
-       (grep -q "iface ${interface} inet static" /etc/network/interfaces || \
-        grep -q "iface ${interface} inet dhcp" /etc/network/interfaces || \
-        grep -q "iface ${interface} inet auto" /etc/network/interfaces); then
-        interface_configured=true
-    fi
-    # 检查interfaces.d目录中是否有配置
-    if [ -d "/etc/network/interfaces.d/" ]; then
-        for file in /etc/network/interfaces.d/*; do
-            if [ -f "$file" ] && (grep -q "auto ${interface}" "$file" || grep -q "allow-hotplug ${interface}" "$file" || grep -q "iface ${interface}" "$file"); then
-                interface_configured=true
-                break
-            fi
-        done
-    fi
-    # 如果没有找到接口配置，说明可能是从NetworkManager切换过来的
-    if [ "$interface_configured" = false ]; then
-        _blue "No network interface configuration found, possibly switched from NetworkManager"
-        _blue "Adding static configuration for interface ${interface}"
-        _blue "未找到网络接口配置，可能是从 NetworkManager 切换而来"
-        _blue "正在为接口 ${interface} 添加静态配置"
-        chattr -i /etc/network/interfaces
-        echo "" >>/etc/network/interfaces
-        echo "# Network interface ${interface}" >>/etc/network/interfaces
-        echo "auto ${interface}" >>/etc/network/interfaces
-        if [[ -z "${CN}" || "${CN}" != true ]]; then
-            echo "iface ${interface} inet static" >>/etc/network/interfaces
-            echo "    address $(get_ipv4_address_plain)" >>/etc/network/interfaces
-            echo "    netmask ${ipv4_subnet}" >>/etc/network/interfaces
-            format_ipv4_gateway_config "    " "${interface}" >>/etc/network/interfaces
-            echo "    dns-nameservers 8.8.8.8 8.8.4.4" >>/etc/network/interfaces
-        else
-            echo "iface ${interface} inet static" >>/etc/network/interfaces
-            echo "    address $(get_ipv4_address_plain)" >>/etc/network/interfaces
-            echo "    netmask ${ipv4_subnet}" >>/etc/network/interfaces
-            format_ipv4_gateway_config "    " "${interface}" >>/etc/network/interfaces
-            echo "    dns-nameservers 8.8.8.8 223.5.5.5" >>/etc/network/interfaces
-        fi
-        chattr +i /etc/network/interfaces
-        # 标记已配置，跳过后续的接口检查
-        interface_configured=true
-    fi
-    # 只有在接口已配置的情况下才进行后续处理
-    if [ "$interface_configured" = true ]; then
-        chattr -i /etc/network/interfaces
-        echo " " >>/etc/network/interfaces
-        chattr +i /etc/network/interfaces
-        # 合并interfaces.d目录中的文件
-        if [ -d "/etc/network/interfaces.d/" ]; then
-            if [ ! -f "/etc/network/interfaces" ]; then
-                touch /etc/network/interfaces
-            fi
-            if grep -q '^source \/etc\/network\/interfaces\.d\/' "/etc/network/interfaces" || grep -q '^source-directory \/etc\/network\/interfaces\.d' "/etc/network/interfaces"; then
-                chattr -i /etc/network/interfaces
-                for file in /etc/network/interfaces.d/*; do
-                    if [ -f "$file" ]; then
-                        cat "$file" >>/etc/network/interfaces
-                        chattr -i "$file"
-                        rm "$file"
-                    fi
-                done
-                chattr +i /etc/network/interfaces
-            else
-                for file in /etc/network/interfaces.d/*; do
-                    if [ -f "$file" ]; then
-                        chattr -i "$file"
-                        rm "$file"
-                    fi
-                done
-            fi
-        fi
-        # 处理/run/network/interfaces.d/目录
-        if [ -d "/run/network/interfaces.d/" ]; then
-            if [ ! -f "/etc/network/interfaces" ]; then
-                touch /etc/network/interfaces
-            fi
-            if grep -q '^source \/run\/network\/interfaces\.d\/' "/etc/network/interfaces" || grep -q '^source-directory \/run\/network\/interfaces\.d' "/etc/network/interfaces"; then
-                chattr -i /etc/network/interfaces
-                for file in /run/network/interfaces.d/*; do
-                    if [ -f "$file" ]; then
-                        cat "$file" >>/etc/network/interfaces
-                        chattr -i "$file"
-                        rm "$file"
-                    fi
-                done
-                chattr +i /etc/network/interfaces
-            else
-                for file in /run/network/interfaces.d/*; do
-                    if [ -f "$file" ]; then
-                        chattr -i "$file"
-                        rm "$file"
-                    fi
-                done
-            fi
-        fi
-        # 修复部分网络运行部分未空
-        if ! compgen -G "/run/network/interfaces.d/*" >/dev/null; then
-            if [ -f "/etc/network/interfaces" ]; then
-                chattr -i /etc/network/interfaces
-                if ! grep -q "^#.*source-directory \/run\/network\/interfaces\.d" /etc/network/interfaces; then
-                    sed -i '/source-directory \/run\/network\/interfaces.d/s/^/#/' /etc/network/interfaces
-                fi
-                chattr +i /etc/network/interfaces
-            fi
-            if [ -f "/etc/network/interfaces.new" ]; then
-                chattr -i /etc/network/interfaces.new
-                if ! grep -q "^#.*source-directory \/run\/network\/interfaces\.d" /etc/network/interfaces.new; then
-                    sed -i '/source-directory \/run\/network\/interfaces.d/s/^/#/' /etc/network/interfaces.new
-                fi
-                chattr +i /etc/network/interfaces.new
-            fi
-        fi
-        # 去除引用
-        remove_source_input
-        # 检查/etc/network/interfaces文件中是否有iface xxxx inet auto行
-        if [ -f "/etc/network/interfaces" ]; then
-            if grep -q "iface $interface inet auto" /etc/network/interfaces; then
-                chattr -i /etc/network/interfaces
-                if [[ -z "${CN}" || "${CN}" != true ]]; then
-                    replace_interface_mode_with_static "auto" "8.8.8.8 8.8.4.4"
-                else
-                    replace_interface_mode_with_static "auto" "8.8.8.8 223.5.5.5"
-                fi
-            fi
-            chattr +i /etc/network/interfaces
-        fi
-        # 检查/etc/network/interfaces文件中是否有iface xxxx inet dhcp行
-        if [[ $dmidecode_output == *"Hetzner_vServer"* ]] || [[ $dmidecode_output == *"Microsoft Corporation"* ]]; then
-            if [ -f "/etc/network/interfaces" ]; then
-                if grep -qF "inet dhcp" /etc/network/interfaces; then
-                    inet_dhcp=true
-                else
-                    inet_dhcp=false
-                fi
-                if grep -q "iface $interface inet dhcp" /etc/network/interfaces; then
-                    chattr -i /etc/network/interfaces
-                    if [[ -z "${CN}" || "${CN}" != true ]]; then
-                        replace_interface_mode_with_static "dhcp" "8.8.8.8 8.8.4.4"
-                    else
-                        replace_interface_mode_with_static "dhcp" "8.8.8.8 223.5.5.5"
-                    fi
-                fi
-                chattr +i /etc/network/interfaces
-            fi
-        fi
-        # 检测物理接口是否已auto或allow-hotplug链接
-        if ! grep -q "auto ${interface}" /etc/network/interfaces && ! grep -q "allow-hotplug ${interface}" /etc/network/interfaces; then
-            chattr -i /etc/network/interfaces
-            echo "auto ${interface}" >>/etc/network/interfaces
-            chattr +i /etc/network/interfaces
-        fi
-        # 反加载
-        if [[ -f "/etc/network/interfaces.new" && -f "/etc/network/interfaces" ]]; then
-            chattr -i /etc/network/interfaces.new
-            cp -f /etc/network/interfaces /etc/network/interfaces.new
-            chattr +i /etc/network/interfaces.new
-        fi
-    else
-        _red "Warning: No network interface configuration found and unable to create one"
-        _red "Please check if the network interface variables are properly set"
-        _red "警告：未找到网络接口配置且无法自动创建"
-        _red "请检查网络接口相关变量是否设置正确"
-    fi
+    chattr +i "$path"
 }
 
 fix_interfaces_ipv6_auto_type() {
+    local keyword device family method extra
     chattr -i /etc/network/interfaces
     while IFS= read -r line; do
         # 检测以 "iface" 开头且包含 "inet6 auto" 的行
-        if [[ $line == *"inet6 auto"* ]]; then
+        read -r keyword device family method extra <<<"$line"
+        if [[ "$keyword" = iface && "$device" = "$interface" && "$family" = inet6 && "$method" = auto ]]; then
             modified_line="${line/auto/static}"
             echo "$modified_line"
             # 添加静态IPv6配置信息
@@ -1382,33 +1341,34 @@ setup_dns_check_service() {
 }
 
 # 修复APT源问题
-fix_apt_issues1() {
-    # 确保apt没有问题
-    /usr/local/bin/check-dns.sh
-    apt-get update -y
-    apt-get full-upgrade -y
-    if [ $? -ne 0 ]; then
-        apt-get install debian-keyring debian-archive-keyring -y
-        apt-get update -y && apt-get full-upgrade -y
-    fi
-    # 处理缺失的公钥
-    apt_update_output=$(apt-get update 2>&1)
-    echo "$apt_update_output" >"$temp_file_apt_fix"
-    if grep -q 'NO_PUBKEY' "$temp_file_apt_fix"; then
-        public_keys=$(grep -oE 'NO_PUBKEY [0-9A-F]+' "$temp_file_apt_fix" | awk '{ print $2 }')
-        joined_keys=$(echo "$public_keys" | paste -sd " ")
-        _yellow "No Public Keys: ${joined_keys}"
-        apt-key adv --keyserver keyserver.ubuntu.com --recv-keys ${joined_keys}
-        apt-get update
-        if [ $? -eq 0 ]; then
-            _green "Fixed"
+disable_pve_enterprise_sources() {
+    # This installer selects pve-no-subscription. PVE 9 installs its enterprise
+    # source during the package transaction; a retry must disable it before
+    # the first apt update, while retaining a restorable copy.
+    local directory="${PVE_APT_SOURCES_DIR:-/etc/apt/sources.list.d}" file
+    for file in pve-enterprise.list pve-enterprise.sources ceph.list ceph.sources; do
+        file="$directory/$file"
+        [ -f "$file" ] || continue
+        grep -q 'enterprise\.proxmox\.com' "$file" || continue
+        # Do not disable a file that also contains a custom/public repository.
+        if grep -E '^[[:space:]]*(deb |URIs:)' "$file" | grep -v 'enterprise\.proxmox\.com' | grep -q '[^[:space:]]'; then
+            _red "Mixed enterprise/custom APT source requires manual separation: $file"
+            return 1
         fi
+        mv -- "$file" "${file}.ocv-disabled" || return 1
+    done
+    return 0
+}
+
+fix_apt_issues1() {
+    disable_pve_enterprise_sources || return 1
+    preserve_boot_kernels || return 1
+    if ! apt-get update -o APT::Update::Error-Mode=any -o Acquire::Retries=3; then
+        _red "APT metadata verification failed; repair the signed repository before retrying"
+        _red "APT 仓库元数据校验失败；请修复签名或网络后重试"
+        return 1
     fi
-    rm "$temp_file_apt_fix"
-    apt-get update -y
-    if [ $? -ne 0 ]; then
-        switch_mirrors
-    fi
+    apt-get full-upgrade -y || return 1
     systemctl daemon-reload
 }
 
@@ -2266,13 +2226,16 @@ detect_network_interfaces() {
 # 设置持久化网络接口名称
 setup_persistent_network_interface() {
     if [ ! -f /etc/systemd/network/10-persistent-net.link ]; then
-        echo '[Match]' >/etc/systemd/network/10-persistent-net.link
-        echo "MACAddress=${mac_address}" >>/etc/systemd/network/10-persistent-net.link
-        echo "" >>/etc/systemd/network/10-persistent-net.link
-        echo '[Link]' >>/etc/systemd/network/10-persistent-net.link
-        echo "Name=${interface}" >>/etc/systemd/network/10-persistent-net.link
-        /etc/init.d/udev force-reload
+        mkdir -p /etc/systemd/network || return 1
+        printf '[Match]\nMACAddress=%s\n\n[Link]\nName=%s\n' "$mac_address" "$interface" \
+            >/etc/systemd/network/10-persistent-net.link || return 1
+        # Debian 13 no longer ships the SysV /etc/init.d/udev script.
+        # Reload rules without retriggering or renaming the live SSH uplink.
+        if command -v udevadm >/dev/null 2>&1; then
+            udevadm control --reload || _yellow "udev reload unavailable; persistent interface naming will apply on the next boot"
+        fi
     fi
+    return 0
 }
 
 # 获取IPV6网关信息
@@ -2463,14 +2426,21 @@ clean_manual_ipv6() {
     fi
 }
 
-# 配置fe80地址白名单
+# 保留 NDP 必需的链路本地地址，清理旧版本生成的删除钩子。
 configure_fe80_whitelist() {
-    if [[ "${ipv6_gateway_fe80}" == "N" ]]; then
-        chattr -i /etc/network/interfaces
-        echo "        up ip addr del $fe80_address dev $interface" >>/etc/network/interfaces
-        remove_duplicate_lines "/etc/network/interfaces"
-        chattr +i /etc/network/interfaces
-    fi
+    [ -n "${fe80_address:-}" ] || return 0
+    chattr -i /etc/network/interfaces || return 1
+    python3 - "$fe80_address" "$interface" <<'PY'
+import pathlib
+import sys
+path = pathlib.Path('/etc/network/interfaces')
+legacy = ['up', 'ip', 'addr', 'del', sys.argv[1], 'dev', sys.argv[2]]
+lines = path.read_text().splitlines(keepends=True)
+path.write_text(''.join(line for line in lines if line.split() != legacy))
+PY
+    local result=$?
+    chattr +i /etc/network/interfaces
+    return "$result"
 }
 
 # 系统重启检查
@@ -2495,7 +2465,7 @@ configure_network_priority
 run_preliminary_checks
 check_and_configure_environment
 setup_dns_check_service
-fix_apt_issues1
+fix_apt_issues1 || exit 1
 ensure_system_paths
 install_base_packages
 handle_special_environments
@@ -2526,12 +2496,12 @@ else
 fi
 configure_cloud_init
 create_network_interfaces
-rebuild_interfaces
+rebuild_interfaces || exit 1
 remove_duplicate_lines "/etc/network/interfaces"
 if [ -f "/etc/network/interfaces.new" ]; then
     remove_duplicate_lines "/etc/network/interfaces.new"
 fi
-clean_dns_config
+# DNS settings on distinct interfaces are intentionally preserved.
 clean_manual_ipv6
 rebuild_cloud_init
 fix_interfaces_ipv6_auto_type
@@ -2658,7 +2628,7 @@ download_pve_key_with_fallback() {
     for key_url in "$@"; do
         rm -f "$keyfile"
         if wget -q "$key_url" -O "$keyfile" && [ -s "$keyfile" ]; then
-            chmod +r "$keyfile"
+            chmod 0644 "$keyfile" || return 1
             return 0
         fi
     done
@@ -2670,7 +2640,8 @@ ensure_pve_key() {
     local keyfile="$1"
     shift
     if [ -s "$keyfile" ]; then
-        return 0
+        chmod 0644 "$keyfile"
+        return $?
     fi
     download_pve_key_with_fallback "$keyfile" "$@" || true
 }
@@ -2758,6 +2729,7 @@ Suites: $version
 Components: pve-no-subscription
 Signed-By: $keyfile
 EOF
+        chmod 0644 "$sources_file" || return 1
         echo "Proxmox $version source written to $sources_file"
     else
         # 老系统直接写入 sources.list 无需转换
@@ -2830,7 +2802,7 @@ install_arm_pxvirt_repo_key() {
             continue
         fi
         if curl -fsSL --connect-timeout 10 --max-time 30 "$key_url" -o "$key_path"; then
-            chmod +r "$key_path"
+            chmod 0644 "$key_path" || return 1
             _green "PXVIRT repository signing key installed: $key_path"
             _green "PXVIRT 仓库签名密钥已安装：$key_path"
             echo "$key_path"
@@ -2857,6 +2829,7 @@ setup_pxvirt_repo_with_fallback() {
     local apt_output=""
     for mirror in "${mirrors[@]}"; do
         echo "deb ${mirror} ${suite} main" >"$repo_file"
+        chmod 0644 "$repo_file" || return 1
         apt_output=$(apt-get update -o Dir::Etc::sourcelist="$repo_file" -o Dir::Etc::sourceparts='-' -o APT::Get::List-Cleanup=0 2>&1)
         if [ $? -eq 0 ]; then
             _green "PXVIRT repository selected: ${mirror} (${suite})"
@@ -2990,35 +2963,20 @@ confirm_continue() {
 
 # 修复APT问题函数
 fix_apt_issues2() {
-    apt-get update -y && apt-get full-upgrade -y
-    if [ $? -ne 0 ]; then
-        apt-get install debian-keyring debian-archive-keyring -y
-        apt-get update -y && apt-get full-upgrade -y
+    # APT may otherwise exit successfully after using stale indexes. Never
+    # continue to the kernel transaction after a signing or transport failure.
+    if ! apt-get update -o APT::Update::Error-Mode=any -o Acquire::Retries=3; then
+        _red "APT metadata verification failed; fix the signed repository before continuing"
+        _red "APT 仓库元数据校验失败；请修复签名或网络后重试，尚未开始 PVE 安装"
+        return 1
     fi
-    apt_update_output=$(apt-get update 2>&1)
-    echo "$apt_update_output" >"$temp_file_apt_fix"
-    if grep -q 'NO_PUBKEY' "$temp_file_apt_fix"; then
-        public_keys=$(grep -oE 'NO_PUBKEY [0-9A-F]+' "$temp_file_apt_fix" | awk '{ print $2 }')
-        joined_keys=$(echo "$public_keys" | paste -sd " ")
-        _yellow "No Public Keys: ${joined_keys}"
-        apt-key adv --keyserver keyserver.ubuntu.com --recv-keys ${joined_keys}
-        apt-get update
-        if [ $? -eq 0 ]; then
-            _green "Fixed"
-        fi
-    fi
-    rm "$temp_file_apt_fix"
-    output=$(apt-get update 2>&1)
-    if echo $output | grep -q "NO_PUBKEY"; then
-        _yellow "try sudo apt-key adv --keyserver keyserver.ubuntu.com --recvrebuild_interface-keys missing key"
-        exit 1
-    fi
+    apt-get full-upgrade -y
 }
 
 # 修复网络接口配置
 fix_network_configs() {
     # 修复网卡可能存在的auto类型
-    rebuild_interfaces
+    rebuild_interfaces || exit 1
     fix_interfaces_ipv6_auto_type
     # 特殊处理Hetzner和Azure的情况
     if [[ $dmidecode_output == *"Hetzner_vServer"* ]] || [[ $dmidecode_output == *"Microsoft Corporation"* ]] || [[ $dmidecode_output == *"Exoscale Compute Platform"* ]]; then
@@ -3048,8 +3006,11 @@ fix_ipv6_configs() {
 install_proxmox_packages() {
     local pve_packages=(proxmox-ve pve-manager qemu-server pve-cluster)
     local install_mode_created=false
+    local kernel_finalize_mode=""
     local install_mode_file="${PROXMOX_INSTALL_MODE_FILE:-/proxmox_install_mode}"
     local install_exit=0
+    # Keep the distribution's working kernel available as a recovery entry.
+    preserve_boot_kernels || exit 1
     # 部分机器中途service丢失了，尝试修复
     install_package service
     # esxi 开设的部分机器中含有冲突组件 firmware-ath9k-htc ，需要预先卸载
@@ -3095,13 +3056,19 @@ install_proxmox_packages() {
         rollback_failed_pve_install
         exit 1
     fi
+    [ "$install_mode_created" != true ] || kernel_finalize_mode=replay
+    if ! finalize_pve_kernel_installation "$kernel_finalize_mode"; then
+        rollback_failed_pve_install
+        exit 1
+    fi
+    preserve_boot_kernels || exit 1
     if ! verify_pve_installation; then
         rollback_failed_pve_install
         exit 1
     fi
     cleanup_ceph_service_packages
     install_optional_pve_packages
-    rebuild_interfaces
+    rebuild_interfaces || exit 1
 }
 
 # 配置vmbr0桥接接口
@@ -3109,7 +3076,7 @@ configure_vmbr0_bridge() {
     local bridge_ipv4
     bridge_ipv4="$(get_ipv4_address_cidr)" || exit 1
     chattr -i /etc/network/interfaces
-    if grep -q "vmbr0" "/etc/network/interfaces"; then
+    if pve_installer_network_topology has-interface vmbr0; then
         _blue "vmbr0 already exists in /etc/network/interfaces"
         _blue "vmbr0 已存在在 /etc/network/interfaces"
     else
@@ -3122,7 +3089,7 @@ iface vmbr0 inet static
 $(format_ipv4_gateway_config "    " "vmbr0")
     bridge_ports $interface
     bridge_stp off
-    bridge_fd 0
+    bridge_fd 2
 EOF
         # 有IPV6地址，只有一个IPV6地址，且后续仅使用一个IPV6地址，存在slaac机制
         elif [ -f /usr/local/bin/pve_slaac_status ] && [ $(cat /usr/local/bin/pve_maximum_subset) = false ] && [ ! -f /usr/local/bin/pve_last_ipv6 ]; then
@@ -3133,7 +3100,7 @@ iface vmbr0 inet static
 $(format_ipv4_gateway_config "    " "vmbr0")
     bridge_ports $interface
     bridge_stp off
-    bridge_fd 0
+    bridge_fd 2
 
 iface vmbr0 inet6 auto
     bridge_ports $interface
@@ -3148,7 +3115,7 @@ iface vmbr0 inet static
 $(format_ipv4_gateway_config "    " "vmbr0")
     bridge_ports $interface
     bridge_stp off
-    bridge_fd 0
+    bridge_fd 2
 
 iface vmbr0 inet6 static
     address ${last_ipv6}
@@ -3166,7 +3133,7 @@ iface vmbr0 inet static
 $(format_ipv4_gateway_config "    " "vmbr0")
     bridge_ports $interface
     bridge_stp off
-    bridge_fd 0
+    bridge_fd 2
 
 iface vmbr0 inet6 static
     address ${ipv6_address}/${ipv6_prefixlen}
@@ -3187,11 +3154,7 @@ configure_pve_sources() {
             sed -i 's|http://mirrors.ustc.edu.cn/proxmox|https://mirrors.tuna.tsinghua.edu.cn/proxmox|g' /usr/share/perl5/PVE/APLInfo.pm
         fi
     fi
-    # 删除apt源中的无效订阅
-    [ -f "/etc/apt/sources.list.d/pve-enterprise.list" ] && rm -f "/etc/apt/sources.list.d/pve-enterprise.list"
-    [ -f "/etc/apt/sources.list.d/ceph.list" ] && rm -f "/etc/apt/sources.list.d/ceph.list"
-    [ -f "/etc/apt/sources.list.d/pve-enterprise.sources" ] && rm -f "/etc/apt/sources.list.d/pve-enterprise.sources"
-    [ -f "/etc/apt/sources.list.d/ceph.sources" ] && rm -f "/etc/apt/sources.list.d/ceph.sources"
+    disable_pve_enterprise_sources
 }
 
 # 确保DNS配置有效
@@ -3217,26 +3180,23 @@ configure_dns() {
 
 # 清理原有网卡配置
 clean_network_interfaces() {
-    cp /etc/network/interfaces /etc/network/interfaces_nat.bak
-    chattr -i /etc/network/interfaces
-    input_file="/etc/network/interfaces"
-    output_file="/etc/network/interfaces.tmp"
-    start_pattern="iface lo inet loopback"
-    end_pattern="auto vmbr0"
-    delete_lines=0
-    while IFS= read -r line; do
-        if [[ $line == *"$start_pattern"* ]]; then
-            delete_lines=1
-        fi
-        if [ $delete_lines -eq 0 ] || [[ $line == *"$start_pattern"* ]] || [[ $line == *"$end_pattern"* ]]; then
-            echo "$line" >>"$output_file"
-        fi
-        if [[ $line == *"$end_pattern"* ]]; then
-            delete_lines=0
-        fi
-    done <"$input_file"
-    mv "$output_file" "$input_file"
-    chattr +i /etc/network/interfaces
+    local file root="${PVE_INSTALL_NETWORK_BACKUP_ROOT:-/var/lib/oneclickvirt/installer-network-backups}" snapshot
+    pve_installer_network_topology has-interface vmbr0 || return 1
+    install -d -m 700 "$root" || return 1
+    snapshot=$(mktemp -d "$root/change.XXXXXXXX") || return 1
+    pve_installer_network_topology files >"$snapshot/files" || return 1
+    tar -cPf "$snapshot/interfaces.tar" --verbatim-files-from -T "$snapshot/files" || return 1
+    while IFS= read -r file; do
+        chattr -i "$file" || return 1
+    done <"$snapshot/files"
+    if ! pve_installer_network_topology clean-uplink "$interface"; then
+        # An included file may become unwritable midway through cleanup.
+        # Restore every source file before any network reload can occur.
+        tar -xPf "$snapshot/interfaces.tar" || return 1
+        chattr +i "${PVE_NETWORK_INTERFACES_FILE:-/etc/network/interfaces}" || true
+        return 1
+    fi
+    chattr +i "${PVE_NETWORK_INTERFACES_FILE:-/etc/network/interfaces}"
 }
 
 # 安装额外软件包
@@ -3431,15 +3391,15 @@ elif [ "$system_arch" = "arm" ]; then
 elif [ "$system_arch" = "riscv64" ]; then
     setup_riscv_pve_repo "$version" || exit 1
 fi
-rebuild_interfaces
-fix_apt_issues2
+rebuild_interfaces || exit 1
+fix_apt_issues2 || exit 1
 fix_network_configs
 fix_ipv6_configs
 configure_dns
 install_proxmox_packages
 configure_vmbr0_bridge
 configure_pve_sources
-clean_network_interfaces
+clean_network_interfaces || exit 1
 install_additional_packages
 configure_firewall_and_proxy
 if ! initialize_pve_runtime; then
@@ -3447,6 +3407,11 @@ if ! initialize_pve_runtime; then
 fi
 if ! verify_pve_installation; then
     rollback_failed_pve_install
+    exit 1
+fi
+if command -v update-grub >/dev/null 2>&1 && ! update-grub; then
+    _red "Unable to update the boot menu; installed kernels were preserved, do not reboot yet"
+    _red "引导菜单更新失败；已保留现有内核，请修复引导后再重启"
     exit 1
 fi
 if ! wait_for_8006_ready; then
@@ -3468,7 +3433,7 @@ fi
 # 打印内核
 running_kernel=$(uname -r)
 _green "Running kernel: $(pveversion)"
-installed_kernels=($(dpkg -l 'pve-kernel-*' | awk '/^ii/ {print $2}' | cut -d'-' -f3- | sort -V))
+mapfile -t installed_kernels < <(installed_pve_kernel_versions | sort -Vu)
 if [ ${#installed_kernels[@]} -gt 0 ]; then
     latest_kernel=${installed_kernels[-1]}
     _green "PVE latest kernel: $latest_kernel"

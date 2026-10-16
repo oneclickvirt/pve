@@ -21,6 +21,11 @@ assert_eq() {
     fi
 }
 
+# Address prefixes must not select another guest's nft rule handles.
+rules=$'ip6 daddr 2001:db8::d1 drop # handle 11\nip6 daddr 2001:db8::d10 drop # handle 12\nip6 saddr fd42::d1 snat to 2001:db8::901 # handle 13\nip6 saddr fd42::d10 snat to 2001:db8::9010 # handle 14'
+assert_eq 11 "$(printf '%s\n' "$rules" | nft_ipv6_rule_handles 2001:db8::d1)" 'exact nft destination matching'
+assert_eq 13 "$(printf '%s\n' "$rules" | nft_ipv6_rule_handles fd42::d1 2001:db8::901)" 'exact nft NAT matching'
+
 fake_bin="${tmp_dir}/bin"
 mkdir -p "$fake_bin"
 ln -s "$(command -v python3)" "${fake_bin}/python3"

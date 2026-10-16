@@ -8,6 +8,14 @@
 
 ## 更新
 
+2026.10.17
+
+- Debian 13 / PVE 9 安装重放内核安装钩子，检查 initramfs、模块与引导项，保留可用恢复内核。
+- 宿主网桥迁移保留递归接口配置，语法检查和连通性检查失败时由独立定时器回滚。
+- 独立 IPv4 按真实前缀和网关分配，检查 ARP 冲突；分配锁在启动 QEMU 前释放，全端口 NAT 持久化地址占用。
+- 纯 IPv6 CT/VM 使用 IPv6 DNS；直连、NAT66 和一对一映射分别校验，不能满足条件时停止创建。
+- 兼容以 `-` 开头的密码；密码仅保存到本机权限为 600 的元数据文件，IPv6 删除规则按完整地址匹配。
+
 2026.08.27
 
 - 收窄 NDP 代理到参与拓扑的桥接接口，并移除 NAT66 网桥停止时关闭全局 IPv6 转发的行为；保留 SLAAC RA、已委派前缀和 HE/6in4 隧道的可用性
@@ -90,6 +98,34 @@ bootstrap reboot before starting the post-reboot pass. The repository's
 `tests/` directory covers syntax, ShellCheck, network state, and install-mode
 regressions, including isolated ifupdown2 lifecycle, image selection, and
 POSIX `ssh_sh.sh` detection checks.
+
+PVE kernel verification accepts both `pve-kernel-*` and `proxmox-kernel-*`
+concrete installed packages (including signed kernels), and checks their kernel
+image, initramfs and modules before reporting success. The working distribution
+kernel is retained as a recovery option. Failed installation checks preserve
+installed packages instead of purging PVE and automatically removing kernels.
+After the installation-mode marker is removed, kernel installation hooks are
+replayed to generate the initramfs and boot entries. An incomplete existing
+installation can be resumed with `PVE_REPAIR_EXISTING=true`; this preserves
+guests and recovery kernels. Default enterprise sources are backed up and
+disabled before retrying the signed no-subscription repository.
+
+Network preconfiguration uses an ifupdown2 reload with a syntax check, a copy
+of recursively sourced interface files and an independent rollback timer. Host
+IPv4 and, when previously present, IPv6 HTTPS connectivity must survive the
+change before it is committed. NDP link-local addresses are retained. An NDP
+proxy can route permitted IPv6 addresses through the host MAC; it cannot bypass
+an upstream restriction that authorizes only one IPv6 address or a prefix that
+the provider has not routed to this machine.
+
+When UFW is already active, network setup adds forwarding rules limited to
+its guest bridges and IPv4/IPv6 subnets. It does not enable an inactive UFW.
+Failed rule updates participate in the same network rollback as interface edits.
+
+Cached container templates are checked before unprivileged creation. Character
+and block device records from older templates (such as Postfix random devices)
+are removed atomically; file ownership, permissions, hardlinks and extended
+attributes are retained. A damaged archive is rejected without replacing it.
 
 Self-patching VM image sources:
 

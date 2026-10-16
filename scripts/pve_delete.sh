@@ -105,7 +105,7 @@ delete_nft_ipv4_rules_for_ip() {
     local chain=""
 
     [ -n "$ip_address" ] || return 0
-    for chain in prerouting postrouting; do
+    for chain in prerouting postrouting ocv_snat; do
         nft -a list chain ip nat "$chain" 2>/dev/null |
             awk -v ip="$ip_address" '
                 BEGIN {
@@ -238,12 +238,30 @@ should_restart_ndpresponder() {
     return 1
 }
 
+# nft prints address expressions as separate tokens. Substring searches can
+# match ::d1 inside ::d10 and delete another guest's rules.
+nft_ipv6_rule_handles() {
+    local address="$1" other="${2:-}"
+    awk -v address="$address" -v other="$other" '
+        {
+            matched = 0
+            for (i = 1; i <= NF; i++) {
+                if ($i == address || $i == address "/128" ||
+                    (other != "" && ($i == other || $i == other "/128"))) matched = 1
+            }
+            if (matched) for (i = 1; i < NF; i++) {
+                if ($i == "handle" && $(i + 1) ~ /^[0-9]+$/) print $(i + 1)
+            }
+        }
+    '
+}
+
 # 清理IPv6 NAT映射规则
 cleanup_ipv6_nat_rules() {
     local vmctid=$1
-    local appended_file="/usr/local/bin/pve_appended_content.txt"
+    local appended_file="${PVE_IPV6_MAPPING_FILE:-/usr/local/bin/pve_appended_content.txt}"
     local rules_file="/usr/local/bin/ipv6_nat_rules.sh"
-    local used_ips_file="/usr/local/bin/pve_used_vmbr1_ips.txt"
+    local used_ips_file="${PVE_IPV6_USED_FILE:-/usr/local/bin/pve_used_vmbr1_ips.txt}"
     local state_dir="${PVE_STATE_DIR:-/usr/local/bin}"
     if [ -s "$appended_file" ]; then
         log "Cleaning up IPv6 NAT rules for VM $vmctid"
@@ -268,16 +286,19 @@ PY
         local host_external_ipv6=""
         if use_nft_backend; then
             # nftables: find and remove matching rules
-            host_external_ipv6=$(nft list chain ip6 nat prerouting 2>/dev/null | grep -F "dnat to $vm_internal_ipv6" | sed 's/.*ip6 daddr \([^ ]*\).*/\1/' | head -1)
+            host_external_ipv6=$(nft list chain ip6 nat prerouting 2>/dev/null | awk -v address="$vm_internal_ipv6" '
+                { for (i = 1; i <= NF - 2; i++) if ($i == "dnat" && $(i + 1) == "to" && $(i + 2) == address)
+                    for (j = 1; j < NF; j++) if ($j == "daddr") {print $(j + 1); exit} }
+            ')
             if [ -n "$host_external_ipv6" ]; then
                 log "Removing nftables IPv6 NAT rules: $vm_internal_ipv6 -> $host_external_ipv6"
-                for chain in prerouting postrouting; do
-                    nft -a list chain ip6 nat $chain 2>/dev/null | grep -F -e "$vm_internal_ipv6" -e "$host_external_ipv6" | sed 's/.*# handle //' | awk '{print $1}' | while read -r h; do
+                for chain in prerouting postrouting ocv_snat; do
+                    nft -a list chain ip6 nat $chain 2>/dev/null | nft_ipv6_rule_handles "$vm_internal_ipv6" "$host_external_ipv6" | while read -r h; do
                         nft delete rule ip6 nat $chain handle "$h" 2>/dev/null || true
                     done
                 done
                 # 同时清除该隙道IPv6地址的ICMPv6 ping屏蔽规则
-                nft -a list chain ip6 raw prerouting 2>/dev/null | grep -F "$host_external_ipv6" | sed 's/.*# handle //' | awk '{print $1}' | while read -r h; do
+                nft -a list chain ip6 raw prerouting 2>/dev/null | nft_ipv6_rule_handles "$host_external_ipv6" | while read -r h; do
                     nft delete rule ip6 raw prerouting handle "$h" 2>/dev/null || true
                 done
                 printf '#!/usr/sbin/nft -f\nflush ruleset\n' > /etc/nftables.conf
@@ -286,13 +307,21 @@ PY
         else
             # iptables fallback
             if [ -f "$rules_file" ]; then
-                host_external_ipv6=$(grep "DNAT --to-destination $vm_internal_ipv6" "$rules_file" | head -1 | grep -oP "(?<=-d )[^ ]+" || true)
+                host_external_ipv6=$(awk -v address="$vm_internal_ipv6" '
+                    { for (i = 1; i < NF; i++) if ($i == "--to-destination" && $(i + 1) == address)
+                        for (j = 1; j < NF; j++) if ($j == "-d") {print $(j + 1); exit} }
+                ' "$rules_file")
                 if [ -n "$host_external_ipv6" ]; then
                     log "Removing iptables IPv6 NAT rules: $vm_internal_ipv6 -> $host_external_ipv6"
                     ip6tables -t nat -D PREROUTING -d "$host_external_ipv6" -j DNAT --to-destination "$vm_internal_ipv6" 2>/dev/null || true
                     ip6tables -t nat -D POSTROUTING -s "$vm_internal_ipv6" -j SNAT --to-source "$host_external_ipv6" 2>/dev/null || true
-                    sed -i "/DNAT --to-destination $vm_internal_ipv6/d" "$rules_file" 2>/dev/null || true
-                    sed -i "/SNAT --to-source $host_external_ipv6/d" "$rules_file" 2>/dev/null || true
+                    local filtered_rules
+                    filtered_rules=$(mktemp "${rules_file}.XXXXXX") || return 1
+                    awk -v address="$vm_internal_ipv6" '
+                        { remove = 0; for (i = 1; i < NF; i++)
+                            if (($i == "--to-destination" || $i == "-s") && $(i + 1) == address) remove = 1
+                          if (!remove) print }
+                    ' "$rules_file" >"$filtered_rules" && chmod --reference="$rules_file" "$filtered_rules" && mv "$filtered_rules" "$rules_file" || { rm -f -- "$filtered_rules"; return 1; }
 
                     systemctl daemon-reload
                     systemctl restart ipv6nat.service 2>/dev/null || true
@@ -459,7 +488,7 @@ cleanup_vmbr2_icmpv6_rule() {
     [ -n "$ipv6_addr" ] || return 0
     log "Cleaning up ICMPv6 ping block rule for $ipv6_addr"
     if use_nft_backend; then
-        nft -a list chain ip6 raw prerouting 2>/dev/null | grep -F "$ipv6_addr" | sed 's/.*# handle //' | awk '{print $1}' | while read -r h; do
+        nft -a list chain ip6 raw prerouting 2>/dev/null | nft_ipv6_rule_handles "$ipv6_addr" | while read -r h; do
             nft delete rule ip6 raw prerouting handle "$h" 2>/dev/null || true
         done
         printf '#!/usr/sbin/nft -f\nflush ruleset\n' > /etc/nftables.conf

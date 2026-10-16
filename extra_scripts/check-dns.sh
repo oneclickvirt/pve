@@ -1,26 +1,21 @@
 #!/bin/bash
-# from
-# https://github.com/oneclickvirt/pve
-# 2024.03.12
+set -euo pipefail
 
-sleep 3
-DNS_SERVER="8.8.8.8"
-RESOLV_CONF="/etc/resolv.conf"
-ipv6_address=$(cat /usr/local/bin/pve_check_ipv6)
-ipv6_prefixlen=$(cat /usr/local/bin/pve_ipv6_prefixlen)
-ipv6_gateway=$(cat /usr/local/bin/pve_ipv6_gateway)
-grep -q "^nameserver ${DNS_SERVER}$" ${RESOLV_CONF}
-if [ $? -eq 0 ]; then
-    echo "DNS server ${DNS_SERVER} already exists in ${RESOLV_CONF}."
-else
-    echo "Adding DNS server ${DNS_SERVER} to ${RESOLV_CONF}..."
-    if [ -z "$ipv6_address" ] || [ -z "$ipv6_prefixlen" ] || [ -z "$ipv6_gateway" ]; then
-        echo -e "\nnameserver 8.8.8.8\nnameserver 8.8.4.4\n" >>${RESOLV_CONF}
-    else
-        echo -e "\nnameserver 8.8.8.8\nnameserver 8.8.4.4\nnameserver 2606:4700:4700::1111\nnameserver 2001:4860:4860::8888\nnameserver 2001:4860:4860::8844" >>${RESOLV_CONF}
+RESOLV_CONF="${PVE_RESOLV_CONF:-/etc/resolv.conf}"
+state_dir="${PVE_STATE_DIR:-/usr/local/bin}"
+
+# Keep provider DNS, resolved stubs and resolv.conf symlinks intact. Supply
+# fallback resolvers only when no nameserver is configured at all.
+if ! grep -Eq '^[[:space:]]*nameserver[[:space:]]+[^#[:space:]]+' "$RESOLV_CONF" 2>/dev/null; then
+    printf '\nnameserver 8.8.8.8\nnameserver 8.8.4.4\n' >>"$RESOLV_CONF"
+    if [ -s "$state_dir/pve_check_ipv6" ] && [ -s "$state_dir/pve_ipv6_gateway" ]; then
+        printf 'nameserver 2606:4700:4700::1111\n' >>"$RESOLV_CONF"
     fi
 fi
-sleep 3
-if grep -q "vmbr0" "/etc/network/interfaces"; then
-    resolvconf -a vmbr0 < ${RESOLV_CONF}
+
+# resolvconf is optional on Debian 13. Its absence must not fail boot or an
+# otherwise working PVE installation.
+if command -v resolvconf >/dev/null 2>&1 && ip link show vmbr0 >/dev/null 2>&1; then
+    resolvconf -a vmbr0 <"$RESOLV_CONF"
 fi
+printf 'DNS configuration is available in %s\n' "$RESOLV_CONF"

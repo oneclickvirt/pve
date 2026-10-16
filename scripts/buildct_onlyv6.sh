@@ -34,14 +34,14 @@ init() {
     system_ori="${6:-debian11}"
     storage="${7:-local}"
     validate_storage_name "$storage"
-    rm -rf "ct$CTID"
+    pve_validate_guest_metadata ct "$CTID" || return 1
     en_system=$(echo "$system_ori" | sed 's/[0-9]*//g; s/\.$//')
     num_system=$(echo "$system_ori" | sed 's/[a-zA-Z]*//g')
     system="$en_system-$num_system"
 }
 
 check_requirements() {
-    appended_file="/usr/local/bin/pve_appended_content.txt"
+    appended_file="${PVE_IPV6_MAPPING_FILE:-/usr/local/bin/pve_appended_content.txt}"
     if [ -s "$appended_file" ]; then
         _green "Additional IPv6 addresses exist for mapping by NAT, and the host can open services with separate IPV6 addresses."
         _green "存在额外的IPv6地址可供映射，宿主机可开设带独立IPV6地址的服务。"
@@ -51,6 +51,9 @@ check_requirements() {
             _red "当前 IPv6 前缀需要 ndpresponder，但服务未运行"
             exit 1
         fi
+    elif pve_nat66_ready; then
+        _yellow 'Using IPv6 NAT66 with a shared public egress address'
+        _yellow '使用 IPv6 NAT66，共享宿主机公网出口'
     else
         _red "No delegated public IPv6 prefix is available for an IPv6-only container"
         _red "未检测到可用于纯 IPv6 容器的已委派公网前缀"
@@ -109,6 +112,11 @@ download_with_retry() {
 }
 
 load_default_config() {
+    if [ -n "${PVE_DEFAULT_CT_CONFIG_FILE:-}" ]; then
+        [ -r "$PVE_DEFAULT_CT_CONFIG_FILE" ] || return 1
+        . "$PVE_DEFAULT_CT_CONFIG_FILE"
+        return $?
+    fi
     local config_url="${cdn_success_url}https://raw.githubusercontent.com/oneclickvirt/pve/main/scripts/default_ct_config.sh"
     local config_file="default_ct_config.sh"
     if download_with_retry "$config_url" "$config_file"; then
@@ -235,15 +243,18 @@ setup_container_os() {
 }
 
 create_container() {
-    local ct_conf="/etc/pve/lxc/${CTID}.conf"
+    pve_prepare_ct_template || return 1
+    local ct_conf="${PVE_CT_CONFIG_DIR:-/etc/pve/lxc}/${CTID}.conf"
     local retry=0
     local max_retry=7
     local wait_interval=3
     user_ip="${pve_nat_prefix}.${CTID}"
+    # lxc-usernsexec needs traversable mountpoints even when the caller uses umask 077.
+    # Keep the caller mask and private credential records unchanged.
     if [ "$fixed_system" = true ]; then
-        pct create $CTID /var/lib/vz/template/cache/${system_name} -cores $core -cpuunits 1024 -memory $memory -swap 128 -rootfs ${storage}:${disk} -onboot 1 -password $password -features nesting=1
+        (umask 022; pct create "$CTID" "/var/lib/vz/template/cache/${system_name}" -cores "$core" -cpuunits 1024 -memory "$memory" -swap 128 -rootfs "${storage}:${disk}" -onboot 1 --password="$password" -features nesting=1)
     else
-        pct create $CTID ${storage}:vztmpl/${system_name} -cores $core -cpuunits 1024 -memory $memory -swap 128 -rootfs ${storage}:${disk} -onboot 1 -password $password -features nesting=1
+        (umask 022; pct create "$CTID" "${storage}:vztmpl/${system_name}" -cores "$core" -cpuunits 1024 -memory "$memory" -swap 128 -rootfs "${storage}:${disk}" -onboot 1 --password="$password" -features nesting=1)
     fi
     if [ $? -ne 0 ]; then
         echo -e "\e[31mpct create failed for CT ${CTID}, container will not be started\e[0m"
@@ -264,21 +275,13 @@ create_container() {
         echo -e "\e[31m请检查 pve-cluster 状态和 /etc/pve 挂载状态\e[0m"
         exit 1
     fi
-    pct start $CTID
-    if [ $? -ne 0 ]; then
-        echo -e "\e[31mpct start failed for CT ${CTID}\e[0m"
-        echo -e "\e[31mCT ${CTID} 启动失败\e[0m"
-        exit 1
-    fi
-    sleep 5
-    pct set $CTID --hostname $CTID
-    appended_file="/usr/local/bin/pve_appended_content.txt"
+    pct set "$CTID" --hostname "$CTID" || return 1
+    appended_file="${PVE_IPV6_MAPPING_FILE:-/usr/local/bin/pve_appended_content.txt}"
     if [ -s "$appended_file" ]; then
         # 使用 vmbr1 网桥和 NAT 映射
-        ct_internal_ipv6="$(pve_nat_ipv6_for_id "$CTID")"
-        pct set $CTID --net0 name=eth0,ip6="${ct_internal_ipv6}/64",bridge=vmbr1,gw6="${pve_nat_ipv6_gateway}"
-        pct set $CTID --net1 name=eth1,ip=${user_ip}/24,bridge=vmbr1,gw=${pve_nat_gateway}
-        pct set $CTID --nameserver "8.8.8.8 8.8.4.4 2001:4860:4860::8888 2001:4860:4860::8844"
+        ct_internal_ipv6="$(pve_nat_ipv6_for_id "$CTID")" || return 1
+        pct set $CTID --net0 name=eth0,ip=manual,ip6="${ct_internal_ipv6}/64",bridge=vmbr1,gw6="${pve_nat_ipv6_gateway}" || return 1
+        pct set "$CTID" --nameserver "2606:4700:4700::1111 2001:4860:4860::8888" || return 1
         # 获取可用的外部 IPv6 地址
         host_external_ipv6=$(get_available_vmbr1_ipv6)
         if [ -z "$host_external_ipv6" ]; then
@@ -287,7 +290,7 @@ create_container() {
             exit 1
         fi
         # 设置 NAT 映射
-        setup_nat_mapping "$ct_internal_ipv6" "$host_external_ipv6"
+        setup_nat_mapping "$ct_internal_ipv6" "$host_external_ipv6" || return 1
         ct_external_ipv6="$host_external_ipv6"
         echo "Container configured with NAT mapping: $ct_internal_ipv6 -> $host_external_ipv6"
         echo "容器已配置NAT映射：$ct_internal_ipv6 -> $host_external_ipv6"
@@ -295,50 +298,36 @@ create_container() {
         # 使用已确认的直连网桥直接分配 IPv6 地址
         ct_external_ipv6="$(pve_direct_ipv6_for_id "$CTID")" || exit 1
         direct_ipv6_bridge="$(pve_direct_ipv6_bridge)" || exit 1
-        pct set $CTID --net0 name=eth0,ip6="${ct_external_ipv6}/128",bridge="${direct_ipv6_bridge}",gw6="${pve_direct_ipv6_gateway}"
-        pct set $CTID --net1 name=eth1,ip=${user_ip}/24,bridge=vmbr1,gw=${pve_nat_gateway}
-        pct set $CTID --nameserver "8.8.8.8 8.8.4.4 2001:4860:4860::8888 2001:4860:4860::8844"
+        pct set $CTID --net0 name=eth0,ip=manual,ip6="${ct_external_ipv6}/${pve_direct_ipv6_prefix##*/}",bridge="${direct_ipv6_bridge}",gw6="${pve_direct_ipv6_gateway}" || return 1
+        pct set "$CTID" --nameserver "2606:4700:4700::1111 2001:4860:4860::8888" || return 1
         echo "Container configured with ${direct_ipv6_bridge}: ${ct_external_ipv6}"
         echo "容器已配置使用 ${direct_ipv6_bridge}：${ct_external_ipv6}"
         _fw6_drop_icmpv6_ping "${ct_external_ipv6}" "${pve_direct_ipv6_prefix}"
         _fw_save
     else
-        _red "No usable IPv6 allocation mode is available"
-        exit 1
+        pve_nat66_ready || return 1
+        ct_external_ipv6="$(pve_nat_ipv6_for_id "$CTID")" || return 1
+        pct set "$CTID" --net0 "name=eth0,ip=manual,ip6=${ct_external_ipv6}/64,bridge=vmbr1,gw6=${pve_nat_ipv6_gateway}" || return 1
+        pct set "$CTID" --nameserver '2606:4700:4700::1111 2001:4860:4860::8888' || return 1
+        independent_ipv6_status=NAT66
     fi
+    pct start "$CTID" || return 1
+    pve_configure_ct_dns 6 || return 1
     sleep 3
 }
 
 save_container_info() {
-    local ct_conf="/etc/pve/lxc/${CTID}.conf"
-    echo "$CTID $password $core $memory $disk $system_ori $storage ${ct_external_ipv6}" >>"ct${CTID}"
-    data=$(echo " CTID root密码-password CPU核数-CPU 内存-memory 硬盘-disk 系统-system 存储盘-storage 外网IPV6-ipv6")
-    values=$(cat "ct${CTID}")
-    IFS=' ' read -ra data_array <<<"$data"
-    IFS=' ' read -ra values_array <<<"$values"
-    length=${#data_array[@]}
-    for ((i = 0; i < $length; i++)); do
-        echo "${data_array[$i]} ${values_array[$i]}"
-        echo ""
-    done >"/tmp/temp${CTID}.txt"
-    sed -i 's/^/# /' "/tmp/temp${CTID}.txt"
-    if [ -f "$ct_conf" ]; then
-        cat "$ct_conf" >>"/tmp/temp${CTID}.txt"
-        cp "/tmp/temp${CTID}.txt" "$ct_conf"
-    else
-        echo -e "\e[33mSkip writing metadata into missing LXC config: $ct_conf\e[0m"
-        echo -e "\e[33m跳过写入不存在的 LXC 配置文件：$ct_conf\e[0m"
-    fi
-    rm -rf "/tmp/temp${CTID}.txt"
-    cat "ct${CTID}"
+    local ipv6_label=外网IPV6-ipv6
+    [ "${independent_ipv6_status:-}" != NAT66 ] || ipv6_label=共享NAT66地址-ipv6
+    pve_save_guest_record ct "$CTID" "$CTID $password $core $memory $disk $system_ori $storage ${ct_external_ipv6}" \
+        "CTID root密码-password CPU核数-CPU 内存-memory 硬盘-disk 系统-system 存储盘-storage $ipv6_label"
 }
 
 finalize_container() {
-    pct exec $CTID -- echo '*/1 * * * * curl -m 6 -s ipv6.ip.sb && curl -m 6 -s ipv6.ip.sb' | crontab -
-    pct exec $CTID -- rm -rf /etc/network/.pve-ignore.interfaces
-    pct exec $CTID -- touch /etc/.pve-ignore.resolv.conf
-    pct exec $CTID -- touch /etc/.pve-ignore.hosts
-    pct exec $CTID -- touch /etc/.pve-ignore.hostname
+    pct exec "$CTID" -- rm -f /etc/network/.pve-ignore.interfaces || return 1
+    pct exec "$CTID" -- touch /etc/.pve-ignore.resolv.conf || return 1
+    pct exec "$CTID" -- touch /etc/.pve-ignore.hosts || return 1
+    pct exec "$CTID" -- touch /etc/.pve-ignore.hostname || return 1
 }
 
 main() {
@@ -351,14 +340,15 @@ main() {
     check_requirements
     get_system_arch || exit 1
     check_china
-    init "$@"
+    init "$@" || exit 1
     validate_ctid || exit 1
     get_ipv6_info
     prepare_system_image || exit 1
-    create_container
+    create_container || exit 1
     setup_container_os || exit 1
-    finalize_container
-    save_container_info
+    pve_configure_ct_dns 6 || exit 1
+    finalize_container || exit 1
+    save_container_info || exit 1
 }
 
 main "$@"

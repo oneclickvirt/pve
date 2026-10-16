@@ -50,6 +50,44 @@ eval "$(extract_function pve_network_bridge_exists)"
 eval "$(extract_function pve_existing_direct_ipv6_matches)"
 eval "$(extract_function pve_install_ipv6_ifup_hook)"
 eval "$(extract_function configure_ipv6_forwarding)"
+eval "$(extract_function pve_configure_ufw_forwarding)"
+
+# UFW has a separate DROP forwarding hook even when native nftables accepts
+# the packet. Scope guest permissions to the configured bridges and subnets.
+# Fixture functions are called by definitions loaded dynamically above.
+# shellcheck disable=SC2317
+(
+    ufw() {
+        if [[ "$*" == status ]]; then printf 'Status: %s\n' "${fixture_ufw_state:-active}"; return; fi
+        printf '%s\n' "$*" >>"$tmp_dir/ufw-routes"
+        [[ "${fixture_ufw_failure:-false}" != true ]]
+    }
+    pve_ipv6_uplink_interface() { printf '%s\n' vmbr0; }
+    read_network_state() {
+        case "$1" in
+            *pve_direct_ipv6_bridge) printf '%s\n' vmbr2 ;;
+            *pve_direct_ipv6_prefix) printf '%s\n' 2607:9d00:2000:a6:100::/72 ;;
+            *) return 1 ;;
+        esac
+    }
+    nat_ipv4_subnet=172.16.1.0/24
+    nat_ipv6_subnet=fd42:1234::/64
+    pve_configure_ufw_forwarding
+    [[ "$(wc -l <"$tmp_dir/ufw-routes" | tr -d ' ')" == 6 ]]
+    grep -Fxq 'route allow in on vmbr0 out on vmbr2 to 2607:9d00:2000:a6:100::/72' "$tmp_dir/ufw-routes"
+    # DNAT has already replaced the public address with the ULA at FORWARD.
+    # Without this return direction, mapped IPv6 egress works but ingress drops.
+    grep -Fxq 'route allow in on vmbr0 out on vmbr1 to fd42:1234::/64' "$tmp_dir/ufw-routes"
+    fixture_ufw_state=inactive
+    pve_configure_ufw_forwarding
+    [[ "$(wc -l <"$tmp_dir/ufw-routes" | tr -d ' ')" == 6 ]]
+    fixture_ufw_state=active
+    fixture_ufw_failure=true
+    if pve_configure_ufw_forwarding; then
+        echo 'FAIL: rejected UFW guest forwarding rule was ignored' >&2
+        exit 1
+    fi
+)
 
 _green() { :; }
 _red() { :; }
@@ -281,11 +319,11 @@ unset PVE_IPV6_ROUTED_PREFIX PVE_IPV6_DIRECT_GATEWAY PVE_IPV6_DIRECT_MODE
 unset PVE_IPV6_BRIDGE_GATEWAY PVE_IPV6_DIRECT_BRIDGE PVE_IPV6_DIRECT_TRANSPORT
 export PVE_STATE_DIR="${tmp_dir}/state"
 
-if extract_function configure_vmbr2 | grep -Fq 'configure_vmbr2_with_ipv6_subnet'; then
+if grep -Fq 'configure_vmbr2_with_ipv6_subnet' <<<"$(extract_function configure_vmbr2)"; then
     printf 'FAIL: PVE must not derive a vmbr2 public subnet from a host SLAAC address\n' >&2
     exit 1
 fi
-if ! extract_function configure_vmbr2 | grep -Fq 'pve_direct_ipv6_requested'; then
+if ! grep -Fq 'pve_direct_ipv6_requested' <<<"$(extract_function configure_vmbr2)"; then
     printf 'FAIL: PVE direct IPv6 bridge setup must require explicit delegation\n' >&2
     exit 1
 fi
@@ -302,7 +340,7 @@ for ipv6_script in "$repo_root/scripts/build_nat_network.sh" "$repo_root/scripts
         exit 1
     fi
 done
-if ! extract_function install_required_tools | grep -Fq '"python3"'; then
+if ! grep -Fq '"python3"' <<<"$(extract_function install_required_tools)"; then
     printf 'FAIL: build_nat_network.sh must install Python 3 for IPv6 validation\n' >&2
     exit 1
 fi
@@ -446,19 +484,19 @@ grep -Fqx -- '-q -w net.ipv6.conf.vmbr1.proxy_ndp=1' "$PVE_TEST_APPLIED_SYSCTLS"
     exit 1
 }
 
-if ! extract_function configure_ipv6_forwarding | grep -Fq 'pve_ipv6_uplink_interface'; then
+if ! grep -Fq 'pve_ipv6_uplink_interface' <<<"$(extract_function configure_ipv6_forwarding)"; then
     printf 'FAIL: PVE IPv6 forwarding must select the actual IPv6 uplink\n' >&2
     exit 1
 fi
-if ! extract_function configure_vmbr2_with_explicit_ipv6_prefix | grep -Fq 'pve_direct_ndp_interface'; then
+if ! grep -Fq 'pve_direct_ndp_interface' <<<"$(extract_function configure_vmbr2_with_explicit_ipv6_prefix)"; then
     printf 'FAIL: PVE direct IPv6 setup must select the actual NDP uplink\n' >&2
     exit 1
 fi
-if extract_function configure_ipv6_forwarding | grep -Fq 'net.ipv6.conf.all.proxy_ndp=1'; then
+if grep -Fq 'net.ipv6.conf.all.proxy_ndp=1' <<<"$(extract_function configure_ipv6_forwarding)"; then
     printf 'FAIL: PVE must not enable NDP proxying globally\n' >&2
     exit 1
 fi
-if extract_function configure_ipv6_forwarding | grep -Fq 'net.ipv6.conf.default.proxy_ndp=1'; then
+if grep -Fq 'net.ipv6.conf.default.proxy_ndp=1' <<<"$(extract_function configure_ipv6_forwarding)"; then
     printf 'FAIL: PVE must not enable NDP proxying by default on future interfaces\n' >&2
     exit 1
 fi
@@ -466,7 +504,7 @@ if grep -Fq 'post-down sysctl -w net.ipv6.conf.all.forwarding=0' "$network_scrip
     printf 'FAIL: PVE must not disable host IPv6 forwarding when vmbr1 is stopped\n' >&2
     exit 1
 fi
-if ! extract_function configure_vmbr1 | grep -Fq 'configure_ipv6_forwarding vmbr1 || return 1' ||
+if ! grep -Fq 'configure_ipv6_forwarding vmbr1 || return 1' <<<"$(extract_function configure_vmbr1)" ||
    ! grep -Fq 'configure_vmbr1 || exit 1' "$network_script"; then
     printf 'FAIL: PVE NAT66 setup can continue without preserving host router advertisements\n' >&2
     exit 1

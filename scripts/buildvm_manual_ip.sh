@@ -47,7 +47,9 @@ init_params() {
     extra_ip="${9}"
     independent_ipv6="${10:-N}"
     validate_storage_name "$storage"
+    pve_validate_guest_metadata vm "$vm_num" || return 1
     independent_ipv6=$(echo "$independent_ipv6" | tr '[:upper:]' '[:lower:]')
+    [[ "$independent_ipv6" == y || "$independent_ipv6" == n ]] || return 1
     mac_address="${11}"
     user_ip=""
     user_ip_range=""
@@ -71,7 +73,6 @@ init_params() {
     if [ ! -d "qcow" ]; then
         mkdir qcow
     fi
-    rm -rf "vm$vm_num"
 }
 
 check_cdn() {
@@ -125,6 +126,11 @@ download_with_retry() {
 }
 
 load_default_config() {
+    if [ -n "${PVE_DEFAULT_VM_CONFIG:-}" ]; then
+        [ -r "$PVE_DEFAULT_VM_CONFIG" ] || return 1
+        . "$PVE_DEFAULT_VM_CONFIG"
+        return $?
+    fi
     local config_url="${cdn_success_url}https://raw.githubusercontent.com/oneclickvirt/pve/main/scripts/default_vm_config.sh"
     local config_file="default_vm_config.sh"
     if download_with_retry "$config_url" "$config_file"; then
@@ -137,82 +143,17 @@ load_default_config() {
 }
 
 get_network_info() {
-    if ! command -v lshw >/dev/null 2>&1; then
-        apt-get install -y lshw
-    fi
-    if ! command -v ping >/dev/null 2>&1; then
-        apt-get install -y iputils-ping
-        apt-get install -y ping
-    fi
-    interface=$(lshw -C network | awk '/logical name:/{print $3}' | head -1)
-    user_main_ip_range=$(grep -A 1 "iface ${interface}" /etc/network/interfaces | grep "address" | awk '{print $2}' | head -n 1)
-    if [ -z "$user_main_ip_range" ]; then
-        user_main_ip_range=$(grep -A 1 "iface vmbr0" /etc/network/interfaces | grep "address" | awk '{print $2}' | head -n 1)
-        if [ -z "$user_main_ip_range" ]; then
-            _red "宿主机可用IP区间查询失败"
-            exit 1
-        fi
-    fi
-    user_main_ip=$(echo "$user_main_ip_range" | cut -d'/' -f1)
-    gateway=$(grep -E "iface $interface" -A 3 "/etc/network/interfaces" | grep "gateway" | awk '{print $2}' | head -n 1)
-    if [ -z "$gateway" ]; then
-        gateway=$(grep -E "iface vmbr0" -A 3 "/etc/network/interfaces" | grep "gateway" | awk '{print $2}' | head -n 1)
-        if [ -z "$gateway" ]; then
-            _red "宿主机网关查询失败"
-            exit 1
-        fi
-    fi
-    if [ -z "$user_ip" ]; then
-        _red "No matching usable IPV4 address was found"
-        _red "可使用的IP匹配失败"
-        exit 1
-    fi
-    if [ -z "$user_ip_range" ]; then
-        _red "Failed to match a usable subnet size"
-        _red "可使用的子网大小匹配失败"
-        exit 1
-    fi
-    _green "The current IP to which the VM will be bound is: ${user_ip}"
-    _green "当前虚拟机将绑定的IP为：${user_ip}"
+    pve_public_ipv4_config manual "$extra_ip" || return 1
 }
 
 check_subnet() {
-    user_ip_prefix=$(echo "$user_ip" | awk -F '.' '{print $1"."$2"."$3}')
-    user_main_ip_prefix=$(echo "$user_main_ip" | awk -F '.' '{print $1"."$2"."$3}')
-    same_subnet_status=false
-    if [ "$user_ip_prefix" = "$user_main_ip_prefix" ]; then
-        _yellow "The IPV4 prefix of the host matches the IPV4 prefix of the VM to be created"
-        _yellow "宿主机的IPV4前缀与将要开设的虚拟机的IPV4前缀相同"
-        _yellow "If the extra IPV4 address you want to bind is the next address after the host IP, you may want to use the auto-select IPV4 script"
-        _yellow "如果你要绑定的额外IP地址是宿主机IP顺位后面的地址，你可能需要使用 自动选择要绑定的IPV4地址 的脚本"
-        sleep 3
-        same_subnet_status=true
-    else
-        _blue "The host IPV4 prefix differs from the target VM IPV4 prefix, the route for the subnet will be added automatically"
-        _blue "宿主机的IPV4前缀与将要开设的虚拟机的IPV4前缀不同，将自动附加对应子网的路由"
-        same_subnet_status=false
-        if grep -q "iface vmbr0 inet static" /etc/network/interfaces && grep -q "post-up route add -net ${user_ip_prefix}.0/${user_ip_range} gw ${user_main_ip}" /etc/network/interfaces; then
-            _blue "The route for the new subnet already exists, no additional action is required"
-            _blue "新的子网的路由已存在，无需额外添加"
-        else
-            _blue "The route for the new subnet does not exist and will be added now..."
-            _blue "新的子网的路由不存在，正在添加..."
-            line_number=$(grep -n "iface vmbr0 inet static" /etc/network/interfaces | cut -d: -f1)
-            line_number=$((line_number + 5))
-            chattr -i /etc/network/interfaces
-            sed -i "${line_number}i\post-up route add -net ${user_ip_prefix}.0/${user_ip_range} gw ${user_main_ip}" /etc/network/interfaces
-            chattr +i /etc/network/interfaces
-            _blue "Route added successfully, restarting the network..."
-            _blue "路由添加成功，正在重启网络..."
-            sleep 1
-            systemctl restart networking
-            sleep 1
-        fi
-    fi
+    # The shared live preflight validates the entire CIDR and gateway, rather
+    # than comparing the first three octets or restarting the host network.
+    same_subnet_status=true
 }
 
 create_vm() {
-    appended_file="/usr/local/bin/pve_appended_content.txt"
+    appended_file="${PVE_IPV6_MAPPING_FILE:-/usr/local/bin/pve_appended_content.txt}"
     if [ -n "$mac_address" ]; then
         net0="--net0 virtio,bridge=vmbr0,firewall=0,macaddr=$mac_address"
     else
@@ -238,15 +179,15 @@ create_vm() {
         $net0 \
         $net1 \
         --ostype l26 \
-        $kvm_flag
+        $kvm_flag || return 1
 }
 
 import_disk_and_setup() {
     if [ "$system_arch" = "x86" ] || [ "$system_arch" = "x86_64" ]; then
-        qm importdisk $vm_num /root/qcow/${system}.qcow2 ${storage}
+        qm importdisk $vm_num /root/qcow/${system}.qcow2 ${storage} || return 1
     else
-        qm set $vm_num --bios ovmf
-        qm importdisk $vm_num /root/qcow/${system}.${ext} ${storage}
+        qm set $vm_num --bios ovmf || return 1
+        qm importdisk $vm_num /root/qcow/${system}.${ext} ${storage} || return 1
     fi
     sleep 3
     volid=$(pvesm list "$storage" | awk -v vmid="${vm_num}" '$5 == vmid && $1 ~ /\.raw$/ {print $1}' | tail -n 1)
@@ -260,157 +201,75 @@ import_disk_and_setup() {
         echo "错误：在存储 '${storage}' 中未找到 VM ID '${vm_num}' 对应的磁盘文件"
         exit 1
     fi
-    file_path=$(pvesm path ${volid})
-    if [ $? -ne 0 ] || [ -z "$file_path" ]; then
-        echo "Error: Failed to resolve path for volume '${volid}'"
-        echo "错误：无法解析卷 '${volid}' 对应的路径"
-        exit 1
-    fi
-    file_name=$(basename "$file_path")
-    echo "Found file: $file_name"
-    echo "已找到磁盘文件：$file_name"
-    echo "Attempting to set SCSI hardware with virtio-scsi-pci for VM $vm_num..."
-    echo "正在尝试为 VM $vm_num 设置 virtio-scsi-pci SCSI 硬件..."
-    qm set $vm_num --scsihw virtio-scsi-pci --scsi0 ${storage}:${vm_num}/vm-${vm_num}-disk-0.raw
-    if [ $? -ne 0 ]; then
-        echo "Failed to set SCSI hardware with vm-${vm_num}-disk-0.raw. Trying alternative disk file..."
-        echo "使用 vm-${vm_num}-disk-0.raw 设置 SCSI 硬件失败，正在尝试其他磁盘文件..."
-        qm set $vm_num --scsihw virtio-scsi-pci --scsi0 ${storage}:${vm_num}/$file_name
-        if [ $? -ne 0 ]; then
-            echo "Failed to set SCSI hardware with $file_name for VM $vm_num. Trying fallback file..."
-            echo "使用 $file_name 为 VM $vm_num 设置 SCSI 硬件失败，正在尝试回退文件..."
-            qm set $vm_num --scsihw virtio-scsi-pci --scsi0 ${storage}:$file_name
-            if [ $? -ne 0 ]; then
-                echo "All attempts failed. Exiting..."
-                echo "所有尝试均失败，脚本退出..."
-                exit 1
-            fi
-        fi
-    fi
-    qm set $vm_num --bootdisk scsi0
-    qm set $vm_num --boot order=scsi0
-    qm set $vm_num --memory $memory
+    qm set "$vm_num" --scsihw virtio-scsi-pci --scsi0 "$volid" || return 1
+    qm set $vm_num --bootdisk scsi0 || return 1
+    qm set $vm_num --boot order=scsi0 || return 1
+    qm set $vm_num --memory $memory || return 1
     if [[ "$system_arch" == "arm" ]]; then
-        qm set $vm_num --scsi1 ${storage}:cloudinit
+        qm set $vm_num --scsi1 ${storage}:cloudinit || return 1
     else
-        qm set $vm_num --ide1 ${storage}:cloudinit
+        qm set $vm_num --ide1 ${storage}:cloudinit || return 1
     fi
 }
 
 configure_network() {
-    independent_ipv6_status="N"
-    if [ "$independent_ipv6" == "y" ]; then
-        if [ "${pve_direct_ipv6_available:-false}" = true ] || [ -s /usr/local/bin/pve_appended_content.txt ]; then
-            _green "Use ${user_ip}/32 to set ipconfig0"
-            if [ "$same_subnet_status" = true ]; then
-                qm set $vm_num --ipconfig0 ip=${user_ip}/${user_ip_range},gw=${gateway}
-            else
-                qm set $vm_num --ipconfig0 ip=${user_ip}/32,gw=${user_main_ip}
-            fi
-            appended_file="/usr/local/bin/pve_appended_content.txt"
-            if [ -s "$appended_file" ]; then
-                # 使用 vmbr1 网桥和 NAT 映射
-                vm_internal_ipv6="$(pve_nat_ipv6_for_id "$vm_num")"
-                qm set $vm_num --ipconfig1 ip6="${vm_internal_ipv6}/64",gw6="${pve_nat_ipv6_gateway}"
-                host_external_ipv6=$(get_available_vmbr1_ipv6)
-                if [ -z "$host_external_ipv6" ]; then
-                    echo -e "\e[31mNo available IPv6 address found for NAT mapping\e[0m"
-                    echo -e "\e[31m没有可用的IPv6地址用于NAT映射\e[0m"
-                    independent_ipv6_status="N"
-                else
-                    setup_nat_mapping "$vm_internal_ipv6" "$host_external_ipv6"
-                    vm_external_ipv6="$host_external_ipv6"
-                    echo "VM configured with NAT mapping: $vm_internal_ipv6 -> $host_external_ipv6"
-                    echo "虚拟机已配置NAT映射：$vm_internal_ipv6 -> $host_external_ipv6"
-                    independent_ipv6_status="Y"
-                fi
-            elif [ "${pve_direct_ipv6_available:-false}" = true ]; then
-                # 使用已确认的委派前缀直接分配 IPv6 地址
-                if vm_external_ipv6="$(pve_direct_ipv6_for_id "$vm_num")"; then
-                    qm set $vm_num --ipconfig1 ip6="${vm_external_ipv6}/128",gw6="${pve_direct_ipv6_gateway}"
-                    independent_ipv6_status="Y"
-                else
-                    independent_ipv6_status="N"
-                    vm_external_ipv6=""
-                fi
-            else
-                independent_ipv6_status="N"
-            fi
-            qm set $vm_num --nameserver "1.1.1.1 2606:4700:4700::1111" || qm set $vm_num --nameserver 1.1.1.1
-            qm set $vm_num --searchdomain local
-        fi
+    user_ip="${user_ip}"
+    qm set "$vm_num" --ipconfig0 "ip=${user_ip}/${user_ip_range},gw=${gateway}" || return 1
+    independent_ipv6_status=N
+    if [ "$independent_ipv6" == y ]; then
+        pve_configure_vm_ipv6 1 || return 1
+        qm set "$vm_num" --nameserver '1.1.1.1 2606:4700:4700::1111' || return 1
+    else
+        qm set "$vm_num" --nameserver 1.1.1.1 || return 1
     fi
-    if [ "$independent_ipv6_status" == "N" ]; then
-        _green "Use ${user_ip}/32 to set ipconfig0"
-        if [ "$same_subnet_status" = true ]; then
-            qm set $vm_num --ipconfig0 ip=${user_ip}/${user_ip_range},gw=${gateway}
-        else
-            qm set $vm_num --ipconfig0 ip=${user_ip}/32,gw=${user_main_ip}
-        fi
-
-        qm set $vm_num --nameserver 8.8.8.8
-        qm set $vm_num --searchdomain local
-    fi
-    qm set $vm_num --cipassword $password --ciuser $user
+    qm set "$vm_num" --searchdomain local || return 1
+    qm set "$vm_num" --cipassword="$password" --ciuser="$user" || return 1
 }
 
 resize_and_start() {
-    sleep 5
-    qm resize $vm_num scsi0 ${disk}G
-    if [ $? -ne 0 ]; then
-        if [[ $disk =~ ^[0-9]+G$ ]]; then
-            dnum=${disk::-1}
-            disk_m=$((dnum * 1024))
-            qm resize $vm_num scsi0 ${disk_m}M
-        fi
-    fi
-    qm start $vm_num
+    pve_resize_vm_disk || return 1
+    pve_release_public_ipv4_lock || return 1
+    qm start "$vm_num" || return 1
 }
 
 save_vm_info() {
     if [ "$independent_ipv6_status" == "N" ]; then
-        echo "$vm_num $user $password $core $memory $disk $system $storage $user_ip" >>"vm${vm_num}"
+        metadata_values="$vm_num $user $password $core $memory $disk $system $storage $user_ip"
         data=$(echo " VMID 用户名-username 密码-password CPU核数-CPU 内存-memory 硬盘-disk 系统-system 存储盘-storage 外网IP地址-ipv4")
     else
-        echo "$vm_num $user $password $core $memory $disk $system $storage $user_ip $vm_external_ipv6" >>"vm${vm_num}"
+        metadata_values="$vm_num $user $password $core $memory $disk $system $storage $user_ip $vm_external_ipv6"
         data=$(echo " VMID 用户名-username 密码-password CPU核数-CPU 内存-memory 硬盘-disk 系统-system 存储盘-storage 外网IPV4-ipv4 外网IPV6-ipv6")
     fi
-    values=$(cat "vm${vm_num}")
-    IFS=' ' read -ra data_array <<<"$data"
-    IFS=' ' read -ra values_array <<<"$values"
-    length=${#data_array[@]}
-    for ((i = 0; i < $length; i++)); do
-        echo "${data_array[$i]} ${values_array[$i]}"
-        echo ""
-    done >"/tmp/temp${vm_num}.txt"
-    sed -i 's/^/# /' "/tmp/temp${vm_num}.txt"
-    cat "/etc/pve/qemu-server/${vm_num}.conf" >>"/tmp/temp${vm_num}.txt"
-    cp "/tmp/temp${vm_num}.txt" "/etc/pve/qemu-server/${vm_num}.conf"
-    rm -rf "/tmp/temp${vm_num}.txt"
-    cat "vm${vm_num}"
+    if [ "$independent_ipv6_status" = NAT66 ]; then
+        data="${data//独立IPV6地址-ipv6_address/共享NAT66地址-ipv6_address}"
+        data="${data//外网IPV6-ipv6/共享NAT66地址-ipv6}"
+    fi
+    pve_save_guest_record vm "$vm_num" "$metadata_values" "$data" || return 1
 }
 
 main() {
     cdn_urls=("https://cdn0.spiritlhl.top/" "http://cdn1.spiritlhl.net/" "http://cdn2.spiritlhl.net/" "http://cdn3.spiritlhl.net/" "http://cdn4.spiritlhl.net/")
     check_cdn_file
     load_default_config || exit 1
-    load_nat_ipv6_config || exit 1
+    load_nat_ipv4_config || exit 1
     pve_load_direct_ipv6_config || exit 1
     setup_locale
     get_system_arch || exit 1
     check_kvm_support
-    init_params "$@"
+    init_params "$@" || exit 1
     validate_vm_num || exit 1
-    get_network_info
-    check_subnet
-    check_ipv6_config
-    prepare_system_image
-    create_vm
-    import_disk_and_setup
-    configure_network
-    resize_and_start
-    save_vm_info
+    get_network_info || exit 1
+    check_subnet || exit 1
+    check_ipv6_config || exit 1
+    prepare_system_image || exit 1
+    create_vm || exit 1
+    import_disk_and_setup || exit 1
+    configure_network || exit 1
+    resize_and_start || exit 1
+    save_vm_info || exit 1
 }
 
 main "$@"
-rm -rf default_vm_config.sh
+if [ -n "${downloaded_default_config:-}" ]; then
+    rm -f -- "$downloaded_default_config"
+fi

@@ -729,8 +729,8 @@ validate_vm_num() {
 }
 
 get_available_vmbr1_ipv6() {
-    local appended_file="/usr/local/bin/pve_appended_content.txt"
-    local used_ips_file="/usr/local/bin/pve_used_vmbr1_ips.txt"
+    local appended_file="${PVE_IPV6_MAPPING_FILE:-/usr/local/bin/pve_appended_content.txt}"
+    local used_ips_file="${PVE_IPV6_USED_FILE:-/usr/local/bin/pve_used_vmbr1_ips.txt}"
     if [ ! -f "$used_ips_file" ]; then
         touch "$used_ips_file"
     fi
@@ -898,9 +898,12 @@ _fw_add_snat() {
     local src_ip="$1" oif="$2" snat_ip="$3"
     if _use_nft; then
         _nft_init
-        nft add rule ip nat postrouting ip saddr "$src_ip" oifname "$oif" snat to "$snat_ip"
+        nft list chain ip nat ocv_snat >/dev/null 2>&1 ||
+            nft 'add chain ip nat ocv_snat { type nat hook postrouting priority 90; policy accept; }' || return 1
+        nft insert rule ip nat ocv_snat ip saddr "$src_ip" oifname "$oif" snat to "$snat_ip"
     else
-        iptables -t nat -A POSTROUTING -s "$src_ip" -o "$oif" -j SNAT --to-source "$snat_ip"
+        iptables -t nat -C POSTROUTING -s "$src_ip" -o "$oif" -j SNAT --to-source "$snat_ip" 2>/dev/null ||
+            iptables -t nat -I POSTROUTING 1 -s "$src_ip" -o "$oif" -j SNAT --to-source "$snat_ip"
     fi
 }
 
@@ -919,10 +922,13 @@ _fw6_add_snat() {
     local src_int="$1" src_ext="$2"
     if _use_nft; then
         _nft_init
-        nft add rule ip6 nat postrouting ip6 saddr "$src_int" snat to "$src_ext"
+        nft list chain ip6 nat ocv_snat >/dev/null 2>&1 ||
+            nft 'add chain ip6 nat ocv_snat { type nat hook postrouting priority 90; policy accept; }' || return 1
+        nft insert rule ip6 nat ocv_snat ip6 saddr "$src_int" snat to "$src_ext"
     else
         _ip6tables_ensure_modules
-        ip6tables -t nat -A POSTROUTING -s "$src_int" -j SNAT --to-source "$src_ext"
+        ip6tables -t nat -C POSTROUTING -s "$src_int" -j SNAT --to-source "$src_ext" 2>/dev/null ||
+            ip6tables -t nat -I POSTROUTING 1 -s "$src_int" -j SNAT --to-source "$src_ext"
     fi
 }
 
@@ -965,8 +971,8 @@ setup_nat_mapping() {
     fi
     if _use_nft; then
         if ! nft list chain ip6 nat prerouting 2>/dev/null | grep -q "$host_external_ipv6"; then
-            _fw6_add_dnat "$host_external_ipv6" "$ct_internal_ipv6"
-            _fw6_add_snat "$ct_internal_ipv6" "$host_external_ipv6"
+            _fw6_add_dnat "$host_external_ipv6" "$ct_internal_ipv6" || return 1
+            _fw6_add_snat "$ct_internal_ipv6" "$host_external_ipv6" || return 1
         fi
         _fw_save
     else
@@ -978,9 +984,9 @@ setup_nat_mapping() {
         fi
         if ! grep -q "$host_external_ipv6" "$rules_file"; then
             ip6tables -t nat -A PREROUTING -d "$host_external_ipv6" -j DNAT --to-destination "$ct_internal_ipv6"
-            ip6tables -t nat -A POSTROUTING -s "$ct_internal_ipv6" -j SNAT --to-source "$host_external_ipv6"
+            _fw6_add_snat "$ct_internal_ipv6" "$host_external_ipv6" || return 1
             echo "ip6tables -t nat -A PREROUTING -d $host_external_ipv6 -j DNAT --to-destination $ct_internal_ipv6" >> "$rules_file"
-            echo "ip6tables -t nat -A POSTROUTING -s $ct_internal_ipv6 -j SNAT --to-source $host_external_ipv6" >> "$rules_file"
+            echo "ip6tables -t nat -C POSTROUTING -s $ct_internal_ipv6 -j SNAT --to-source $host_external_ipv6 2>/dev/null || ip6tables -t nat -I POSTROUTING 1 -s $ct_internal_ipv6 -j SNAT --to-source $host_external_ipv6" >> "$rules_file"
         fi
         if [ ! -f "$service_file" ]; then
             cat > "$service_file" << 'NATEOF'
@@ -1455,7 +1461,7 @@ prepare_riscv_image() {
 check_ipv6_config() {
     independent_ipv6_status="N"
     if [ "$independent_ipv6" == "y" ]; then
-        appended_file="/usr/local/bin/pve_appended_content.txt"
+        appended_file="${PVE_IPV6_MAPPING_FILE:-/usr/local/bin/pve_appended_content.txt}"
         if [ -s "$appended_file" ]; then
             _green "Additional IPv6 addresses exist for mapping by NAT, and the host can open services with separate IPV6 addresses."
             _green "存在额外的IPv6地址可供NAT进行映射，宿主机可开设带独立IPV6地址的服务。"
@@ -1471,6 +1477,7 @@ check_ipv6_config() {
             _green "Independent IPv6 direct-assignment mode is available (${pve_direct_ipv6_mode})."
             _green "独立 IPv6 直连分配模式可用（${pve_direct_ipv6_mode}）。"
         else
+            pve_nat66_ready || { _red 'IPv6 NAT66 is not ready'; return 1; }
             _yellow "No delegated public IPv6 prefix is available; falling back to IPv6 NAT66."
             _yellow "未检测到已委派的公网 IPv6 前缀，将回退到 IPv6 NAT66。"
         fi
@@ -1507,4 +1514,187 @@ is_ipv4() {
     else
         return 1
     fi
+}
+
+# Metadata contains credentials for local administration only. Never overwrite
+# an existing guest record or copy a password into shared PVE configuration.
+pve_validate_guest_metadata() {
+    local kind="$1" identifier="$2" directory
+    [[ "$kind" == ct || "$kind" == vm ]] || return 1
+    [[ "$identifier" =~ ^[0-9]+$ ]] && ((identifier >= 100 && identifier <= 256)) || return 1
+    directory="${PVE_GUEST_METADATA_DIR:-/root}"
+    [ "$kind" != ct ] || directory="${PVE_CT_METADATA_DIR:-$directory}"
+    if [ -e "$directory/${kind}${identifier}" ] || [ -L "$directory/${kind}${identifier}" ]; then
+        echo "Refusing to replace existing guest metadata: $directory/${kind}${identifier}" >&2
+        return 1
+    fi
+}
+
+pve_save_guest_record() {
+    local kind="$1" identifier="$2" record="$3" labels="$4" directory target temporary notes config index
+    local -a record_values record_labels
+    pve_validate_guest_metadata "$kind" "$identifier" || return 1
+    directory="${PVE_GUEST_METADATA_DIR:-/root}"
+    [ "$kind" != ct ] || directory="${PVE_CT_METADATA_DIR:-$directory}"
+    mkdir -p "$directory" || return 1
+    target="$directory/${kind}${identifier}"
+    temporary=$(mktemp "$directory/.${kind}${identifier}.XXXXXX") || return 1
+    if ! printf '%s\n' "$record" >"$temporary" || ! chmod 600 "$temporary" || ! ln -- "$temporary" "$target"; then
+        rm -f -- "$temporary"
+        return 1
+    fi
+    rm -f -- "$temporary"
+    config="${PVE_VM_CONFIG_DIR:-/etc/pve/qemu-server}/${identifier}.conf"
+    [ "$kind" != ct ] || config="${PVE_CT_CONFIG_DIR:-/etc/pve/lxc}/${identifier}.conf"
+    if [ -f "$config" ]; then
+        notes=$(mktemp "$directory/.${kind}${identifier}.notes.XXXXXX") || return 1
+        IFS=' ' read -r -a record_values <<<"$record"
+        IFS=' ' read -r -a record_labels <<<"$labels"
+        for index in "${!record_labels[@]}"; do
+            case "${record_labels[$index]}" in *password*|*密码*) continue;; esac
+            printf '# %s %s\n\n' "${record_labels[$index]}" "${record_values[$index]:-}"
+        done >"$notes"
+        cat "$config" >>"$notes" && cp "$notes" "$config" || { rm -f -- "$notes"; return 1; }
+        rm -f -- "$notes"
+    fi
+    printf '%s %s created; private metadata: %s\n' "$kind" "$identifier" "$target"
+}
+
+pve_release_public_ipv4_lock() {
+    [ -n "${pve_public_ipv4_lock:-}" ] || return 0
+    # QEMU can inherit the open file description. Closing only the shell's
+    # descriptor leaves its flock held; explicitly unlock that description.
+    flock -u "$pve_public_ipv4_lock" || return 1
+    exec {pve_public_ipv4_lock}>&-
+    unset pve_public_ipv4_lock
+}
+
+pve_public_ipv4_config() {
+    local mode="$1" requested="${2:-}" helper="${PVE_PUBLIC_IPV4_HELPER_FILE:-}" snapshot
+    local -a fields
+    # Keep selection and creation serialized across the standalone entrypoints.
+    if [ -z "${pve_public_ipv4_lock:-}" ]; then
+        exec {pve_public_ipv4_lock}>"${PVE_PUBLIC_IPV4_LOCK_FILE:-/run/lock/oneclickvirt-public-ipv4.lock}" || return 1
+        if ! flock -w 30 "$pve_public_ipv4_lock"; then
+            pve_release_public_ipv4_lock
+            echo 'Public IPv4 allocation lock timed out; no guest was created' >&2
+            return 1
+        fi
+        trap pve_release_public_ipv4_lock EXIT
+    fi
+    if [ -z "$helper" ]; then
+        helper="$(dirname "${BASH_SOURCE[0]}")/../extra_scripts/public_ipv4.py"
+        if [ ! -f "$helper" ]; then
+            helper=/usr/local/lib/oneclickvirt/public_ipv4.py
+            mkdir -p "${helper%/*}" || return 1
+            _download_with_retry "${cdn_success_url:-}https://raw.githubusercontent.com/oneclickvirt/pve/main/extra_scripts/public_ipv4.py" "$helper" || return 1
+        fi
+    fi
+    if [ "$mode" != fullnat ] && ! command -v arping >/dev/null 2>&1; then
+        DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends iputils-arping || return 1
+    fi
+    snapshot=$(python3 "$helper" "$mode" "$requested") || return 1
+    mapfile -t fields <<<"$snapshot"
+    [ "${#fields[@]}" -eq 4 ] || return 1
+    user_ip="${fields[0]}"
+    user_ip_range="${fields[1]}"
+    gateway="${fields[2]}"
+    user_main_ip="${fields[3]}"
+}
+
+pve_nat66_ready() {
+    local route_json address_json uplink
+    [ -n "${pve_nat_ipv6_subnet:-}" ] && [ -n "${pve_nat_ipv6_gateway:-}" ] || return 1
+    [ "$(sysctl -n net.ipv6.conf.all.forwarding 2>/dev/null)" = 1 ] || return 1
+    route_json=$(LC_ALL=C NO_COLOR=1 ip -j -6 route show default) || return 1
+    address_json=$(LC_ALL=C NO_COLOR=1 ip -j -6 addr show scope global) || return 1
+    uplink=$(PVE_NAT66_ROUTES="$route_json" PVE_NAT66_ADDRESSES="$address_json" python3 - <<'PY'
+import ipaddress
+import json
+import os
+import re
+
+strip = lambda raw: re.sub(r'\x1b\[[0-?]*[ -/]*[@-~]', '', raw)
+routes = json.loads(strip(os.environ['PVE_NAT66_ROUTES']))
+addresses = json.loads(strip(os.environ['PVE_NAT66_ADDRESSES']))
+for route in routes:
+    if route.get('dst') != 'default':
+        continue
+    name = route.get('dev', '')
+    if not re.fullmatch(r'[A-Za-z0-9_.-]{1,15}', name):
+        continue
+    for interface in addresses:
+        if interface.get('ifname') != name:
+            continue
+        for info in interface.get('addr_info', []):
+            if info.get('family') != 'inet6' or info.get('scope') != 'global':
+                continue
+            if info.get('tentative') or info.get('dadfailed'):
+                continue
+            try:
+                address = ipaddress.IPv6Address(info['local'])
+            except (KeyError, ValueError):
+                continue
+            if address in ipaddress.IPv6Network('2000::/3') and address.is_global:
+                print(name)
+                raise SystemExit(0)
+raise SystemExit(1)
+PY
+) || return 1
+    if command -v nft >/dev/null 2>&1 &&
+       LC_ALL=C NO_COLOR=1 nft list chain ip6 nat postrouting 2>/dev/null |
+           grep -Fq "ip6 saddr ${pve_nat_ipv6_subnet} oifname \"${uplink}\" masquerade"; then
+        return 0
+    fi
+    ip6tables -t nat -C POSTROUTING -s "$pve_nat_ipv6_subnet" -o "$uplink" -j MASQUERADE 2>/dev/null
+}
+
+# Use one IPv6 policy for all VM entrypoints, with failures propagated before
+# the guest starts. Omit IPv4 on the IPv6-only NIC: qm cloud-init rejects the
+# LXC-only ip=manual value with "not a CIDR: manual" when starting a VM.
+pve_configure_vm_ipv6() {
+    local index="$1" address prefix gateway
+    if [ -s "${PVE_IPV6_MAPPING_FILE:-/usr/local/bin/pve_appended_content.txt}" ]; then
+        address="$(pve_nat_ipv6_for_id "$vm_num")" || return 1
+        host_external_ipv6=$(get_available_vmbr1_ipv6) || return 1
+        [ -n "$host_external_ipv6" ] || return 1
+        setup_nat_mapping "$address" "$host_external_ipv6" || return 1
+        vm_external_ipv6="$host_external_ipv6"
+        prefix=64
+        gateway="$pve_nat_ipv6_gateway"
+        independent_ipv6_status=Y
+    elif [ "${pve_direct_ipv6_available:-false}" = true ]; then
+        address="$(pve_direct_ipv6_for_id "$vm_num")" || return 1
+        vm_external_ipv6="$address"
+        prefix="${pve_direct_ipv6_prefix##*/}"
+        gateway="$pve_direct_ipv6_gateway"
+        independent_ipv6_status=Y
+    else
+        pve_nat66_ready || { echo 'IPv6 NAT66 is not ready; guest creation stopped' >&2; return 1; }
+        address="$(pve_nat_ipv6_for_id "$vm_num")" || return 1
+        vm_external_ipv6="$address"
+        prefix=64
+        gateway="$pve_nat_ipv6_gateway"
+        independent_ipv6_status=NAT66
+        echo "VM IPv6 NAT66 address: $address (shared public egress)"
+    fi
+    qm set "$vm_num" "--ipconfig${index}" "ip6=${address}/${prefix},gw6=${gateway}" || return 1
+}
+
+pve_resize_vm_disk() {
+    local size="${disk%G}"
+    [[ "$size" =~ ^[1-9][0-9]*$ ]] || return 1
+    qm resize "$vm_num" scsi0 "${size}G"
+}
+
+# NAT addressing uses the last IPv4 octet; reject 255/256 before creating a guest.
+pve_nat_ipv4_for_id() {
+    python3 - "${pve_nat_prefix:-}" "$1" <<'PYCODE'
+import ipaddress
+import sys
+identifier = int(sys.argv[2])
+if not 2 <= identifier <= 254:
+    raise SystemExit('NAT guest ID must fit a usable IPv4 last octet (2..254)')
+print(ipaddress.IPv4Address(sys.argv[1] + '.' + str(identifier)))
+PYCODE
 }

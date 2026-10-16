@@ -67,6 +67,19 @@ assert_eq 'fe80::1' "${selected[3]}" 'preserves link-local upstream next hop'
 normalized=$(pve_direct_ipv6_normalize "${selected[0]}" "${selected[3]}" "${selected[2]}" "${selected[1]}")
 assert_eq "${selected[1]}" "$(sed -n '2p' <<<"$normalized")" 'NDP supports separate bridge and upstream gateways'
 
+# PVE has written the bridge but has not yet reloaded the physical uplink.
+cp "$tmp_dir/interfaces.d/uplink.cfg" "$tmp_dir/original-uplink"
+cat >"$tmp_dir/interfaces.d/uplink.cfg" <<'EOF'
+auto vmbr0
+iface vmbr0 inet manual
+    bridge_ports eth0
+iface vmbr0 inet6 static
+    address 2a01:4f8:c014:1a63::2/64
+    gateway fe80::1
+EOF
+assert_eq "$selection" "$(pve_auto_direct_ipv6_config)" 'static prefix follows pending bridge owner'
+cp "$tmp_dir/original-uplink" "$tmp_dir/interfaces.d/uplink.cfg"
+
 # A static file by itself is insufficient when the live address is dynamic,
 # tentative, stale, host-only, or belongs to a tunnel transfer link.
 for flag in dynamic temporary tentative dadfailed; do

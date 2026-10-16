@@ -30,6 +30,7 @@ eval "$(extract_function read_network_state)"
 eval "$(extract_function ensure_selected_interface_ipv4_config)"
 eval "$(extract_function choose_persisted_ipv4_address)"
 eval "$(extract_function install_proxmox_packages)"
+eval "$(extract_function preserve_boot_kernels)"
 
 _red() { :; }
 _yellow() { :; }
@@ -213,6 +214,7 @@ fi
 install_package() { :; }
 ensure_arm_qemu_server_installable() { return 0; }
 verify_pve_installation() { return 0; }
+finalize_pve_kernel_installation() { [[ ! -e "$PROXMOX_INSTALL_MODE_FILE" ]]; }
 cleanup_ceph_service_packages() { :; }
 install_optional_pve_packages() { :; }
 rebuild_interfaces() { :; }
@@ -244,7 +246,14 @@ assert_file_absent "$marker" "owned install marker after failure"
 
 touch "$marker"
 TEST_INSTALL_DPKG_FAILURE=false
-install_proxmox_packages
+set +e
+(install_proxmox_packages >/dev/null 2>&1)
+failure_status=$?
+set -e
+if [[ "$failure_status" -eq 0 ]]; then
+    printf 'FAIL: skipped kernel hooks under an externally owned install marker were accepted\n' >&2
+    exit 1
+fi
 if [[ ! -e "$marker" ]]; then
     printf 'FAIL: pre-existing Proxmox install marker was removed\n' >&2
     exit 1
