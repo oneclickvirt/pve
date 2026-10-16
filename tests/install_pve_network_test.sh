@@ -30,7 +30,10 @@ eval "$(extract_function read_network_state)"
 eval "$(extract_function ensure_selected_interface_ipv4_config)"
 eval "$(extract_function choose_persisted_ipv4_address)"
 eval "$(extract_function install_proxmox_packages)"
-eval "$(extract_function preserve_boot_kernels)"
+# Package mutation is outside this network/install-mode fixture. Kernel
+# preservation has its own fixture with synthetic package state.
+# shellcheck disable=SC2317
+preserve_boot_kernels() { :; }
 
 _red() { :; }
 _yellow() { :; }

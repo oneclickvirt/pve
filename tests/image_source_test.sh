@@ -35,7 +35,13 @@ if download_x86_image >/dev/null; then exit 1; fi
 for url in "${calls[@]}"; do [[ "$url" != *kvm_images/releases/download/v1.0/missing99* ]]; done
 # Test failure propagation through the preparation entry point.
 get_new_images() { return 1; }; get_system_tag_images() { return 1; }
-if prepare_x86_image >/dev/null; then exit 1; fi
+(
+    # Preparation uses /root/qcow in production. Keep this failure-propagation
+    # fixture independent of the runner cache and permissions.
+    # shellcheck disable=SC2317
+    download_x86_image() { return 1; }
+    if prepare_x86_image >/dev/null; then exit 1; fi
+)
 # Exercise the real atomic downloader: HTTP failure preserves the old cache,
 # while a CDN failure falls back to the direct origin before retrying.
 sleep() { :; }; cdn_success_url=https://cdn.invalid/
