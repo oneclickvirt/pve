@@ -147,7 +147,7 @@ cleanup_empty_nft_snat_chains() {
     for family in ip ip6; do
         chain_output=$(nft -a list chain "$family" nat ocv_snat 2>/dev/null || true)
         [ -n "$chain_output" ] || continue
-        if ! printf '%s\n' "$chain_output" | grep -qE '[[:space:]]# handle [0-9]+'; then
+        if ! printf '%s\n' "$chain_output" | grep -vE '^[[:space:]]*chain ' | grep -qE '[[:space:]]# handle [0-9]+'; then
             nft delete chain "$family" nat ocv_snat 2>/dev/null || true
         fi
     done
