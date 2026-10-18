@@ -3185,7 +3185,11 @@ clean_network_interfaces() {
     install -d -m 700 "$root" || return 1
     snapshot=$(mktemp -d "$root/change.XXXXXXXX") || return 1
     pve_installer_network_topology files >"$snapshot/files" || return 1
-    tar -cPf "$snapshot/interfaces.tar" --verbatim-files-from -T "$snapshot/files" || return 1
+    if tar --help 2>&1 | grep -q -- '--verbatim-files-from'; then
+        tar -cPf "$snapshot/interfaces.tar" --verbatim-files-from -T "$snapshot/files" || return 1
+    else
+        tar -cPf "$snapshot/interfaces.tar" -T "$snapshot/files" || return 1
+    fi
     while IFS= read -r file; do
         chattr -i "$file" || return 1
     done <"$snapshot/files"

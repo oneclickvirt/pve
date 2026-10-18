@@ -2209,14 +2209,27 @@ pve_begin_network_transaction() {
             printf '%s\n' "$file" >>"$pve_network_snapshot/absent"
         fi
     done < <(pve_network_transaction_files)
-    tar -cPf "$pve_network_snapshot/config.tar" --verbatim-files-from -T "$pve_network_snapshot/files" || return 1
+    if tar --help 2>&1 | grep -q -- '--verbatim-files-from'; then
+        tar -cPf "$pve_network_snapshot/config.tar" --verbatim-files-from -T "$pve_network_snapshot/files" || return 1
+    else
+        # BSD tar and older BusyBox tar do not expose GNU's option.  The
+        # snapshot list contains absolute paths and no option-like entries.
+        tar -cPf "$pve_network_snapshot/config.tar" -T "$pve_network_snapshot/files" || return 1
+    fi
     pve_capture_network_runtime || return 1
     pve_network_rollback_unit="pve-network-rollback-${BASHPID}"
     {
         printf '#!/bin/bash\nset -eu\nsnapshot=%q\n' "$pve_network_snapshot"
         cat <<'ROLLBACK'
 exec 8>"$snapshot/lock"
-flock 8
+if command -v flock >/dev/null 2>&1; then
+    flock 8
+else
+    # BSD/macOS and minimal BusyBox images may lack util-linux flock.
+    # mkdir is atomic and provides a sufficient short-lived rollback lock.
+    while ! mkdir "$snapshot/rollback.lock" 2>/dev/null; do sleep 1; done
+    trap 'rmdir "$snapshot/rollback.lock" 2>/dev/null || true' EXIT
+fi
 [ ! -e "$snapshot/committed" ] || exit 0
 systemctl stop ndpresponder.service 2>/dev/null || true
 while IFS= read -r file; do
@@ -2264,11 +2277,21 @@ pve_abort_network_transaction() {
 
 pve_commit_network_transaction() {
     [ -n "${pve_network_snapshot:-}" ] || return 0
-    (
-        flock 8 || exit 1
-        [ ! -e "$pve_network_snapshot/rolled-back" ] || exit 1
+    if command -v flock >/dev/null 2>&1; then
+        (
+            flock 8 || exit 1
+            [ ! -e "$pve_network_snapshot/rolled-back" ] || exit 1
+            touch "$pve_network_snapshot/committed"
+        ) 8>"$pve_network_snapshot/lock" || return 1
+    else
+        mkdir "$pve_network_snapshot/commit.lock" 2>/dev/null || return 1
+        if [ -e "$pve_network_snapshot/rolled-back" ]; then
+            rmdir "$pve_network_snapshot/commit.lock" 2>/dev/null || true
+            return 1
+        fi
         touch "$pve_network_snapshot/committed"
-    ) 8>"$pve_network_snapshot/lock" || return 1
+        rmdir "$pve_network_snapshot/commit.lock" 2>/dev/null || true
+    fi
     systemctl stop "${pve_network_rollback_unit}.timer" >/dev/null 2>&1 || true
 }
 
