@@ -65,7 +65,17 @@ change_debian_apt_sources() {
     10*) DEBIAN_RELEASE="buster" ;;
     11*) DEBIAN_RELEASE="bullseye" ;;
     12*) DEBIAN_RELEASE="bookworm" ;;
-    *) echo "The system is not Debian 6/7/8/9/10/11/12 . No changes were made to the apt-get sources." && return 1 ;;
+    13*) DEBIAN_RELEASE="trixie" ;;
+    *)
+        # Keep newer Debian releases usable while preserving the existing
+        # mirror layout.  os-release may expose VERSION_CODENAME even when
+        # lsb_release is absent or changes its output format.
+        DEBIAN_RELEASE=$(awk -F= '$1 == "VERSION_CODENAME" {gsub(/"/, "", $2); print $2}' /etc/os-release 2>/dev/null | head -n1)
+        if [[ -z "$DEBIAN_RELEASE" ]]; then
+            echo "Unsupported Debian release; no changes were made to apt sources." >&2
+            return 1
+        fi
+        ;;
     esac
 
     cat >/etc/apt/sources.list <<EOF
