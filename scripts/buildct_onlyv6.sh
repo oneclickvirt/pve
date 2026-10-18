@@ -157,14 +157,14 @@ setup_container_os() {
             setup_mirrors_for_cn || return 1
         fi
         sleep 2
-        public_network_check_res=$(pct exec $CTID -- curl -lk -m 6 ${cdn_success_url}https://raw.githubusercontent.com/spiritLHLS/ecs/main/back/test)
+        public_network_check_res=$(pct exec $CTID -- curl -lk -m 6 ${cdn_success_url}https://raw.githubusercontent.com/spiritLHLS/ecs/main/back/test 2>/dev/null || true)
         if [[ $public_network_check_res == *"success"* ]]; then
             echo "network is public"
             echo "网络连通正常"
         else
             echo "nameserver 8.8.8.8" | pct exec $CTID -- tee -a /etc/resolv.conf
             sleep 1
-            pct exec $CTID -- curl -lk -m 6 ${cdn_success_url}https://raw.githubusercontent.com/spiritLHLS/ecs/main/back/test
+            pct exec $CTID -- curl -lk -m 6 ${cdn_success_url}https://raw.githubusercontent.com/spiritLHLS/ecs/main/back/test || return 1
         fi
         sleep 2
         ssh_check_res=$(pct exec $CTID -- lsof -i:22)
@@ -242,6 +242,33 @@ setup_container_os() {
     fi
 }
 
+ensure_guest_ipv6_network() {
+    # Debian cloud templates often enable systemd-networkd without shipping a
+    # matching unit.  Persist the PVE-provided IPv6 address and gateway so a
+    # first boot, stop/start, guest reboot, and host reboot all converge.
+    pct exec "$CTID" -- sh -c 'ip link set dev eth0 up; if command -v ifup >/dev/null 2>&1; then ifup eth0 >/dev/null 2>&1 || true; fi' || return 1
+    if pct exec "$CTID" -- sh -c 'command -v systemctl >/dev/null 2>&1 && systemctl is-enabled systemd-networkd >/dev/null 2>&1'; then
+        pct exec "$CTID" -- sh -c 'mkdir -p /etc/systemd/network; cat > /etc/systemd/network/10-oneclickvirt-ipv6.network' <<EOF
+[Match]
+Name=eth0
+
+[Network]
+Address=${ct_external_ipv6}/${pve_direct_ipv6_prefix##*/}
+Gateway=${pve_direct_ipv6_gateway}
+DNS=2606:4700:4700::1111
+DNS=2001:4860:4860::8888
+IPv6AcceptRA=no
+EOF
+        if [ "${independent_ipv6_status:-}" = NAT66 ]; then
+            pct exec "$CTID" -- sh -c "sed -i 's#Address=.*#Address=${ct_external_ipv6}/64#; s#Gateway=.*#Gateway=${pve_nat_ipv6_gateway}#' /etc/systemd/network/10-oneclickvirt-ipv6.network"
+        fi
+        pct exec "$CTID" -- systemctl restart systemd-networkd || return 1
+        pct exec "$CTID" -- networkctl reconfigure eth0 >/dev/null 2>&1 || true
+    fi
+    pct exec "$CTID" -- ip -6 addr show dev eth0 | grep -q 'inet6 ' || return 1
+    pct exec "$CTID" -- ip -6 route show default | grep -q . || return 1
+}
+
 create_container() {
     pve_prepare_ct_template || return 1
     local ct_conf="${PVE_CT_CONFIG_DIR:-/etc/pve/lxc}/${CTID}.conf"
@@ -312,6 +339,7 @@ create_container() {
         independent_ipv6_status=NAT66
     fi
     pct start "$CTID" || return 1
+    ensure_guest_ipv6_network || return 1
     pve_configure_ct_dns 6 || return 1
     sleep 3
 }
