@@ -76,6 +76,23 @@ extract_first_ipv4_from_config() {
     return 0
 }
 
+# Full-NAT guests keep their public alias in a durable comment because the
+# cloud-init ipconfig contains only the private address.  Read the marker
+# without assuming a particular qm/pct config layout.
+extract_fullnat_ipv4_from_config() {
+    local config_text=$1
+    printf '%s\n' "$config_text" |
+        sed -nE 's/^[[:space:]]*# oneclickvirt-fullnat-ipv4[[:space:]]+(([0-9]{1,3}\.){3}[0-9]{1,3})[[:space:]]*$/\1/p' |
+        while IFS= read -r candidate; do
+            if is_ipv4_address "$candidate"; then
+                printf '%s' "$candidate"
+                return 0
+            fi
+        done
+    printf ''
+    return 0
+}
+
 extract_first_public_ipv6_from_config() {
     local config_text=$1
 
@@ -121,6 +138,18 @@ delete_nft_ipv4_rules_for_ip() {
             while IFS= read -r h; do
                 [ -n "$h" ] && nft delete rule ip nat "$chain" handle "$h" 2>/dev/null || true
             done
+    done
+}
+
+cleanup_empty_nft_snat_chains() {
+    local family
+    local chain_output
+    for family in ip ip6; do
+        chain_output=$(nft -a list chain "$family" nat ocv_snat 2>/dev/null || true)
+        [ -n "$chain_output" ] || continue
+        if ! printf '%s\n' "$chain_output" | grep -qE '[[:space:]]# handle [0-9]+'; then
+            nft delete chain "$family" nat ocv_snat 2>/dev/null || true
+        fi
     done
 }
 
@@ -532,6 +561,7 @@ handle_vm_deletion() {
     local vmid=$1
     local ip_address=$2
     local configured_ipv6="${3:-}"
+    local external_ipv4="${4:-}"
     log "Starting deletion process for VM $vmid (IP: $ip_address)"
     # 解锁VM
     log "Attempting to unlock VM $vmid"
@@ -557,8 +587,10 @@ handle_vm_deletion() {
         log "Removing firewall rules for IP $ip_address"
         if use_nft_backend; then
             delete_nft_ipv4_rules_for_ip "$ip_address"
+            [ "$external_ipv4" = "$ip_address" ] || delete_nft_ipv4_rules_for_ip "$external_ipv4"
         else
             delete_iptables_ipv4_rules_for_ip "$ip_address"
+            [ "$external_ipv4" = "$ip_address" ] || delete_iptables_ipv4_rules_for_ip "$external_ipv4"
         fi
     fi
 }
@@ -568,6 +600,7 @@ handle_ct_deletion() {
     local ctid=$1
     local ip_address=$2
     local configured_ipv6="${3:-}"
+    local external_ipv4="${4:-}"
     log "Starting deletion process for CT $ctid (IP: $ip_address)"
     # 停止容器
     log "Stopping CT $ctid"
@@ -590,8 +623,10 @@ handle_ct_deletion() {
         log "Removing firewall rules for IP $ip_address"
         if use_nft_backend; then
             delete_nft_ipv4_rules_for_ip "$ip_address"
+            [ "$external_ipv4" = "$ip_address" ] || delete_nft_ipv4_rules_for_ip "$external_ipv4"
         else
             delete_iptables_ipv4_rules_for_ip "$ip_address"
+            [ "$external_ipv4" = "$ip_address" ] || delete_iptables_ipv4_rules_for_ip "$external_ipv4"
         fi
     fi
 }
@@ -618,7 +653,7 @@ main() {
         fi
     done
     # 获取所有VM和CT的IP信息
-    declare -A vmip_array vmipv6_array ctip_array ctipv6_array
+    declare -A vmip_array vmipv6_array vmexternalip_array ctip_array ctipv6_array ctexternalip_array
     # 获取VM的IP
     vmids=$(qm list | awk '{if(NR>1)print $1}')
     if [ -n "$vmids" ]; then
@@ -626,8 +661,10 @@ main() {
             config_text=$(qm config "$vmid" 2>/dev/null || true)
             ip_address=$(extract_first_ipv4_from_config "$config_text")
             ipv6_address=$(extract_first_public_ipv6_from_config "$config_text")
+            external_ipv4=$(extract_fullnat_ipv4_from_config "$config_text")
             vmip_array["$vmid"]="${ip_address:-}"
             vmipv6_array["$vmid"]="${ipv6_address:-}"
+            vmexternalip_array["$vmid"]="${external_ipv4:-}"
         done
     fi
     # 获取CT的IP
@@ -637,8 +674,10 @@ main() {
             config_text=$(pct config "$ctid" 2>/dev/null || true)
             ip_address=$(extract_first_ipv4_from_config "$config_text")
             ipv6_address=$(extract_first_public_ipv6_from_config "$config_text")
+            external_ipv4=$(extract_fullnat_ipv4_from_config "$config_text")
             ctip_array["$ctid"]="${ip_address:-}"
             ctipv6_array["$ctid"]="${ipv6_address:-}"
+            ctexternalip_array["$ctid"]="${external_ipv4:-}"
         done
     fi
     if [ "$delete_all" = true ]; then
@@ -654,9 +693,9 @@ main() {
     # 处理删除操作
     for id in "${!unique_ids[@]}"; do
         if [ -n "${vmip_array[$id]+x}" ]; then
-            handle_vm_deletion "$id" "${vmip_array[$id]}" "${vmipv6_array[$id]-}"
+            handle_vm_deletion "$id" "${vmip_array[$id]}" "${vmipv6_array[$id]-}" "${vmexternalip_array[$id]-}"
         elif [ -n "${ctip_array[$id]+x}" ]; then
-            handle_ct_deletion "$id" "${ctip_array[$id]}" "${ctipv6_array[$id]-}"
+            handle_ct_deletion "$id" "${ctip_array[$id]}" "${ctipv6_array[$id]-}" "${ctexternalip_array[$id]-}"
         else
             log "Warning: ID $id not found in existing VMs or CTs"
         fi
@@ -664,6 +703,7 @@ main() {
     # 重建防火墙规则
     log "Rebuilding firewall rules..."
     if use_nft_backend; then
+        cleanup_empty_nft_snat_chains
         printf '#!/usr/sbin/nft -f\nflush ruleset\n' > /etc/nftables.conf
         nft list ruleset >> /etc/nftables.conf
     else

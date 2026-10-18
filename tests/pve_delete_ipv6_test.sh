@@ -30,6 +30,7 @@ fake_bin="${tmp_dir}/bin"
 mkdir -p "$fake_bin"
 ln -s "$(command -v python3)" "${fake_bin}/python3"
 ln -s "$(command -v cat)" "${fake_bin}/cat"
+ln -s "$(command -v sed)" "${fake_bin}/sed"
 export PVE_STATE_DIR="${tmp_dir}/state"
 mkdir -p "$PVE_STATE_DIR"
 PATH="$fake_bin"
@@ -87,5 +88,11 @@ assert_eq 3 "${#ip6tables_calls[@]}" "legacy host fallback deletion count"
 assert_eq '-t raw -D PREROUTING -d 2a14:7c0:1002:10f8::100 -s 2a14:7c0:1000::/38 -p icmpv6 --icmpv6-type echo-request -j ACCEPT' "${ip6tables_calls[0]}" "legacy canonical source deletion"
 
 assert_eq '2a14:7c0:1002:10f8::64' "$(extract_first_public_ipv6_from_config $'ipconfig0: ip6=fd42:5339:296f:1f00::64/64\nipconfig1: ip6=2a14:7c0:1002:10f8::64/128,gw6=2a14:7c0:1002:10f8::1')" "configured public IPv6 extraction"
+
+# Full-NAT aliases are stored as comments beside the private cloud-init
+# address.  Deletion must discover the alias as well, otherwise ocv_snat keeps
+# forwarding traffic to a destroyed guest.
+assert_eq '107.172.105.195' "$(extract_fullnat_ipv4_from_config $'ipconfig0: ip=172.16.1.204/24,gw=172.16.1.1\n# oneclickvirt-fullnat-ipv4 107.172.105.195')" "fullnat alias extraction"
+assert_eq '' "$(extract_fullnat_ipv4_from_config $'ipconfig0: ip=172.16.1.204/24,gw=172.16.1.1\n# oneclickvirt-fullnat-ipv4 not-an-ip')" "invalid fullnat alias ignored"
 
 printf 'pve delete IPv6 regression tests passed\n'
