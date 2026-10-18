@@ -21,6 +21,10 @@ pve_direct_ipv6_for_id() { echo '2001:db8:1::a0'; }
 pve_direct_ipv6_bridge() { echo vmbr2; }
 _fw6_drop_icmpv6_ping() { :; }
 _fw_save() { :; }
+# The creation fixture exercises address selection and failure propagation;
+# guest network convergence is covered by the live/network regression tests.
+# Keep this extracted-function unit test independent of guest command output.
+ensure_guest_ipv6_network() { :; }
 pct() {
     if [[ "$1" == create ]]; then
         [[ "$(umask)" == 0022 ]] || { echo 'unsafe LXC extraction umask' >&2; return 1; }
