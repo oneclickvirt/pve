@@ -153,6 +153,37 @@ cleanup_empty_nft_snat_chains() {
     done
 }
 
+resolve_pve_nat_ipv4_for_id() {
+    local id=$1
+    local subnet_file="${PVE_NAT_SUBNET_FILE:-/usr/local/bin/pve_nat_subnet}"
+    [ -s "$subnet_file" ] || return 1
+    command -v python3 >/dev/null 2>&1 || return 1
+    python3 - "$subnet_file" "$id" <<'PY'
+import ipaddress
+import sys
+try:
+    network = ipaddress.ip_network(open(sys.argv[1]).read().strip(), strict=False)
+    address = ipaddress.ip_address(int(network.network_address) + int(sys.argv[2]))
+    print(address if address in network else "")
+except (OSError, ValueError):
+    print("")
+PY
+}
+
+cleanup_orphan_fullnat_for_id() {
+    local id=$1 internal external
+    internal=$(resolve_pve_nat_ipv4_for_id "$id" 2>/dev/null || true)
+    [ -n "$internal" ] || return 0
+    use_nft_backend || return 0
+    external=$(nft list chain ip nat ocv_snat 2>/dev/null | awk -v ip="$internal" '
+        $0 ~ ("ip saddr " ip " ") { for (i = 1; i <= NF - 2; i++) if ($i == "snat" && $(i + 1) == "to") { print $(i + 2); exit } }
+    ')
+    [ -n "$external" ] || return 0
+    log "Removing orphan full-NAT firewall rules for VM/CT $id ($internal -> $external)"
+    delete_nft_ipv4_rules_for_ip "$internal"
+    delete_nft_ipv4_rules_for_ip "$external"
+}
+
 delete_iptables_ipv4_rules_for_ip() {
     local ip_address=$1
     local escaped_ip=""
@@ -698,6 +729,7 @@ main() {
             handle_ct_deletion "$id" "${ctip_array[$id]}" "${ctipv6_array[$id]-}" "${ctexternalip_array[$id]-}"
         else
             log "Warning: ID $id not found in existing VMs or CTs"
+            cleanup_orphan_fullnat_for_id "$id"
         fi
     done
     # 重建防火墙规则

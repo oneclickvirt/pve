@@ -95,4 +95,8 @@ assert_eq '2a14:7c0:1002:10f8::64' "$(extract_first_public_ipv6_from_config $'ip
 assert_eq '107.172.105.195' "$(extract_fullnat_ipv4_from_config $'ipconfig0: ip=172.16.1.204/24,gw=172.16.1.1\n# oneclickvirt-fullnat-ipv4 107.172.105.195')" "fullnat alias extraction"
 assert_eq '' "$(extract_fullnat_ipv4_from_config $'ipconfig0: ip=172.16.1.204/24,gw=172.16.1.1\n# oneclickvirt-fullnat-ipv4 not-an-ip')" "invalid fullnat alias ignored"
 
+printf '%s\n' '172.16.1.0/24' >"${tmp_dir}/nat-subnet"
+export PVE_NAT_SUBNET_FILE="${tmp_dir}/nat-subnet"
+assert_eq '172.16.1.204' "$(resolve_pve_nat_ipv4_for_id 204)" "NAT address derived from VMID"
+
 printf 'pve delete IPv6 regression tests passed\n'
