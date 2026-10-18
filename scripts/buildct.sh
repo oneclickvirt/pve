@@ -174,6 +174,56 @@ start_container() {
         echo -e "\e[31mCT ${CTID} 启动失败\e[0m"
         exit 1
     fi
+    # Some current Debian cloud templates ship ifupdown without enabling the
+    # interface during container boot.  PVE persists the address in the CT
+    # config, but the link can still remain DOWN, making the first package/
+    # SSH probe fail.  Bring the configured link up before any network work;
+    # keep a small iproute2 fallback for images without ifupdown.
+    pct exec "$CTID" -- sh -c 'ip link set dev eth0 up; if command -v ifup >/dev/null 2>&1; then ifup eth0 >/dev/null 2>&1 || true; fi' || return 1
+    # Debian cloud images commonly enable systemd-networkd but ship no
+    # matching .network unit.  Persist a minimal unit so a later pct
+    # stop/start or guest reboot brings the interface back automatically.
+    if pct exec "$CTID" -- sh -c 'command -v systemctl >/dev/null 2>&1 && systemctl is-enabled systemd-networkd >/dev/null 2>&1'; then
+        pct exec "$CTID" -- sh -c 'mkdir -p /etc/systemd/network; cat > /etc/systemd/network/10-oneclickvirt-eth0.network' <<EOF
+[Match]
+Name=eth0
+
+[Network]
+Address=${user_ip}/24
+Gateway=${pve_nat_gateway}
+DNS=1.1.1.1
+DNS=8.8.8.8
+EOF
+        if [ "${independent_ipv6_status:-N}" = Y ]; then
+            pct exec "$CTID" -- sh -c 'cat > /etc/systemd/network/11-oneclickvirt-eth1.network' <<EOF
+[Match]
+Name=eth1
+
+[Network]
+Address=${ct_external_ipv6}/${pve_direct_ipv6_prefix##*/}
+Gateway=${pve_direct_ipv6_gateway}
+IPv6AcceptRA=no
+EOF
+        elif [ "${independent_ipv6_status:-N}" = NAT66 ]; then
+            pct exec "$CTID" -- sh -c 'cat > /etc/systemd/network/11-oneclickvirt-eth1.network' <<EOF
+[Match]
+Name=eth1
+
+[Network]
+Address=${ct_internal_ipv6}/64
+Gateway=${pve_nat_ipv6_gateway}
+IPv6AcceptRA=no
+EOF
+        fi
+        pct exec "$CTID" -- systemctl restart systemd-networkd || return 1
+        pct exec "$CTID" -- networkctl reconfigure eth0 >/dev/null 2>&1 || true
+    fi
+    if ! pct exec "$CTID" -- ip -4 addr show dev eth0 | grep -q 'inet '; then
+        pct exec "$CTID" -- ip -4 addr add "${user_ip}/24" dev eth0 || return 1
+    fi
+    if ! pct exec "$CTID" -- ip route show default | grep -q .; then
+        pct exec "$CTID" -- ip route add default via "${pve_nat_gateway}" dev eth0 || return 1
+    fi
     local dns_family=4
     [ "${independent_ipv6_status:-N}" = N ] || dns_family=46
     pve_configure_ct_dns "$dns_family" || return 1

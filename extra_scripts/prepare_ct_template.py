@@ -15,6 +15,32 @@ import tarfile
 import tempfile
 
 
+def remove_device_members(raw, names):
+    """Remove device records with GNU tar when available, portable otherwise."""
+    command = ['tar', '--delete', '--file', str(raw), '--null',
+               '--verbatim-files-from', '--files-from', str(names)]
+    probe = subprocess.run(['tar', '--help'], stdout=subprocess.PIPE,
+                           stderr=subprocess.STDOUT, text=True, check=False)
+    if '--delete' in probe.stdout:
+        subprocess.run(command, check=True, timeout=300)
+        return
+    # BSD tar (macOS) and some BusyBox builds do not implement --delete.
+    # Rewrite the uncompressed archive while retaining TarInfo metadata and
+    # file payloads; compression is applied by the caller afterwards.
+    blocked = set(names.read_bytes().split(b'\0'))
+    blocked.discard(b'')
+    replacement = raw.with_name(raw.name + '.rewrite')
+    with tarfile.open(raw, 'r:') as source, tarfile.open(replacement, 'w:') as target:
+        for member in source:
+            if member.name.encode('utf-8', 'surrogateescape') in blocked:
+                continue
+            payload = source.extractfile(member) if member.isfile() else None
+            target.addfile(member, payload)
+            if payload is not None:
+                payload.close()
+    os.replace(replacement, raw)
+
+
 def fingerprint(path):
     info = path.stat()
     return [info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns]
@@ -77,8 +103,7 @@ def prepare(path):
             if nodes:
                 names = folder/'devices'
                 names.write_bytes(b''.join(name.encode('utf-8', 'surrogateescape')+b'\0' for name in nodes))
-                subprocess.run(['tar', '--delete', '--file', str(raw), '--null',
-                                '--verbatim-files-from', '--files-from', str(names)], check=True, timeout=300)
+                remove_device_members(raw, names)
                 replacement = folder/path.name
                 with replacement.open('wb') as output:
                     subprocess.run([*selected[2], str(raw)], stdout=output, check=True, timeout=600)
