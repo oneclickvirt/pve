@@ -135,6 +135,7 @@ create_vm() {
             --cpu $cpu_type \
             --net0 virtio,bridge=vmbr0,firewall=0 \
             --ostype l26 \
+            --onboot 1 \
             ${kvm_flag} || return 1
     else
         if [ -s "$appended_file" ] || [ "${pve_direct_ipv6_available:-false}" != true ]; then
@@ -152,6 +153,7 @@ create_vm() {
             --net0 virtio,bridge=vmbr0,firewall=0 \
             --net1 virtio,bridge="$net1_bridge",firewall=0 \
             --ostype l26 \
+            --onboot 1 \
             ${kvm_flag} || return 1
     fi
     if [ "$system_arch" = "x86" ] || [ "$system_arch" = "x86_64" ]; then

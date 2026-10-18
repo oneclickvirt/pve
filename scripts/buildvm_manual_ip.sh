@@ -179,6 +179,7 @@ create_vm() {
         $net0 \
         $net1 \
         --ostype l26 \
+        --onboot 1 \
         $kvm_flag || return 1
 }
 

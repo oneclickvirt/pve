@@ -161,6 +161,7 @@ create_vm() {
         --cpu "$cpu_type" \
         --net0 virtio,bridge="$net1_bridge",firewall=0 \
         --ostype l26 \
+        --onboot 1 \
         $kvm_flag || return 1
     if [ "$system_arch" = "x86" ] || [ "$system_arch" = "x86_64" ]; then
         qm importdisk $vm_num /root/qcow/${system}.qcow2 ${storage} || return 1
