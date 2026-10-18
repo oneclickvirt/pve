@@ -44,5 +44,6 @@ grep -Fq 'pct exec "$CTID" -- test -s ssh_bash.sh' ./scripts/buildct.sh
 grep -Fq 'pct exec "$CTID" -- curl -fsSL' ./scripts/buildct_onlyv6.sh
 grep -Fq 'pct exec "$CTID" -- test -s ssh_bash.sh' ./scripts/buildct_onlyv6.sh
 grep -Fq 'TimeoutStartSec=30min' ./extra_scripts/ifupdown2-install.service
+grep -Fq '13*) DEBIAN_RELEASE="trixie"' ./scripts/ssh_bash.sh
 
 printf 'static shell inventory passed (%s scripts)\n' "${#shell_files[@]}"
