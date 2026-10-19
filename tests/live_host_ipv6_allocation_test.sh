@@ -191,7 +191,20 @@ assert rows and rows[0].get("dev") == "eth1"
 print(json.dumps(rows[0], separators=(",", ":")))
 ')
 ct_egress=$(pct exec "$ctid" -- curl -6 -fsS --connect-timeout 10 --max-time 30 https://api64.ipify.org)
-[ "$ct_egress" = "$host_egress_before" ]
+# NAT66 presents the host's public address, while routed/delegated IPv6 keeps
+# the guest's own global address.  Validate the mode-specific invariant rather
+# than assuming every valid installation is NAT66.
+python3 - "$ct_ipv6" "$ct_egress" "$host_egress_before" <<'PY'
+import ipaddress
+import sys
+guest = ipaddress.IPv6Address(sys.argv[1])
+egress = ipaddress.IPv6Address(sys.argv[2])
+host = ipaddress.IPv6Address(sys.argv[3])
+if guest.is_private:
+    assert egress == host
+else:
+    assert guest.is_global and egress == guest and egress != host
+PY
 
 host_after=$(host_snapshot)
 host_egress_after=$(curl -6 -fsS --max-time 12 https://api64.ipify.org)
