@@ -43,6 +43,7 @@ ip6tables() {
 log() { :; }
 FW_BACKEND=iptables
 
+# shellcheck disable=SC2317 # Called indirectly by the sourced list_vm_ids helper.
 qm() {
     case "${PVE_TEST_LIST_LAYOUT:-legacy}" in
         legacy)
@@ -54,6 +55,7 @@ qm() {
         *) return 1 ;;
     esac
 }
+# shellcheck disable=SC2317 # Called indirectly by the sourced list_ct_ids helper.
 pct() {
     case "${PVE_TEST_LIST_LAYOUT:-legacy}" in
         legacy)
@@ -70,6 +72,7 @@ assert_eq $'200\n202' "$(list_ct_ids)" "legacy pct list IDs"
 PVE_TEST_LIST_LAYOUT=modern
 assert_eq $'101\n103' "$(list_vm_ids)" "modern qm list IDs"
 assert_eq $'201\n203' "$(list_ct_ids)" "modern pct list IDs"
+# shellcheck disable=SC2317 # The next indirect list_vm_ids call must propagate this failure.
 qm() { return 1; }
 if list_vm_ids; then
     printf 'qm list command failure was accepted\n' >&2
