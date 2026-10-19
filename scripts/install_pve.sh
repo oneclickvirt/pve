@@ -1753,21 +1753,51 @@ validate_interface_name() {
 }
 
 get_interface_mac() {
-    local iface="$1"
-    if [ -f "/sys/class/net/$iface/address" ]; then
-        cat "/sys/class/net/$iface/address"
+    local iface="$1" sysfs_root="${2:-/sys/class/net}" mac
+    if [ -r "$sysfs_root/$iface/address" ]; then
+        mac=$(cat "$sysfs_root/$iface/address")
     else
-        ip -o link show dev "$iface" 2>/dev/null | awk '{print $17}'
+        mac=$(LC_ALL=C ip -o link show dev "$iface" 2>/dev/null | awk '
+            {
+                for (i = 1; i < NF; i++) {
+                    if ($i == "link/ether") {
+                        print $(i + 1)
+                        exit
+                    }
+                }
+            }
+        ')
     fi
+    printf '%s\n' "$mac"
 }
 
 get_interface_state() {
-    local iface="$1"
-    if [ -f "/sys/class/net/$iface/operstate" ]; then
-        cat "/sys/class/net/$iface/operstate"
+    local iface="$1" sysfs_root="${2:-/sys/class/net}" state
+    if [ -r "$sysfs_root/$iface/operstate" ]; then
+        state=$(cat "$sysfs_root/$iface/operstate")
     else
-        ip -o link show dev "$iface" 2>/dev/null | awk -F'[<>]' '{print $2}' | cut -d, -f1
+        state=$(LC_ALL=C ip -o link show dev "$iface" 2>/dev/null | awk '
+            {
+                for (i = 1; i < NF; i++) {
+                    if ($i == "state") {
+                        print tolower($(i + 1))
+                        exit
+                    }
+                }
+                if (match($0, /<[^>]+>/)) {
+                    flags = substr($0, RSTART + 1, RLENGTH - 2)
+                    count = split(flags, values, ",")
+                    for (i = 1; i <= count; i++) {
+                        if (values[i] == "UP" || values[i] == "DOWN" || values[i] == "UNKNOWN") {
+                            print tolower(values[i])
+                            exit
+                        }
+                    }
+                }
+            }
+        ')
     fi
+    printf '%s\n' "$state"
 }
 
 get_interface_ipv4_addresses() {

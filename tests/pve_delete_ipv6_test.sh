@@ -31,6 +31,7 @@ mkdir -p "$fake_bin"
 ln -s "$(command -v python3)" "${fake_bin}/python3"
 ln -s "$(command -v cat)" "${fake_bin}/cat"
 ln -s "$(command -v sed)" "${fake_bin}/sed"
+ln -s "$(command -v awk)" "${fake_bin}/awk"
 export PVE_STATE_DIR="${tmp_dir}/state"
 mkdir -p "$PVE_STATE_DIR"
 PATH="$fake_bin"
@@ -41,6 +42,40 @@ ip6tables() {
 }
 log() { :; }
 FW_BACKEND=iptables
+
+qm() {
+    case "${PVE_TEST_LIST_LAYOUT:-legacy}" in
+        legacy)
+            printf '%s\n' 'VMID NAME STATUS MEM(MB) BOOTDISK(GB) PID' '100 vm100 running 512 8.00 1234' '102 vm102 stopped 256 4.00 0'
+            ;;
+        modern)
+            printf '%s\n' 'VMID STATUS NAME MEM(MB) BOOTDISK(GB) PID' '101 stopped vm101 256 4.00 0' '103 running vm103 1024 16.00 5678'
+            ;;
+        *) return 1 ;;
+    esac
+}
+pct() {
+    case "${PVE_TEST_LIST_LAYOUT:-legacy}" in
+        legacy)
+            printf '%s\n' 'VMID STATUS LOCK' '200 running -' '202 stopped -'
+            ;;
+        modern)
+            printf '%s\n' 'VMID STATUS NAME' '201 stopped ct201' '203 running ct203'
+            ;;
+        *) return 1 ;;
+    esac
+}
+assert_eq $'100\n102' "$(list_vm_ids)" "legacy qm list IDs"
+assert_eq $'200\n202' "$(list_ct_ids)" "legacy pct list IDs"
+PVE_TEST_LIST_LAYOUT=modern
+assert_eq $'101\n103' "$(list_vm_ids)" "modern qm list IDs"
+assert_eq $'201\n203' "$(list_ct_ids)" "modern pct list IDs"
+qm() { return 1; }
+if list_vm_ids; then
+    printf 'qm list command failure was accepted\n' >&2
+    exit 1
+fi
+unset -f qm pct
 
 # A persisted /38 uses the builder's decimal VMID allocation and must remove
 # the canonical delegated-prefix rule, not a host-address-derived /64 rule.

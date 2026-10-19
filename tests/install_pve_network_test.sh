@@ -21,6 +21,8 @@ eval "$(extract_function is_single_network_value)"
 eval "$(extract_function validate_prefixlen_value)"
 eval "$(extract_function validate_ipv6_prefixlen_value)"
 eval "$(extract_function validate_interface_value)"
+eval "$(extract_function get_interface_mac)"
+eval "$(extract_function get_interface_state)"
 eval "$(extract_function validate_ipv4_value)"
 eval "$(extract_function validate_ipv4_network24_value)"
 eval "$(extract_function validate_ipv6_value)"
@@ -45,6 +47,33 @@ assert_eq() {
         exit 1
     fi
 }
+
+sysfs_root="${tmp_dir}/sysfs"
+mkdir -p "$sysfs_root/eno1"
+printf '02:11:22:33:44:55\n' >"$sysfs_root/eno1/address"
+printf 'up\n' >"$sysfs_root/eno1/operstate"
+assert_eq "02:11:22:33:44:55" "$(get_interface_mac eno1 "$sysfs_root")" "sysfs interface MAC"
+assert_eq "up" "$(get_interface_state eno1 "$sysfs_root")" "sysfs interface state"
+rm -f "$sysfs_root/eno1/address" "$sysfs_root/eno1/operstate"
+mock_bin="${tmp_dir}/command-output-bin"
+mkdir -p "$mock_bin"
+cat >"$mock_bin/ip" <<'EOF'
+#!/usr/bin/env bash
+case "${IP_LINK_FORMAT:-legacy}" in
+    legacy)
+        printf '%s\n' '2: eno1: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc fq_codel state UP mode DEFAULT group default qlen 1000 link/ether 02:11:22:33:44:55 brd ff:ff:ff:ff:ff:ff'
+        ;;
+    modern)
+        printf '%s\n' '7: eno1: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 9000 qdisc mq state DOWN mode DEFAULT group default qlen 1000 altname enp1s0 link/ether 02:11:22:33:44:66 brd ff:ff:ff:ff:ff:ff'
+        ;;
+    *) exit 2 ;;
+esac
+EOF
+chmod 700 "$mock_bin/ip"
+assert_eq "02:11:22:33:44:55" "$(PATH="$mock_bin:$PATH" get_interface_mac eno1 "$sysfs_root")" "legacy ip-link MAC"
+assert_eq "up" "$(PATH="$mock_bin:$PATH" get_interface_state eno1 "$sysfs_root")" "legacy ip-link state"
+assert_eq "02:11:22:33:44:66" "$(IP_LINK_FORMAT=modern PATH="$mock_bin:$PATH" get_interface_mac eno1 "$sysfs_root")" "modern ip-link MAC"
+assert_eq "down" "$(IP_LINK_FORMAT=modern PATH="$mock_bin:$PATH" get_interface_state eno1 "$sysfs_root")" "modern ip-link state"
 
 assert_file_absent() {
     local path="$1" label="$2"

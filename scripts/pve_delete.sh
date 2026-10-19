@@ -37,6 +37,18 @@ check_vmct_status() {
     return 1
 }
 
+list_vm_ids() {
+    local output
+    output=$(qm list) || return 1
+    awk '$1 ~ /^[0-9]+$/ {print $1}' <<< "$output"
+}
+
+list_ct_ids() {
+    local output
+    output=$(pct list) || return 1
+    awk '$1 ~ /^[0-9]+$/ {print $1}' <<< "$output"
+}
+
 # 安全删除文件/路径
 safe_remove() {
     local path=$1
@@ -686,7 +698,10 @@ main() {
     # 获取所有VM和CT的IP信息
     declare -A vmip_array vmipv6_array vmexternalip_array ctip_array ctipv6_array ctexternalip_array
     # 获取VM的IP
-    vmids=$(qm list | awk '{if(NR>1)print $1}')
+    if ! vmids=$(list_vm_ids); then
+        log "Failed to list PVE virtual machines; aborting deletion"
+        return 1
+    fi
     if [ -n "$vmids" ]; then
         for vmid in $vmids; do
             config_text=$(qm config "$vmid" 2>/dev/null || true)
@@ -699,7 +714,10 @@ main() {
         done
     fi
     # 获取CT的IP
-    ctids=$(pct list | awk '{if(NR>1)print $1}')
+    if ! ctids=$(list_ct_ids); then
+        log "Failed to list PVE containers; aborting deletion"
+        return 1
+    fi
     if [ -n "$ctids" ]; then
         for ctid in $ctids; do
             config_text=$(pct config "$ctid" 2>/dev/null || true)
