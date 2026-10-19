@@ -2233,6 +2233,8 @@ setup_persistent_network_interface() {
         # Reload rules without retriggering or renaming the live SSH uplink.
         if command -v udevadm >/dev/null 2>&1; then
             udevadm control --reload || _yellow "udev reload unavailable; persistent interface naming will apply on the next boot"
+        elif [ -x /etc/init.d/udev ]; then
+            /etc/init.d/udev force-reload >/dev/null 2>&1 || true
         fi
     fi
     return 0

@@ -1084,6 +1084,8 @@ setup_persistent_net_link() {
         echo "Name=${interface}" >>/etc/systemd/network/10-persistent-net.link
         if command -v udevadm >/dev/null 2>&1; then
             udevadm control --reload || return 1
+        elif [ -x /etc/init.d/udev ]; then
+            /etc/init.d/udev force-reload >/dev/null 2>&1 || true
         fi
     fi
 }
