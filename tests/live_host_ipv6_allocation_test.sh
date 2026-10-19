@@ -174,7 +174,11 @@ found = [a["local"] for r in rows for a in r.get("addr_info", [])
          and not a.get("tentative") and not a.get("dadfailed")
          and not ({"tentative", "dadfailed"} & set(a.get("flags") or []))]
 assert len(found) == 1
-assert ipaddress.IPv6Address(found[0]).is_private
+# The installer supports both NAT66 (ULA) and routed/delegated IPv6.  The
+# former is private, while the latter is intentionally a global address;
+# accept either usable scope and reject link-local/unspecified addresses.
+address = ipaddress.IPv6Address(found[0])
+assert address.is_private or address.is_global
 print(found[0])
 ')
 ct_route=$(pct exec "$ctid" -- env LC_ALL=C NO_COLOR=1 ip -j -6 route show default | python3 -c '
