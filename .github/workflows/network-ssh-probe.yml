@@ -1,0 +1,52 @@
+name: Hosted runner independent IPv4 and IPv6 SSH
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: independent-network-ssh-probe
+  cancel-in-progress: false
+jobs:
+  password-ssh:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v7
+      - name: Prepare an independent IPv6 egress
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          sudo install -d -m 0755 /usr/share/keyrings
+          curl -fsSL --connect-timeout 15 --max-time 60 https://pkg.cloudflareclient.com/pubkey.gpg | sudo gpg --dearmor --yes -o /usr/share/keyrings/cloudflare-warp-archive-keyring.gpg
+          printf 'deb [signed-by=/usr/share/keyrings/cloudflare-warp-archive-keyring.gpg] https://pkg.cloudflareclient.com/ %s main\n' "$(. /etc/os-release; printf '%s' "$VERSION_CODENAME")" | sudo tee /etc/apt/sources.list.d/cloudflare-client.list >/dev/null
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq cloudflare-warp python3-paramiko python3-socks
+          sudo systemctl start warp-svc
+          warp-cli --accept-tos registration new >"$RUNNER_TEMP/warp-registration.log" 2>&1
+          warp-cli --accept-tos mode proxy >"$RUNNER_TEMP/warp-mode.log" 2>&1
+          warp-cli --accept-tos proxy port 40000 >>"$RUNNER_TEMP/warp-mode.log" 2>&1
+          warp-cli --accept-tos connect >"$RUNNER_TEMP/warp-connect.log" 2>&1
+          ready=false
+          for _attempt in {1..24}; do
+            if curl --silent --fail --socks5-hostname 127.0.0.1:40000 --connect-timeout 5 --max-time 8 https://api6.ipify.org >"$RUNNER_TEMP/ipv6-egress"; then
+              ready=true
+              break
+            fi
+            sleep 3
+          done
+          test "$ready" = true
+          python3 -c 'import ipaddress,os,pathlib; assert ipaddress.ip_address(pathlib.Path(os.environ["RUNNER_TEMP"],"ipv6-egress").read_text().strip()).version == 6'
+      - name: Prove password authentication and guest command execution
+        env:
+          RUNTIME_NETWORK_SSH_TARGETS: ${{ secrets.RUNTIME_NETWORK_SSH_TARGETS }}
+          RUNTIME_IPV6_SOCKS: 127.0.0.1:40000
+        run: /usr/bin/python3 tests/network_ssh_probe.py
+      - name: Remove temporary probe state
+        if: always()
+        shell: bash
+        run: |
+          set +e
+          warp-cli --accept-tos disconnect >/dev/null 2>&1
+          warp-cli --accept-tos registration delete >/dev/null 2>&1
+          rm -f "$RUNNER_TEMP"/warp-{registration,mode,connect}.log "$RUNNER_TEMP/ipv6-egress"
