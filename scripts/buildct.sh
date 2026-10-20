@@ -454,16 +454,18 @@ configure_container_extras() {
 
 setup_port_forwarding() {
     [ -z "${public_ipv4:-}" ] || return 0
-    _fw_add_dnat "vmbr0" "tcp" "${sshn}" "${user_ip}:22"
+    if [ "${sshn}" -ne 0 ]; then
+        _fw_add_dnat "vmbr0" "tcp" "${sshn}" "${user_ip}:22" || return 1
+    fi
     if [ "${web1_port}" -ne 0 ]; then
-        _fw_add_dnat "vmbr0" "tcp" "${web1_port}" "${user_ip}:80"
+        _fw_add_dnat "vmbr0" "tcp" "${web1_port}" "${user_ip}:80" || return 1
     fi
     if [ "${web2_port}" -ne 0 ]; then
-        _fw_add_dnat "vmbr0" "tcp" "${web2_port}" "${user_ip}:443"
+        _fw_add_dnat "vmbr0" "tcp" "${web2_port}" "${user_ip}:443" || return 1
     fi
     if [ "${port_first}" -ne 0 ] && [ "${port_last}" -ne 0 ]; then
-        _fw_add_dnat_range "vmbr0" "tcp" "${port_first}-${port_last}" "${user_ip}:${port_first}-${port_last}"
-        _fw_add_dnat_range "vmbr0" "udp" "${port_first}-${port_last}" "${user_ip}:${port_first}-${port_last}"
+        _fw_add_dnat_range "vmbr0" "tcp" "${port_first}-${port_last}" "${user_ip}:${port_first}-${port_last}" || return 1
+        _fw_add_dnat_range "vmbr0" "udp" "${port_first}-${port_last}" "${user_ip}:${port_first}-${port_last}" || return 1
     fi
     _fw_save
 }
@@ -552,7 +554,7 @@ main() {
     start_container || exit 1
     configure_os || exit 1
     configure_container_extras
-    setup_port_forwarding
+    setup_port_forwarding || exit 1
     save_container_info || exit 1
 }
 

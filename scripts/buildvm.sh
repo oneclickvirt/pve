@@ -194,7 +194,9 @@ configure_network() {
 
 setup_port_forwarding() {
     user_ip="${pve_nat_prefix}.${vm_num}"
-    _fw_add_dnat "vmbr0" "tcp" "${sshn}" "${user_ip}:22" || return 1
+    if [ "${sshn}" -ne 0 ]; then
+        _fw_add_dnat "vmbr0" "tcp" "${sshn}" "${user_ip}:22" || return 1
+    fi
     if [ "${web1_port}" -ne 0 ]; then
         _fw_add_dnat "vmbr0" "tcp" "${web1_port}" "${user_ip}:80" || return 1
     fi
