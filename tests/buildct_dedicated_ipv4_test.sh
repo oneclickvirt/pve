@@ -5,7 +5,9 @@ extract() { sed -n "/^$1() {/,/^}/p" "$repo_root/scripts/buildct.sh"; }
 eval "$(extract prepare_ipv4_network)"
 eval "$(extract configure_networking)"
 eval "$(extract setup_port_forwarding)"
+allocator_fail=false
 pve_public_ipv4_config() {
+    [ "$allocator_fail" != true ] || return 1
     [ "$1" = manual ] && [ "$2" = 198.51.100.195/27 ]
     user_ip=198.51.100.195
     user_ip_range=27
@@ -42,7 +44,7 @@ public_ipv4=''
 prepare_ipv4_network
 [ "$user_ip" = 172.16.1.150 ] && [ "$ct_ipv4_prefix" = 24 ] && [ "$ct_ipv4_bridge" = vmbr1 ]
 # A failed allocation must abort before pct create, without a NAT fallback.
-pve_public_ipv4_config() { return 1; }
+allocator_fail=true
 public_ipv4=198.51.100.195/27
 if prepare_ipv4_network; then exit 1; fi
 printf 'LXC dedicated dual-stack preserves bridge, actual IPv4/IPv6 prefixes and NAT compatibility\n'
