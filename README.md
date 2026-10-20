@@ -154,3 +154,14 @@ https://github.com/spiritLHLS/ecs
 ## Stargazers over time
 
 [![Stargazers over time](https://starchart.cc/oneclickvirt/pve.svg)](https://github.com/oneclickvirt/ecs)
+
+### LXC 独立 IPv4 与独立双栈
+
+`buildct.sh` 保留原来的 NAT 参数，第 14 个参数可指定独立 IPv4/CIDR 或 `auto`。使用和虚拟机相同的宿主、网关、广播地址、已用地址及 ARP 冲突校验，并保留实际子网掩码；公网 IPv4 不创建端口转发。第 13 个参数为 `y` 时同时申请 IPv6，实际模式会写入结果。
+
+```bash
+# 最后两个参数：独立 IPv6、独立 IPv4/CIDR（请使用自己的空闲地址）
+bash buildct.sh 150 'YOUR_PASSWORD' 1 768 6 0 0 0 0 0 debian12 local y 198.51.100.195/27
+```
+
+启用独立 IPv6 前，须先配置实例网桥及其可用委派前缀；不要使用宿主地址或网桥网关作为实例地址。

@@ -3,7 +3,7 @@
 # https://github.com/oneclickvirt/pve
 # 2026.08.26
 
-# ./buildct.sh CTID 密码 CPU核数 内存 硬盘 SSH端口 80端口 443端口 外网端口起 外网端口止 系统 存储盘 独立IPV6
+# ./buildct.sh CTID 密码 CPU核数 内存 硬盘 SSH端口 80端口 443端口 外网端口起 外网端口止 系统 存储盘 独立IPV6 [独立IPV4/CIDR或auto]
 # ./buildct.sh 102 1234567 1 512 5 20001 20002 20003 30000 30025 debian11 local N
 
 cd /root >/dev/null 2>&1
@@ -40,6 +40,7 @@ init() {
     system_ori="${11:-debian11}"
     storage="${12:-local}"
     independent_ipv6="${13:-N}"
+    public_ipv4="${14:-${PVE_CT_PUBLIC_IPV4:-}}"
     validate_storage_name "$storage"
     if ! [[ "$CTID" =~ ^[0-9]+$ ]] || [[ "$CTID" -lt 100 || "$CTID" -gt 256 ]]; then
         echo "CTID must be in the range 100 ~ 256: ${CTID}" >&2
@@ -126,13 +127,35 @@ load_default_config() {
     fi
 }
 
+# Keep the existing NAT CLI compatible. The optional final argument selects a
+# real public bridge address using the same collision/ARP checks as VM scripts.
+prepare_ipv4_network() {
+    ct_ipv4_prefix=24
+    ct_ipv4_gateway="$pve_nat_gateway"
+    ct_ipv4_bridge=vmbr1
+    if [ -n "${public_ipv4:-}" ]; then
+        local mode=manual
+        [ "$public_ipv4" != auto ] || mode=auto
+        pve_public_ipv4_config "$mode" "$public_ipv4" || return 1
+        ct_ipv4_prefix="$user_ip_range"
+        ct_ipv4_gateway="$gateway"
+        ct_ipv4_bridge=vmbr0
+        sshn=22
+        web1_port=80
+        web2_port=443
+        port_first=0
+        port_last=0
+    else
+        user_ip="${pve_nat_prefix}.${CTID}"
+    fi
+}
+
 create_container() {
     pve_prepare_ct_template || return 1
     local ct_conf="${PVE_CT_CONFIG_DIR:-/etc/pve/lxc}/${CTID}.conf"
     local retry=0
     local max_retry=7
     local wait_interval=3
-    user_ip="${pve_nat_prefix}.${CTID}"
     # lxc-usernsexec needs traversable mountpoints even when the caller uses umask 077.
     # Keep the caller mask and private credential records unchanged.
     if [ "$fixed_system" = true ]; then
@@ -189,8 +212,8 @@ start_container() {
 Name=eth0
 
 [Network]
-Address=${user_ip}/24
-Gateway=${pve_nat_gateway}
+Address=${user_ip}/${ct_ipv4_prefix:-24}
+Gateway=${ct_ipv4_gateway:-$pve_nat_gateway}
 DNS=1.1.1.1
 DNS=8.8.8.8
 EOF
@@ -219,10 +242,10 @@ EOF
         pct exec "$CTID" -- networkctl reconfigure eth0 >/dev/null 2>&1 || true
     fi
     if ! pct exec "$CTID" -- ip -4 addr show dev eth0 | grep -q 'inet '; then
-        pct exec "$CTID" -- ip -4 addr add "${user_ip}/24" dev eth0 || return 1
+        pct exec "$CTID" -- ip -4 addr add "${user_ip}/${ct_ipv4_prefix:-24}" dev eth0 || return 1
     fi
     if ! pct exec "$CTID" -- ip route show default | grep -q .; then
-        pct exec "$CTID" -- ip route add default via "${pve_nat_gateway}" dev eth0 || return 1
+        pct exec "$CTID" -- ip route add default via "${ct_ipv4_gateway:-$pve_nat_gateway}" dev eth0 || return 1
     fi
     local dns_family=4
     [ "${independent_ipv6_status:-N}" = N ] || dns_family=46
@@ -238,7 +261,7 @@ configure_networking() {
             if [ -s "$appended_file" ]; then
                 # 使用 vmbr1 网桥和 NAT 映射
                 ct_internal_ipv6="$(pve_nat_ipv6_for_id "$CTID")" || return 1
-                pct set "$CTID" --net0 "name=eth0,ip=${user_ip}/24,bridge=vmbr1,gw=${pve_nat_gateway}" || return 1
+                pct set "$CTID" --net0 "name=eth0,ip=${user_ip}/${ct_ipv4_prefix:-24},bridge=${ct_ipv4_bridge:-vmbr1},gw=${ct_ipv4_gateway:-$pve_nat_gateway}" || return 1
                 pct set "$CTID" --net1 "name=eth1,ip6=${ct_internal_ipv6}/64,bridge=vmbr1,gw6=${pve_nat_ipv6_gateway}" || return 1
                 pct set "$CTID" --nameserver 1.1.1.1 || return 1
                 pct set "$CTID" --searchdomain local || return 1
@@ -258,7 +281,7 @@ configure_networking() {
                 fi
             elif [ "${pve_direct_ipv6_available:-false}" = true ]; then
                 # 使用已确认的委派前缀直接分配 IPv6 地址
-                pct set "$CTID" --net0 "name=eth0,ip=${user_ip}/24,bridge=vmbr1,gw=${pve_nat_gateway}" || return 1
+                pct set "$CTID" --net0 "name=eth0,ip=${user_ip}/${ct_ipv4_prefix:-24},bridge=${ct_ipv4_bridge:-vmbr1},gw=${ct_ipv4_gateway:-$pve_nat_gateway}" || return 1
                 if ct_external_ipv6="$(pve_direct_ipv6_for_id "$CTID")"; then
                     direct_ipv6_bridge="$(pve_direct_ipv6_bridge)" || return 1
                     pct set "$CTID" --net1 "name=eth1,ip6=${ct_external_ipv6}/${pve_direct_ipv6_prefix##*/},bridge=${direct_ipv6_bridge},gw6=${pve_direct_ipv6_gateway}" || return 1
@@ -277,7 +300,7 @@ configure_networking() {
             # prefix. Give the guest a private ULA and share the host's
             # public egress through the already checked NAT66 rule.
             ct_internal_ipv6="$(pve_nat_ipv6_for_id "$CTID")" || return 1
-            pct set "$CTID" --net0 "name=eth0,ip=${user_ip}/24,bridge=vmbr1,gw=${pve_nat_gateway}" || return 1
+            pct set "$CTID" --net0 "name=eth0,ip=${user_ip}/${ct_ipv4_prefix:-24},bridge=${ct_ipv4_bridge:-vmbr1},gw=${ct_ipv4_gateway:-$pve_nat_gateway}" || return 1
             pct set "$CTID" --net1 "name=eth1,ip6=${ct_internal_ipv6}/64,bridge=vmbr1,gw6=${pve_nat_ipv6_gateway}" || return 1
             pct set "$CTID" --nameserver '1.1.1.1 2606:4700:4700::1111' || return 1
             independent_ipv6_status="NAT66"
@@ -286,7 +309,7 @@ configure_networking() {
         fi
     fi
     if [ "$independent_ipv6_status" == "N" ]; then
-        pct set "$CTID" --net0 "name=eth0,ip=${user_ip}/24,bridge=vmbr1,gw=${pve_nat_gateway}" || return 1
+        pct set "$CTID" --net0 "name=eth0,ip=${user_ip}/${ct_ipv4_prefix:-24},bridge=${ct_ipv4_bridge:-vmbr1},gw=${ct_ipv4_gateway:-$pve_nat_gateway}" || return 1
         pct set "$CTID" --nameserver 1.1.1.1 || return 1
         pct set "$CTID" --searchdomain local || return 1
     fi
@@ -430,6 +453,7 @@ configure_container_extras() {
 }
 
 setup_port_forwarding() {
+    [ -z "${public_ipv4:-}" ] || return 0
     _fw_add_dnat "vmbr0" "tcp" "${sshn}" "${user_ip}:22"
     if [ "${web1_port}" -ne 0 ]; then
         _fw_add_dnat "vmbr0" "tcp" "${web1_port}" "${user_ip}:80"
@@ -520,14 +544,16 @@ main() {
     validate_ctid || exit 1
     pve_nat_ipv4_for_id "$CTID" >/dev/null || exit 1
     check_ipv6_setup || exit 1
+    prepare_ipv4_network || exit 1
     prepare_system_image || exit 1
     create_container || exit 1
     configure_networking || exit 1
+    pve_release_public_ipv4_lock || exit 1
     start_container || exit 1
     configure_os || exit 1
     configure_container_extras
     setup_port_forwarding
-    save_container_info
+    save_container_info || exit 1
 }
 
 main "$@"

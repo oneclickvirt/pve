@@ -1534,3 +1534,45 @@ pve_configure_ct_dns() {
     read -r -a dns_servers <<< "$resolvers"
     pct exec "$CTID" -- sh -c 'for resolver do printf "nameserver %s\n" "$resolver"; done > /etc/resolv.conf' sh "${dns_servers[@]}"
 }
+
+pve_release_public_ipv4_lock() {
+    [ -n "${pve_public_ipv4_lock:-}" ] || return 0
+    # QEMU can inherit the open file description. Closing only the shell's
+    # descriptor leaves its flock held; explicitly unlock that description.
+    flock -u "$pve_public_ipv4_lock" || return 1
+    exec {pve_public_ipv4_lock}>&-
+    unset pve_public_ipv4_lock
+}
+
+pve_public_ipv4_config() {
+    local mode="$1" requested="${2:-}" helper="${PVE_PUBLIC_IPV4_HELPER_FILE:-}" snapshot
+    local -a fields
+    # Keep selection and creation serialized across the standalone entrypoints.
+    if [ -z "${pve_public_ipv4_lock:-}" ]; then
+        exec {pve_public_ipv4_lock}>"${PVE_PUBLIC_IPV4_LOCK_FILE:-/run/lock/oneclickvirt-public-ipv4.lock}" || return 1
+        if ! flock -w 30 "$pve_public_ipv4_lock"; then
+            pve_release_public_ipv4_lock
+            echo 'Public IPv4 allocation lock timed out; no guest was created' >&2
+            return 1
+        fi
+        trap pve_release_public_ipv4_lock EXIT
+    fi
+    if [ -z "$helper" ]; then
+        helper="$(dirname "${BASH_SOURCE[0]}")/../extra_scripts/public_ipv4.py"
+        if [ ! -f "$helper" ]; then
+            helper=/usr/local/lib/oneclickvirt/public_ipv4.py
+            mkdir -p "${helper%/*}" || return 1
+            _download_with_retry "${cdn_success_url:-}https://raw.githubusercontent.com/oneclickvirt/pve/main/extra_scripts/public_ipv4.py" "$helper" || return 1
+        fi
+    fi
+    if [ "$mode" != fullnat ] && ! command -v arping >/dev/null 2>&1; then
+        DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends iputils-arping || return 1
+    fi
+    snapshot=$(python3 "$helper" "$mode" "$requested") || return 1
+    mapfile -t fields <<<"$snapshot"
+    [ "${#fields[@]}" -eq 4 ] || return 1
+    user_ip="${fields[0]}"
+    user_ip_range="${fields[1]}"
+    gateway="${fields[2]}"
+    user_main_ip="${fields[3]}"
+}
