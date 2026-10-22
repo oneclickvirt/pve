@@ -2,67 +2,8 @@
 
 [![Hits](https://hits.spiritlhl.net/pve.svg?action=hit&title=Hits&title_bg=%23555555&count_bg=%230eecf8&edge_flat=false)](https://hits.spiritlhl.net)
 
-感谢 Proxmox VE 的免费订阅支持
+Proxmox VE 环境安装与容器、虚拟机管理脚本。
 
-如果有未适配的商家的机器欢迎联系[@spiritlhl_bot](https://t.me/spiritlhl_bot)，有空会尝试支持一下
-
-## 更新
-
-[更新日志](CHANGELOG.md)
-
-## 说明文档
-
-国内(China Docs)：
-
-[https://virt.spiritlhl.net/](https://virt.spiritlhl.net/)
-
-国际(English Docs)：
-
-[https://www.spiritlhl.net/en/](https://www.spiritlhl.net/en/)
-
-说明文档中 Proxmox VE 分区内容
-
-自修补虚拟机镜像源：
-
-[https://github.com/oneclickvirt/pve_kvm_images](https://github.com/oneclickvirt/pve_kvm_images)
-
-[https://github.com/oneclickvirt/kvm_images](https://github.com/oneclickvirt/kvm_images)
-
-[https://github.com/oneclickvirt/macos](https://github.com/oneclickvirt/macos)
-
-自修补容器镜像源：
-
-[https://github.com/oneclickvirt/lxc_amd64_images](https://github.com/oneclickvirt/lxc_amd64_images)
-
-[https://github.com/oneclickvirt/pve_lxc_images](https://github.com/oneclickvirt/pve_lxc_images)
-
-[https://github.com/oneclickvirt/lxc_arm_images](https://github.com/oneclickvirt/lxc_arm_images)
-
-
-Self-patching VM image sources:
-
-[https://github.com/oneclickvirt/pve_kvm_images](https://github.com/oneclickvirt/pve_kvm_images)
-
-[https://github.com/oneclickvirt/kvm_images](https://github.com/oneclickvirt/kvm_images)
-
-[https://github.com/oneclickvirt/macos](https://github.com/oneclickvirt/macos)
-
-Self-patching container image source:
-
-[https://github.com/oneclickvirt/lxc_amd64_images](https://github.com/oneclickvirt/lxc_amd64_images)
-
-[https://github.com/oneclickvirt/pve_lxc_images](https://github.com/oneclickvirt/pve_lxc_images)
-
-[https://github.com/oneclickvirt/lxc_arm_images](https://github.com/oneclickvirt/lxc_arm_images)
-
-## 友链
-
-VPS融合怪测评脚本
-
-https://github.com/oneclickvirt/ecs
-
-https://github.com/spiritLHLS/ecs
-
-### 不创建入站端口映射
-
-`buildct.sh`、`buildvm.sh` 的 SSH、HTTP、HTTPS、端口范围起止五个端口参数均设为 `0`，即可只保留内网地址和出网能力，不创建入站端口映射。此时通过宿主机或可达内网连接实例的 SSH 22 端口。端口映射写入失败会使脚本报错，避免把不可连接的实例报告为成功。
+- [中文说明](https://virt.spiritlhl.net/guide/pve/pve_precheck.html)
+- [English documentation](https://www.spiritlhl.net/en/guide/pve/pve_precheck.html)
+- [更新日志 / Changelog](CHANGELOG.md)
