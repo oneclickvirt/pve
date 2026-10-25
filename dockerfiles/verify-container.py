@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""Boot a disposable amd64 VM; never run privileged PVE on the build host."""
+"""Boot a disposable native VM; never run privileged PVE on the build host."""
 import argparse
 import fcntl
 import hashlib
 import json
 import os
+import platform
 from pathlib import Path
 import shlex
 import shutil
@@ -33,12 +34,14 @@ def main():
     parser=argparse.ArgumentParser()
     parser.add_argument('major',choices=['7','8','9']);parser.add_argument('image')
     args=parser.parse_args()
+    arch={'x86_64':'amd64','aarch64':'arm64'}.get(platform.machine())
+    if arch is None:raise RuntimeError('Unsupported native verification architecture')
     if not Path('/.dockerenv').is_file():raise RuntimeError('Use the isolated VM launcher image')
     for path in ['/input/image.tar','/input/guest.qcow2']:
         if not Path(path).is_file():raise RuntimeError('Missing read-only verification input')
     with tempfile.TemporaryDirectory(prefix='pve-docker-vm-') as temporary:
         folder=Path(temporary)
-        filename='noble-server-cloudimg-amd64.img'
+        filename=f'noble-server-cloudimg-{arch}.img'
         base='https://cloud-images.ubuntu.com/noble/current/'
         for name in [filename,'SHA256SUMS']:
             cached=Path('/input')/name
@@ -81,6 +84,13 @@ def main():
               '-drive',f'file={folder}/seed.img,if=virtio,format=raw,readonly=on',
               '-netdev',f'user,id=net0,hostfwd=tcp:127.0.0.1:{port}-:22','-device','virtio-net-pci,netdev=net0',
               '-object','rng-random,id=rng0,filename=/dev/urandom','-device','virtio-rng-pci,rng=rng0']
+        if arch=='arm64':
+            shutil.copyfile('/usr/share/AAVMF/AAVMF_VARS.fd',folder/'uefi-vars.fd')
+            qemu[:7]=['qemu-system-aarch64','-machine','virt,gic-version=3',
+                      '-accel','kvm' if accelerated else 'tcg,thread=multi',
+                      '-cpu','host' if accelerated else 'max']
+            qemu.extend(['-drive','if=pflash,format=raw,readonly=on,file=/usr/share/AAVMF/AAVMF_CODE.fd',
+                         '-drive',f'if=pflash,format=raw,file={folder}/uefi-vars.fd'])
         process=None
         with (folder/'serial.log').open('wb') as serial:
             try:
@@ -101,7 +111,7 @@ def main():
                 run(ssh+[command],timeout=5400)
                 subprocess.run(ssh+['poweroff'],timeout=30,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
                 process.wait(timeout=180)
-                print('PVE_DOCKER_ISOLATED_VERIFICATION_COMPLETE major='+args.major,flush=True)
+                print('PVE_DOCKER_ISOLATED_VERIFICATION_COMPLETE major='+args.major+' architecture='+arch,flush=True)
             except BaseException:
                 print((folder/'serial.log').read_text(errors='replace')[-5000:],flush=True)
                 raise

@@ -4,6 +4,7 @@ import argparse
 import hashlib
 import json
 import os
+import platform
 from pathlib import Path
 import secrets
 import subprocess
@@ -52,6 +53,8 @@ def main():
     p=argparse.ArgumentParser()
     p.add_argument('image'); p.add_argument('major',choices=['7','8','9']); p.add_argument('guest',type=Path)
     args=p.parse_args()
+    arm=platform.machine()=='aarch64'
+    architecture='arm64' if arm else 'amd64'
     if not Path('/run/cnb-disposable-build').is_file():
         raise RuntimeError('Run this privileged test inside the disposable verification VM')
     run(['systemd-detect-virt','--vm'],stdout=subprocess.DEVNULL)
@@ -81,7 +84,8 @@ def main():
         deadline=time.monotonic()+1800
         while time.monotonic()<deadline:
             result=subprocess.run(['docker','exec',name,'qm','guest','exec',vmid,'--timeout','30','--',
-                                   '/bin/sh','-c','test -r /etc/alpine-release && cat /proc/sys/kernel/random/boot_id'],
+                                   '/bin/sh','-c',('test -r /etc/debian_version && test "$(uname -m)" = aarch64' if arm
+                                   else 'test -r /etc/alpine-release')+' && cat /proc/sys/kernel/random/boot_id'],
                                   stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,text=True,timeout=50)
             if result.returncode==0:
                 value=json.loads(result.stdout)
@@ -110,28 +114,49 @@ def main():
                 assert dout('systemctl','show','-p','LoadState','--value',service+'.service')=='masked'
             version=dout('dpkg-query','-W','-f=${Version}','pve-manager')
             assert version.startswith(args.major+'.')
+            assert dout('dpkg','--print-architecture')==architecture
+            build_info=json.loads(dout('cat','/usr/share/pve-container/build-info.json'))
+            assert build_info['distribution']==('pxvirt' if arm else 'proxmox-ve')
             ca=dout('sha256sum','/etc/pve/pve-root-ca.pem').split()[0]
             storages=json.loads(dout('pvesh','get','/storage','--output-format','json'))
+            content='images,rootdir,vztmpl,iso,backup'+(',snippets' if arm else '')
             if any(x['storage']=='local' for x in storages):
-                dex('pvesm','set','local','--content','images,rootdir,vztmpl,iso,backup')
+                dex('pvesm','set','local','--content',content)
             else:
-                dex('pvesm','add','dir','local','--path','/var/lib/vz','--content','images,rootdir,vztmpl,iso,backup')
+                dex('pvesm','add','dir','local','--path','/var/lib/vz','--content',content)
             dex('ip','link','add','vmbr0','type','bridge')
             dex('ip','addr','add','10.76.0.1/24','dev','vmbr0')
             dex('ip','link','set','vmbr0','up')
             guest_path='/var/lib/vz/template/iso/runtime-guest.qcow2'
             dex('mkdir','-p','/var/lib/vz/template/iso')
             run(['docker','cp',str(args.guest),name+':'+guest_path])
-            cpu='Nehalem' if args.major=='7' else 'x86-64-v2-AES'
+            cpu='max' if arm else ('Nehalem' if args.major=='7' else 'x86-64-v2-AES')
+            arch_options=['--arch','aarch64'] if arm else []
             dex('qm','create',vmid,'--name','docker-smoke','--memory','1024','--cores','2','--kvm','0',
-                '--cpu',cpu,'--machine','q35','--bios','ovmf',
+                *arch_options,'--cpu',cpu,'--machine','virt' if arm else 'q35','--bios','ovmf',
                 '--efidisk0','local:1,efitype=4m,pre-enrolled-keys=0','--agent','enabled=1',
                 '--rng0','source=/dev/urandom',
                 '--net0','virtio,bridge=vmbr0','--serial0','socket','--vga','serial0')
             dex('qm','importdisk',vmid,guest_path,'local','--format','qcow2')
             config=dout('qm','config',vmid)
             volume=next(line.split(': ',1)[1] for line in config.splitlines() if line.startswith('unused0: '))
-            dex('qm','set',vmid,'--virtio0',volume,'--boot','order=virtio0','--ide2','local:cloudinit',
+            cloudinit_options=[]
+            if arm:
+                # The unmodified official Debian ARM cloud image has no QGA.
+                # Install its signed Debian package through first-boot cloud-init.
+                # All forwarding changes stay inside the disposable outer VM.
+                dex('sysctl','-w','net.ipv4.ip_forward=1',stdout=subprocess.DEVNULL)
+                dex('iptables','-t','nat','-A','POSTROUTING','-s','10.76.0.0/24','-o','eth0','-j','MASQUERADE')
+                dex('iptables','-I','FORWARD','-i','vmbr0','-j','ACCEPT')
+                dex('iptables','-I','FORWARD','-o','vmbr0','-m','conntrack','--ctstate','RELATED,ESTABLISHED','-j','ACCEPT')
+                user_data=Path(folder)/'arm-validation.yaml'
+                user_data.write_text('#cloud-config\n'+json.dumps({'package_update':True,'packages':['qemu-guest-agent'],
+                    'runcmd':[['systemctl','start','qemu-guest-agent']]}))
+                dex('mkdir','-p','/var/lib/vz/snippets')
+                run(['docker','cp',str(user_data),name+':/var/lib/vz/snippets/arm-validation.yaml'])
+                cloudinit_options=['--scsihw','virtio-scsi-pci','--cicustom','user=local:snippets/arm-validation.yaml']
+            dex('qm','set',vmid,'--virtio0',volume,'--boot','order=virtio0','--scsi1' if arm else '--ide2','local:cloudinit',
+                *cloudinit_options,
                 '--ipconfig0','ip=10.76.0.2/24,gw=10.76.0.1','--nameserver','1.1.1.1')
             dex('qm','start',vmid)
             with console_path.open('wb') as log:
@@ -139,7 +164,7 @@ def main():
                                          stdout=log,stderr=subprocess.STDOUT)
             print('PVE test VM started; waiting for the guest agent',flush=True)
             boot=wait_guest()
-            print('PVE test VM reached the Alpine guest agent; requesting reboot',flush=True)
+            print('PVE test VM reached the guest agent; requesting reboot',flush=True)
             dex('qm','reboot',vmid,'--timeout','120')
             wait_guest(boot)
             print('PVE test VM boot and reboot verified',flush=True)
@@ -151,7 +176,8 @@ def main():
             assert ca==dout('sha256sum','/etc/pve/pve-root-ca.pem').split()[0]
             assert 'name: docker-smoke' in dout('qm','config',vmid)
             dex('qm','destroy',vmid,'--purge','1')
-            print('PVE_DOCKER_RUNTIME_OK '+json.dumps({'major':args.major,'version':version,
+            print('PVE_DOCKER_RUNTIME_OK '+json.dumps({'major':args.major,'version':version,'architecture':architecture,
+                  'distribution':build_info['distribution'],
                   'https_pam':True,'qm_boot_reboot':'tcg','container_restart':True,
                   'password_change_persistent':True,'host_units_masked':True}),flush=True)
         except BaseException:

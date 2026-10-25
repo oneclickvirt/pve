@@ -3,6 +3,11 @@ set -Eeuo pipefail
 
 ROOT_DIR=$(CDPATH= cd -- "$(dirname -- "$BASH_SOURCE")/.." && pwd)
 major=${1:-9}
+architecture=${2:-amd64}
+case "$major:$architecture" in
+  7:amd64|8:amd64|9:amd64|8:arm64|9:arm64) ;;
+  *) echo 'Supported builds: amd64 7/8/9, ARM64 (PXVIRT) 8/9' >&2; exit 1 ;;
+esac
 case "$major" in
   7) debian=bullseye ;;
   8) debian=bookworm ;;
@@ -39,18 +44,33 @@ cleanup() {
 trap cleanup EXIT
 
 source_sha=$(git -C "$ROOT_DIR" rev-parse HEAD)
-printf 'Building experimental PVE %s on Debian %s; source=%s\n' "$major" "$debian" "$source_sha"
-docker build --platform linux/amd64 --pull \
+printf 'Building experimental PVE/PXVIRT %s on Debian %s (%s); source=%s\n' "$major" "$debian" "$architecture" "$source_sha"
+docker build --platform "linux/$architecture" --pull \
   --build-arg DEBIAN_RELEASE="$debian" --build-arg PVE_MAJOR="$major" \
   -t "$image" -f "$ROOT_DIR/dockerfiles/Dockerfile" "$ROOT_DIR/dockerfiles"
 version=$(docker run --rm --entrypoint dpkg-query "$image" -W '-f=${Version}' pve-manager)
 [[ "$version" == "$major".* ]] || { echo 'Unexpected PVE package version' >&2; exit 1; }
+[[ "$(docker image inspect --format '{{.Architecture}}' "$image")" == "$architecture" ]] || exit 1
+docker run --rm --entrypoint cat "$image" /usr/share/pve-container/build-info.json > "$work/packages.json"
 docker save "$image" -o "$work/image.tar"
 
 # Use the independently maintained test guest, and verify GitHub's asset digest.
-python3 - "$work/guest.qcow2" <<'PY'
-import hashlib,json,sys,urllib.request
+python3 - "$work/guest.qcow2" "$architecture" <<'PY'
+import hashlib,json,sys,urllib.request,subprocess
 from pathlib import Path
+if sys.argv[2]=='arm64':
+    base='https://cloud.debian.org/images/cloud/bookworm/latest/'
+    name='debian-12-genericcloud-arm64.qcow2'
+    path=Path(sys.argv[1]);checks=path.with_suffix('.checksums')
+    for filename,destination in [('SHA512SUMS',checks),(name,path)]:
+        subprocess.run(['curl','-fLsS','--retry','3','--max-time','1200',base+filename,'-o',str(destination)],check=True)
+    matches=[line.split()[0] for line in checks.read_text().splitlines()
+             if len(line.split())==2 and line.split()[1].lstrip('*./')==name]
+    with path.open('rb') as stream:digest=hashlib.file_digest(stream,'sha512').hexdigest()
+    if matches!=[digest]:raise RuntimeError('Debian ARM test guest checksum mismatch')
+    path.with_suffix('.json').write_text(json.dumps({'name':name,'url':base+name,'sha512':digest,
+        'qemu_guest_agent':'signed Debian package installed through first-boot cloud-init'},indent=2)+'\n')
+    sys.exit(0)
 url='https://api.github.com/repos/oneclickvirt/pve_kvm_images/releases/tags/alpine'
 with urllib.request.urlopen(urllib.request.Request(url,headers={'Accept':'application/vnd.github+json','User-Agent':'oneclickvirt-pve-validation'}),timeout=90) as response:
     release=json.load(response)
@@ -83,31 +103,41 @@ docker start -a "$container" | tee "$work/validation.log"
   echo 'Isolated PVE runtime validation failed; previous Release retained' >&2
   exit 1
 }
-grep -q "PVE_DOCKER_ISOLATED_VERIFICATION_COMPLETE major=$major" "$work/validation.log"
+grep -q "PVE_DOCKER_ISOLATED_VERIFICATION_COMPLETE major=$major architecture=$architecture" "$work/validation.log"
 
 image_id=$(docker image inspect --format '{{.Id}}' "$image")
-for reference in "spiritlhl/pve:$major" "spiritlhl/pve:${major}_x86_64" "oneclickvirt/pve:$major"; do
+if [[ "$architecture" == arm64 ]]; then
+  references=("spiritlhl/pve:${major}_aarch64" "spiritlhl/pve:${major}_arm64" "oneclickvirt/pve:${major}_aarch64")
+  checksum_name=SHA256SUMS-arm64
+  metadata_name=build-arm64.json
+else
+  references=("spiritlhl/pve:$major" "spiritlhl/pve:${major}_x86_64" "oneclickvirt/pve:$major")
+  checksum_name=SHA256SUMS
+  metadata_name=build.json
+fi
+for reference in "${references[@]}"; do
   previous_image_ids+=("$(docker image inspect --format '{{.Id}}' "$reference" 2>/dev/null || true)")
   release_images+=("$reference")
   docker tag "$image" "$reference"
 done
 if [[ "$publish_hub" == true ]]; then
-  docker push "spiritlhl/pve:$major"
-  docker push "spiritlhl/pve:${major}_x86_64"
+  docker push "${references[0]}"
+  docker push "${references[1]}"
   python3 "$ROOT_DIR/dockerfiles/verify-hub.py" "$image_id" "$work/dockerhub.json" \
-    "spiritlhl/pve:$major" "spiritlhl/pve:${major}_x86_64"
+    "${references[0]}" "${references[1]}" --architecture "$architecture"
 fi
-docker save "${release_images[@]}" | gzip -1 > "$work/pve${major}-amd64.tar.gz"
-python3 - "$work" "$major" "$version" "$source_sha" "$image_id" <<'PY'
+docker save "${release_images[@]}" | gzip -1 > "$work/pve${major}-${architecture}.tar.gz"
+python3 - "$work" "$major" "$version" "$source_sha" "$image_id" "$architecture" "$checksum_name" "$metadata_name" "${references[@]}" <<'PY'
 import hashlib,json,sys
 from pathlib import Path
 root=Path(sys.argv[1]);major,version,source=sys.argv[2:5]
-image=root/f'pve{major}-amd64.tar.gz'
+architecture,checksum,metadata=sys.argv[6:9];references=sys.argv[9:]
+image=root/f'pve{major}-{architecture}.tar.gz'
 with image.open('rb') as stream:digest=hashlib.file_digest(stream,'sha256').hexdigest()
-(root/'SHA256SUMS').write_text(digest+'  '+image.name+'\n')
-(root/'build.json').write_text(json.dumps({'pve_major':major,'pve_version':version,'source_sha':source,
-    'architecture':'amd64','image':'spiritlhl/pve:'+major,
-    'image_aliases':['spiritlhl/pve:'+major+'_x86_64','oneclickvirt/pve:'+major],
+(root/checksum).write_text(digest+'  '+image.name+'\n')
+(root/metadata).write_text(json.dumps({'pve_major':major,'pve_version':version,'source_sha':source,
+    'architecture':architecture,'image':references[0],
+    'image_aliases':references[1:],'packages':json.loads((root/'packages.json').read_text()),
     'image_id':sys.argv[5],
     'dockerhub':json.loads((root/'dockerhub.json').read_text()) if (root/'dockerhub.json').is_file() else [],
     'archive':image.name,'size':image.stat().st_size,
@@ -118,7 +148,7 @@ if [[ "$publish" == true ]]; then
   export GH_TOKEN=${GH_TOKEN:-$GITHUB_TOKEN}
   export GITHUB_REPOSITORY=oneclickvirt/pve GITHUB_SHA="$source_sha"
   python3 "$ROOT_DIR/dockerfiles/release_assets.py" "docker-pve$major" \
-    "$work/pve${major}-amd64.tar.gz" "$work/SHA256SUMS" "$work/build.json"
+    "$work/pve${major}-${architecture}.tar.gz" "$work/$checksum_name" "$work/$metadata_name"
   echo "PVE $major runtime checks and verified GitHub Release publication completed"
 else
   echo "PVE $major build and isolated runtime checks passed; publication disabled"

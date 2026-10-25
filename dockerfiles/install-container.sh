@@ -3,9 +3,10 @@ set -Eeuo pipefail
 
 major=${1:?PVE major version is required}
 . /etc/os-release
-case "$major:$VERSION_CODENAME:$(dpkg --print-architecture)" in
-    7:bullseye:amd64|8:bookworm:amd64|9:trixie:amd64) ;;
-    *) echo 'Use Debian 11/12/13 for PVE 7/8/9 respectively on amd64' >&2; exit 1 ;;
+architecture=$(dpkg --print-architecture)
+case "$major:$VERSION_CODENAME:$architecture" in
+    7:bullseye:amd64|8:bookworm:amd64|9:trixie:amd64|8:bookworm:arm64|9:trixie:arm64) ;;
+    *) echo 'Use Debian 11/12/13 for amd64 PVE 7/8/9, or Debian 12/13 for ARM64 PXVIRT 8/9' >&2; exit 1 ;;
 esac
 export DEBIAN_FRONTEND=noninteractive
 if [[ "$major" == 7 ]]; then
@@ -22,19 +23,48 @@ apt-get update
 apt-get upgrade -y
 apt-get install -y --no-install-recommends ca-certificates curl gnupg systemd-sysv dbus openssh-server \
     iproute2 iputils-ping procps python3 locales
-case "$major" in
-    7) key=proxmox-release-bullseye.gpg ;;
-    8) key=proxmox-release-bookworm.gpg ;;
-    9) key=proxmox-archive-keyring-trixie.gpg ;;
-esac
-curl --fail --silent --show-error --location --retry 3 \
-    "https://enterprise.proxmox.com/debian/$key" -o /usr/share/keyrings/proxmox-container.gpg
-gpg --batch --show-keys /usr/share/keyrings/proxmox-container.gpg >/dev/null
-# Proxmox's official no-subscription endpoint uses HTTP; APT verifies its
-# signed Release and every package checksum against the HTTPS-fetched key.
-printf 'deb [signed-by=/usr/share/keyrings/proxmox-container.gpg] http://download.proxmox.com/debian/pve %s pve-no-subscription\n' \
-    "$VERSION_CODENAME" > /etc/apt/sources.list.d/pve-container.list
-apt-get update
+if [[ "$architecture" == arm64 ]]; then
+    # Proxmox does not publish ARM64 packages. PXVIRT is the community fork
+    # succeeding Proxmox-Port; record that distinction in every ARM image.
+    distribution=pxvirt
+    repository=https://mirrors.lierfang.com/pxcloud/pxvirt
+    curl --fail --silent --show-error --location --retry 3 \
+        "$repository/pveport.gpg" -o /usr/share/keyrings/proxmox-container.gpg
+    gpg --batch --show-keys /usr/share/keyrings/proxmox-container.gpg >/dev/null
+    printf 'deb [signed-by=/usr/share/keyrings/proxmox-container.gpg] %s %s main\n' \
+        "$repository" "$VERSION_CODENAME" > /etc/apt/sources.list.d/pve-container.list
+else
+    distribution=proxmox-ve
+    repository=http://download.proxmox.com/debian/pve
+    case "$major" in
+        7) key=proxmox-release-bullseye.gpg ;;
+        8) key=proxmox-release-bookworm.gpg ;;
+        9) key=proxmox-archive-keyring-trixie.gpg ;;
+    esac
+    curl --fail --silent --show-error --location --retry 3 \
+        "https://enterprise.proxmox.com/debian/$key" -o /usr/share/keyrings/proxmox-container.gpg
+    gpg --batch --show-keys /usr/share/keyrings/proxmox-container.gpg >/dev/null
+    # APT verifies the signed Release and package checksums over HTTP.
+    printf 'deb [signed-by=/usr/share/keyrings/proxmox-container.gpg] %s %s pve-no-subscription\n' \
+        "$repository" "$VERSION_CODENAME" > /etc/apt/sources.list.d/pve-container.list
+fi
+apt-get update -o APT::Update::Error-Mode=any -o Acquire::Retries=3
+if [[ "$architecture:$major" == arm64:8 ]] && ! apt-cache show python3-virt-firmware >/dev/null 2>&1; then
+    # PXVIRT's newest bookworm qemu-server requires an unavailable dependency.
+    # Select the newest fully installable ARM package without bypassing dpkg.
+    compatible=
+    while read -r candidate; do
+        dependencies=$(apt-cache show "qemu-server=$candidate" | sed -n '/^Depends:/{p;q;}')
+        if [[ -n "$dependencies" && "$dependencies" != *python3-virt-firmware* ]]; then
+            compatible=$candidate
+            break
+        fi
+    done < <(apt-cache madison qemu-server | awk '{print $3}')
+    [[ -n "$compatible" ]] || { echo 'No installable ARM64 qemu-server package' >&2; exit 1; }
+    printf 'Package: qemu-server\nPin: version %s\nPin-Priority: 1001\n' "$compatible" \
+        > /etc/apt/preferences.d/pve-arm-qemu-server-compat.pref
+    echo "ARM64 bookworm compatibility: qemu-server=$compatible"
+fi
 # pve-manager includes the VM and CT tools. The proxmox-ve metapackage would
 # additionally install a host kernel, which a Docker container cannot boot.
 if [[ "$major" == 7 ]]; then
@@ -50,6 +80,16 @@ dpkg-query -W -f='${Status}\n' pve-manager | grep -qx 'install ok installed'
 dpkg-query -W -f='${Version}\n' pve-manager | grep -E "^${major}\."
 test -x /usr/sbin/qm
 test -x /usr/sbin/pct
+mkdir -p /usr/share/pve-container
+python3 - "$distribution" "$repository" "$VERSION_CODENAME" "$architecture" <<'PY'
+import json, subprocess, sys
+from pathlib import Path
+packages={name:subprocess.check_output(['dpkg-query','-W','-f=${Version}',name],text=True)
+          for name in ['pve-manager','qemu-server','pve-qemu-kvm']}
+Path('/usr/share/pve-container/build-info.json').write_text(json.dumps(dict(
+    distribution=sys.argv[1],repository=sys.argv[2],suite=sys.argv[3],architecture=sys.argv[4],
+    packages=packages),indent=2)+'\n')
+PY
 systemctl enable pve-cluster pvedaemon pveproxy pvestatd ssh
 passwd -l root
 rm -f /etc/ssh/ssh_host_*_key /etc/ssh/ssh_host_*_key.pub /etc/machine-id /usr/sbin/policy-rc.d
