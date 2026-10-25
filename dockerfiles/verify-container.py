@@ -77,7 +77,7 @@ def main():
                 else:raise TimeoutError('Verification VM did not boot')
                 print('PVE verification VM ready; SSH host key verified',flush=True)
                 run(ssh+['cloud-init status --wait'],timeout=600)
-                run(ssh+['export DEBIAN_FRONTEND=noninteractive; apt-get update && apt-get install -y --no-install-recommends docker.io && modprobe fuse && test -c /dev/fuse'],timeout=1800)
+                run(ssh+['export DEBIAN_FRONTEND=noninteractive; apt-get update && apt-get install -y --no-install-recommends docker.io && modprobe -a fuse tun && test -c /dev/fuse && test -c /dev/net/tun'],timeout=1800)
                 run(scp+['/input/image.tar','/input/guest.qcow2','/checks/pve_container_runtime.py','root@127.0.0.1:/tmp/'],timeout=1800)
                 run(ssh+['docker load -i /tmp/image.tar'],timeout=600)
                 command='python3 /tmp/pve_container_runtime.py '+shlex.quote(args.image)+' '+args.major+' /tmp/guest.qcow2'
