@@ -20,10 +20,10 @@ def run(command, **kwargs):
     return subprocess.run(command, check=True, timeout=kwargs.pop('timeout',600),**kwargs)
 
 
-def monitor_installation(ssh, command):
-    """Report slow ARM TCG work without hiding a failed or stalled install."""
+def monitor_command(ssh, command, stage, timeout=1800):
+    """Report slow ARM TCG work without hiding a failed or stalled command."""
     process=subprocess.Popen(ssh+[command])
-    deadline=time.monotonic()+1800
+    deadline=time.monotonic()+timeout
     try:
         while True:
             try:
@@ -32,12 +32,12 @@ def monitor_installation(ssh, command):
                 return
             except subprocess.TimeoutExpired:
                 if time.monotonic()>=deadline:
-                    raise TimeoutError('Disposable VM Docker installation exceeded 30 minutes')
-                print('Disposable ARM VM installation progress:',flush=True)
+                    raise TimeoutError(f'Disposable VM {stage} exceeded {timeout // 60} minutes')
+                print(f'Disposable ARM VM {stage} progress:',flush=True)
                 try:
-                    subprocess.run(ssh+['ps -eo comm,pcpu,etime,wchan:24 --sort=-pcpu | head -15; free -m'],timeout=45,check=False)
+                    subprocess.run(ssh+['ps -eo comm,pcpu,etime,wchan:24 --sort=-pcpu | head -15; free -m; df -h /'],timeout=45,check=False)
                 except subprocess.TimeoutExpired:
-                    print('Disposable ARM VM progress probe timed out; installation deadline retained',flush=True)
+                    print('Disposable ARM VM progress probe timed out; command deadline retained',flush=True)
     finally:
         if process.poll() is None:
             process.terminate()
@@ -118,6 +118,11 @@ def main():
                       '-cpu','host' if accelerated else 'cortex-a72']
             qemu.extend(['-drive','if=pflash,format=raw,readonly=on,file=/usr/share/AAVMF/AAVMF_CODE.fd',
                          '-drive',f'if=pflash,format=raw,file={folder}/uefi-vars.fd'])
+            # Share only the explicit test payloads as read-only block devices.
+            # Large image transfers need no encrypted SSH stream under TCG.
+            for payload,label in [('image.tar','pve-image'),('guest.qcow2','pve-guest')]:
+                qemu.extend(['-drive',f'if=none,id={label},format=raw,readonly=on,file=/input/{payload}',
+                             '-device',f'virtio-blk-pci,drive={label},serial={label}'])
         process=None
         with (folder/'serial.log').open('wb') as serial:
             try:
@@ -148,11 +153,20 @@ def main():
                     # signed package indexes without refreshing GUI catalogues.
                     installation='rm -f /etc/apt/apt.conf.d/50appstream /etc/apt/apt.conf.d/50command-not-found /etc/apt/apt.conf.d/20packagekit; '+installation
                     installation=installation.replace('apt-get ', 'apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 -o Acquire::Languages=none ')
-                    monitor_installation(ssh,installation)
+                    monitor_command(ssh,installation,'Docker installation')
                 else:
                     run(ssh+[installation],timeout=1800)
-                run(scp+['/input/image.tar','/input/guest.qcow2','/checks/pve_container_runtime.py','root@127.0.0.1:/tmp/'],timeout=1800)
-                run(ssh+['docker load -i /tmp/image.tar'],timeout=600)
+                if arch=='arm64':
+                    print('Loading ARM test payloads from read-only virtio disks',flush=True)
+                    run(scp+['/checks/pve_container_runtime.py','root@127.0.0.1:/tmp/'],timeout=180)
+                    monitor_command(ssh,'test "$(blockdev --getro /dev/disk/by-id/virtio-pve-image)" = 1 && '
+                             'test "$(blockdev --getro /dev/disk/by-id/virtio-pve-guest)" = 1 && '
+                             'dd if=/dev/disk/by-id/virtio-pve-guest of=/tmp/guest.qcow2 bs=4M status=none && '
+                             'docker load -i /dev/disk/by-id/virtio-pve-image','image import')
+                else:
+                    run(scp+['/input/image.tar','/input/guest.qcow2','/checks/pve_container_runtime.py','root@127.0.0.1:/tmp/'],timeout=1800)
+                    run(ssh+['docker load -i /tmp/image.tar'],timeout=600)
+                print('PVE Docker image loaded in the disposable VM; starting runtime checks',flush=True)
                 command='python3 /tmp/pve_container_runtime.py '+shlex.quote(args.image)+' '+args.major+' /tmp/guest.qcow2'
                 run(ssh+[command],timeout=5400)
                 subprocess.run(ssh+['poweroff'],timeout=30,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
