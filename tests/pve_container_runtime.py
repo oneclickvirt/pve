@@ -130,7 +130,7 @@ def main():
             guest_path='/var/lib/vz/template/iso/runtime-guest.qcow2'
             dex('mkdir','-p','/var/lib/vz/template/iso')
             run(['docker','cp',str(args.guest),name+':'+guest_path])
-            cpu='max' if arm else ('Nehalem' if args.major=='7' else 'x86-64-v2-AES')
+            cpu='cortex-a72' if arm else ('Nehalem' if args.major=='7' else 'x86-64-v2-AES')
             arch_options=['--arch','aarch64'] if arm else []
             dex('qm','create',vmid,'--name','docker-smoke','--memory','1024','--cores','2','--kvm','0',
                 *arch_options,'--cpu',cpu,'--machine','virt' if arm else 'q35','--bios','ovmf',

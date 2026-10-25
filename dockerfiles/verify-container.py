@@ -20,6 +20,31 @@ def run(command, **kwargs):
     return subprocess.run(command, check=True, timeout=kwargs.pop('timeout',600),**kwargs)
 
 
+def monitor_installation(ssh, command):
+    """Report slow ARM TCG work without hiding a failed or stalled install."""
+    process=subprocess.Popen(ssh+[command])
+    deadline=time.monotonic()+1800
+    try:
+        while True:
+            try:
+                code=process.wait(timeout=min(60,max(1,deadline-time.monotonic())))
+                if code:raise subprocess.CalledProcessError(code,ssh+[command])
+                return
+            except subprocess.TimeoutExpired:
+                if time.monotonic()>=deadline:
+                    raise TimeoutError('Disposable VM Docker installation exceeded 30 minutes')
+                print('Disposable ARM VM installation progress:',flush=True)
+                try:
+                    subprocess.run(ssh+['ps -eo comm,pcpu,etime,wchan:24 --sort=-pcpu | head -15; free -m'],timeout=45,check=False)
+                except subprocess.TimeoutExpired:
+                    print('Disposable ARM VM progress probe timed out; installation deadline retained',flush=True)
+    finally:
+        if process.poll() is None:
+            process.terminate()
+            try:process.wait(timeout=10)
+            except subprocess.TimeoutExpired:process.kill();process.wait(timeout=10)
+
+
 def kvm_available():
     try:
         with open('/dev/kvm','rb') as device:
@@ -88,7 +113,9 @@ def main():
             shutil.copyfile('/usr/share/AAVMF/AAVMF_VARS.fd',folder/'uefi-vars.fd')
             qemu[:7]=['qemu-system-aarch64','-machine','virt,gic-version=3',
                       '-accel','kvm' if accelerated else 'tcg,thread=multi',
-                      '-cpu','host' if accelerated else 'max']
+                      # Avoid emulating SVE and other optional CPU features in
+                      # the software-only verifier. ARMv8 is sufficient here.
+                      '-cpu','host' if accelerated else 'cortex-a72']
             qemu.extend(['-drive','if=pflash,format=raw,readonly=on,file=/usr/share/AAVMF/AAVMF_CODE.fd',
                          '-drive',f'if=pflash,format=raw,file={folder}/uefi-vars.fd'])
         process=None
@@ -114,7 +141,12 @@ def main():
                 else:raise TimeoutError('Verification VM did not boot')
                 print('PVE verification VM ready; SSH host key verified',flush=True)
                 run(ssh+['cloud-init status --wait'],timeout=600)
-                run(ssh+['export DEBIAN_FRONTEND=noninteractive; apt-get update && apt-get install -y --no-install-recommends docker.io && modprobe -a fuse tun && test -c /dev/fuse && test -c /dev/net/tun'],timeout=1800)
+                installation='export DEBIAN_FRONTEND=noninteractive; apt-get update && apt-get install -y --no-install-recommends docker.io && modprobe -a fuse tun && test -c /dev/fuse && test -c /dev/net/tun'
+                if arch=='arm64':
+                    installation=installation.replace('apt-get ', 'apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 -o Acquire::Languages=none ')
+                    monitor_installation(ssh,installation)
+                else:
+                    run(ssh+[installation],timeout=1800)
                 run(scp+['/input/image.tar','/input/guest.qcow2','/checks/pve_container_runtime.py','root@127.0.0.1:/tmp/'],timeout=1800)
                 run(ssh+['docker load -i /tmp/image.tar'],timeout=600)
                 command='python3 /tmp/pve_container_runtime.py '+shlex.quote(args.image)+' '+args.major+' /tmp/guest.qcow2'
