@@ -96,6 +96,7 @@ if [[ "$architecture" == arm64 ]]; then
     cat > /etc/systemd/system/pveproxy.service.d/container-certificates.conf <<'EOF'
 [Service]
 ExecStartPre=
+ExecStartPre=-/usr/bin/pvecm updatecerts --silent
 ExecStartPre=/usr/local/sbin/pve-container-certificates
 TimeoutStartSec=180
 EOF
