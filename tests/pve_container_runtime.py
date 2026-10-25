@@ -62,12 +62,20 @@ def main():
     def dout(*command, **kwargs):
         return output(['docker','exec',name,*command],**kwargs)
     def wait_api(password):
-        deadline=time.monotonic()+300
+        services=['pve-cluster','pvedaemon','pveproxy','pvestatd','ssh']
+        deadline=time.monotonic()+900
         while time.monotonic()<deadline:
+            # A proxy worker can accept requests before systemd finishes the
+            # unit's startup hooks. Wait for every required service as well.
+            state=subprocess.run(['docker','exec',name,'systemctl','is-active',*services],
+                                 stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,text=True,timeout=30)
+            if state.stdout.split()!=['active']*len(services):
+                time.sleep(10)
+                continue
             result=subprocess.run(['docker','exec','-i',name,'python3','-c',API_CHECK],input=password,text=True,
                                   stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,timeout=20)
             if result.returncode==0 and result.stdout.strip()=='PAM_API_LOGIN_OK':return
-            time.sleep(3)
+            time.sleep(10)
         raise RuntimeError('PVE authenticated HTTPS API did not become ready')
     def wait_guest(previous=None):
         deadline=time.monotonic()+1800
@@ -151,6 +159,10 @@ def main():
                 print(console_path.read_text(errors='replace')[-6000:],flush=True)
             subprocess.run(['docker','logs','--tail','100',name],check=False)
             subprocess.run(['docker','exec',name,'systemctl','--failed','--no-pager'],check=False)
+            subprocess.run(['docker','exec',name,'systemctl','show','pve-cluster','pvedaemon','pveproxy',
+                            '-p','ActiveState','-p','SubState','-p','Result'],check=False)
+            subprocess.run(['docker','exec',name,'journalctl','--no-pager','-n','80',
+                            '-u','pve-cluster','-u','pvedaemon','-u','pveproxy'],check=False)
             raise
         finally:
             if console is not None and console.poll() is None:
