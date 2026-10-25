@@ -70,7 +70,7 @@ def main():
             time.sleep(3)
         raise RuntimeError('PVE authenticated HTTPS API did not become ready')
     def wait_guest(previous=None):
-        deadline=time.monotonic()+1200
+        deadline=time.monotonic()+1800
         while time.monotonic()<deadline:
             result=subprocess.run(['docker','exec',name,'qm','guest','exec',vmid,'--timeout','30','--',
                                    '/bin/sh','-c','test -r /etc/alpine-release && cat /proc/sys/kernel/random/boot_id'],
@@ -114,9 +114,10 @@ def main():
             guest_path='/var/lib/vz/template/iso/runtime-guest.qcow2'
             dex('mkdir','-p','/var/lib/vz/template/iso')
             run(['docker','cp',str(args.guest),name+':'+guest_path])
-            dex('qm','create',vmid,'--name','docker-smoke','--memory','512','--cores','1','--kvm','0',
+            dex('qm','create',vmid,'--name','docker-smoke','--memory','1024','--cores','2','--kvm','0',
                 '--cpu','x86-64-v2-AES','--machine','q35','--bios','ovmf',
                 '--efidisk0','local:1,efitype=4m,pre-enrolled-keys=0','--agent','enabled=1',
+                '--rng0','source=/dev/urandom',
                 '--net0','virtio,bridge=vmbr0','--serial0','socket','--vga','serial0')
             dex('qm','importdisk',vmid,guest_path,'local','--format','qcow2')
             config=dout('qm','config',vmid)

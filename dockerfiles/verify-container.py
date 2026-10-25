@@ -58,7 +58,9 @@ def main():
                  '-o','ServerAliveInterval=30','-o','ServerAliveCountMax=4']
         ssh=['ssh','-p',str(port)]+options+['root@127.0.0.1']
         scp=['scp','-P',str(port)]+options
-        qemu=['qemu-system-x86_64','-machine','q35','-accel','tcg,thread=multi','-cpu','max','-m','6144','-smp','4',
+        # Keep the software-emulated CPU at x86-64-v2. Advertising wide vector
+        # extensions makes nested QEMU and libc select expensive emulated code.
+        qemu=['qemu-system-x86_64','-machine','q35','-accel','tcg,thread=multi','-cpu','Nehalem','-m','6144','-smp','4',
               '-display','none','-serial','stdio','-no-reboot',
               '-drive',f'file={folder}/disk.qcow2,if=virtio,format=qcow2',
               '-drive',f'file={folder}/seed.img,if=virtio,format=raw,readonly=on',
@@ -81,7 +83,7 @@ def main():
                 run(scp+['/input/image.tar','/input/guest.qcow2','/checks/pve_container_runtime.py','root@127.0.0.1:/tmp/'],timeout=1800)
                 run(ssh+['docker load -i /tmp/image.tar'],timeout=600)
                 command='python3 /tmp/pve_container_runtime.py '+shlex.quote(args.image)+' '+args.major+' /tmp/guest.qcow2'
-                run(ssh+[command],timeout=3600)
+                run(ssh+[command],timeout=5400)
                 subprocess.run(ssh+['poweroff'],timeout=30,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
                 process.wait(timeout=180)
                 print('PVE_DOCKER_ISOLATED_VERIFICATION_COMPLETE major='+args.major,flush=True)
