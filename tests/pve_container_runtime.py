@@ -78,6 +78,8 @@ def main():
             if report:
                 print('PVE service readiness: '+json.dumps(dict(zip(services,state.stdout.split()))),flush=True)
                 reported=time.monotonic()
+                if arm:
+                    subprocess.run(['docker','exec',name,'journalctl','--no-pager','-n','20','-u','pveproxy'],timeout=30,check=False)
             if state.stdout.split()!=['active']*len(services):
                 time.sleep(10)
                 continue
@@ -108,7 +110,6 @@ def main():
                         stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,timeout=20)
                     print('PVE loopback TLS probe '+str(options)+': '+str(probe.returncode)+' '+
                           probe.stdout[-500:]+' '+probe.stderr[-2000:],flush=True)
-                subprocess.run(['docker','exec',name,'journalctl','--no-pager','-n','15','-u','pveproxy'],timeout=30,check=False)
             time.sleep(10)
         raise RuntimeError('PVE authenticated HTTPS API did not become ready')
     def wait_guest(previous=None):
