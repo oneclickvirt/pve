@@ -101,7 +101,7 @@ docker save "${release_images[@]}" | gzip -1 > "$work/pve${major}-amd64.tar.gz"
 python3 - "$work" "$major" "$version" "$source_sha" "$image_id" <<'PY'
 import hashlib,json,sys
 from pathlib import Path
-root=Path(sys.argv[1]);major,version,source=sys.argv[2:]
+root=Path(sys.argv[1]);major,version,source=sys.argv[2:5]
 image=root/f'pve{major}-amd64.tar.gz'
 with image.open('rb') as stream:digest=hashlib.file_digest(stream,'sha256').hexdigest()
 (root/'SHA256SUMS').write_text(digest+'  '+image.name+'\n')
