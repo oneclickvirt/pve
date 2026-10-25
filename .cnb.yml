@@ -1,0 +1,18 @@
+main:
+  push: &publish-cnb
+    - name: mirror-validated-pve-images
+      services:
+        - docker
+      docker:
+        image: cnbcool/default-build-env
+      stages:
+        - name: install registry copy tools
+          script: |
+            set -eu
+            apt-get update
+            apt-get install -y --no-install-recommends python3 skopeo
+        - name: copy validated Release images and verify CNB Docker pulls
+          script: python3 dockerfiles/publish-cnb.py
+          timeout: 2h
+  "crontab: 47 * * * *": *publish-cnb
+  web_trigger_publish_images: *publish-cnb
