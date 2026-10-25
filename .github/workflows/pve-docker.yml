@@ -1,4 +1,4 @@
-name: Build and validate modern PVE Docker images
+name: Build and validate PVE Docker images
 
 on:
   workflow_dispatch:
@@ -23,7 +23,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        major: ['8', '9']
+        major: ['7', '8', '9']
     steps:
       - name: Checkout source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -33,8 +33,15 @@ jobs:
       - name: Require hardware acceleration for the disposable verification VM
         run: test -c /dev/kvm
 
-      - name: Build, validate inside a disposable VM and publish GitHub Release
+      - name: Log in to Docker Hub
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Build, validate inside a disposable VM and publish Docker Hub and GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
           PUBLISH_RELEASE: 'true'
+          PUBLISH_DOCKERHUB: 'true'
         run: bash dockerfiles/build-modern.sh '${{ matrix.major }}'

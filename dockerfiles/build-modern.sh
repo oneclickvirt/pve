@@ -4,12 +4,15 @@ set -Eeuo pipefail
 ROOT_DIR=$(CDPATH= cd -- "$(dirname -- "$BASH_SOURCE")/.." && pwd)
 major=${1:-9}
 case "$major" in
+  7) debian=bullseye ;;
   8) debian=bookworm ;;
   9) debian=trixie ;;
-  *) echo 'Use PVE major version 8 or 9' >&2; exit 1 ;;
+  *) echo 'Use PVE major version 7, 8 or 9' >&2; exit 1 ;;
 esac
 publish=${PUBLISH_RELEASE:-false}
+publish_hub=${PUBLISH_DOCKERHUB:-false}
 [[ "$publish" == true || "$publish" == false ]] || { echo 'Invalid publication mode' >&2; exit 1; }
+[[ "$publish_hub" == true || "$publish_hub" == false ]] || { echo 'Invalid Docker Hub publication mode' >&2; exit 1; }
 if [[ "$publish" == true && -z "${GH_TOKEN:-${GITHUB_TOKEN:-}}" ]]; then
   echo 'GitHub Release publication requires a configured release credential' >&2
   exit 1
@@ -19,8 +22,17 @@ key=$(basename "$work" | tr '[:upper:]' '[:lower:]')
 image="oneclickvirt-pve-$key:$major"
 validator="oneclickvirt-pve-validator-$key:latest"
 container="pve-validator-$key"
+release_images=()
+previous_image_ids=()
 cleanup() {
   docker rm -f "$container" >/dev/null 2>&1 || true
+  for index in "${!release_images[@]}"; do
+    if [[ -n "${previous_image_ids[$index]:-}" ]]; then
+      docker tag "${previous_image_ids[$index]}" "${release_images[$index]}" >/dev/null 2>&1 || true
+    else
+      docker image rm "${release_images[$index]}" >/dev/null 2>&1 || true
+    fi
+  done
   docker image rm "$validator" "$image" >/dev/null 2>&1 || true
   rm -rf -- "$work"
 }
@@ -73,11 +85,20 @@ docker start -a "$container" | tee "$work/validation.log"
 }
 grep -q "PVE_DOCKER_ISOLATED_VERIFICATION_COMPLETE major=$major" "$work/validation.log"
 
-release_image="oneclickvirt/pve:$major"
-docker tag "$image" "$release_image"
-docker save "$release_image" | gzip -1 > "$work/pve${major}-amd64.tar.gz"
-docker image rm "$release_image" >/dev/null
-python3 - "$work" "$major" "$version" "$source_sha" <<'PY'
+image_id=$(docker image inspect --format '{{.Id}}' "$image")
+for reference in "spiritlhl/pve:$major" "spiritlhl/pve:${major}_x86_64" "oneclickvirt/pve:$major"; do
+  previous_image_ids+=("$(docker image inspect --format '{{.Id}}' "$reference" 2>/dev/null || true)")
+  release_images+=("$reference")
+  docker tag "$image" "$reference"
+done
+if [[ "$publish_hub" == true ]]; then
+  docker push "spiritlhl/pve:$major"
+  docker push "spiritlhl/pve:${major}_x86_64"
+  python3 "$ROOT_DIR/dockerfiles/verify-hub.py" "$image_id" "$work/dockerhub.json" \
+    "spiritlhl/pve:$major" "spiritlhl/pve:${major}_x86_64"
+fi
+docker save "${release_images[@]}" | gzip -1 > "$work/pve${major}-amd64.tar.gz"
+python3 - "$work" "$major" "$version" "$source_sha" "$image_id" <<'PY'
 import hashlib,json,sys
 from pathlib import Path
 root=Path(sys.argv[1]);major,version,source=sys.argv[2:]
@@ -85,7 +106,11 @@ image=root/f'pve{major}-amd64.tar.gz'
 with image.open('rb') as stream:digest=hashlib.file_digest(stream,'sha256').hexdigest()
 (root/'SHA256SUMS').write_text(digest+'  '+image.name+'\n')
 (root/'build.json').write_text(json.dumps({'pve_major':major,'pve_version':version,'source_sha':source,
-    'architecture':'amd64','image':'oneclickvirt/pve:'+major,'archive':image.name,'size':image.stat().st_size,
+    'architecture':'amd64','image':'spiritlhl/pve:'+major,
+    'image_aliases':['spiritlhl/pve:'+major+'_x86_64','oneclickvirt/pve:'+major],
+    'image_id':sys.argv[5],
+    'dockerhub':json.loads((root/'dockerhub.json').read_text()) if (root/'dockerhub.json').is_file() else [],
+    'archive':image.name,'size':image.stat().st_size,
     'sha256':digest,'validation':{'https_pam':True,'qm_boot_reboot':'tcg','container_restart':True,
     'password_change_persistent':True,'host_units_masked':True},'test_guest':json.loads((root/'guest.json').read_text())},indent=2)+'\n')
 PY

@@ -31,7 +31,7 @@ def kvm_available():
 
 def main():
     parser=argparse.ArgumentParser()
-    parser.add_argument('major',choices=['8','9']);parser.add_argument('image')
+    parser.add_argument('major',choices=['7','8','9']);parser.add_argument('image')
     args=parser.parse_args()
     if not Path('/.dockerenv').is_file():raise RuntimeError('Use the isolated VM launcher image')
     for path in ['/input/image.tar','/input/guest.qcow2']:

@@ -4,8 +4,8 @@ set -Eeuo pipefail
 major=${1:?PVE major version is required}
 . /etc/os-release
 case "$major:$VERSION_CODENAME:$(dpkg --print-architecture)" in
-    8:bookworm:amd64|9:trixie:amd64) ;;
-    *) echo 'Use Debian 12 for PVE 8 or Debian 13 for PVE 9 on amd64' >&2; exit 1 ;;
+    7:bullseye:amd64|8:bookworm:amd64|9:trixie:amd64) ;;
+    *) echo 'Use Debian 11/12/13 for PVE 7/8/9 respectively on amd64' >&2; exit 1 ;;
 esac
 export DEBIAN_FRONTEND=noninteractive
 printf '#!/bin/sh\nexit 101\n' > /usr/sbin/policy-rc.d
@@ -15,6 +15,7 @@ apt-get upgrade -y
 apt-get install -y --no-install-recommends ca-certificates curl gnupg systemd-sysv dbus openssh-server \
     iproute2 iputils-ping procps python3 locales
 case "$major" in
+    7) key=proxmox-release-bullseye.gpg ;;
     8) key=proxmox-release-bookworm.gpg ;;
     9) key=proxmox-archive-keyring-trixie.gpg ;;
 esac

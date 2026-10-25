@@ -50,7 +50,7 @@ while True:
 
 def main():
     p=argparse.ArgumentParser()
-    p.add_argument('image'); p.add_argument('major',choices=['8','9']); p.add_argument('guest',type=Path)
+    p.add_argument('image'); p.add_argument('major',choices=['7','8','9']); p.add_argument('guest',type=Path)
     args=p.parse_args()
     if not Path('/run/cnb-disposable-build').is_file():
         raise RuntimeError('Run this privileged test inside the disposable verification VM')
@@ -122,8 +122,9 @@ def main():
             guest_path='/var/lib/vz/template/iso/runtime-guest.qcow2'
             dex('mkdir','-p','/var/lib/vz/template/iso')
             run(['docker','cp',str(args.guest),name+':'+guest_path])
+            cpu='Nehalem' if args.major=='7' else 'x86-64-v2-AES'
             dex('qm','create',vmid,'--name','docker-smoke','--memory','1024','--cores','2','--kvm','0',
-                '--cpu','x86-64-v2-AES','--machine','q35','--bios','ovmf',
+                '--cpu',cpu,'--machine','q35','--bios','ovmf',
                 '--efidisk0','local:1,efitype=4m,pre-enrolled-keys=0','--agent','enabled=1',
                 '--rng0','source=/dev/urandom',
                 '--net0','virtio,bridge=vmbr0','--serial0','socket','--vga','serial0')
