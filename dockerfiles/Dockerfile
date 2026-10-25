@@ -10,11 +10,12 @@ RUN /usr/local/sbin/install-pve-container "$PVE_MAJOR" && rm /usr/local/sbin/ins
 # change the shared kernel or replace the host's binary format registrations.
 RUN systemctl mask systemd-binfmt.service systemd-udevd.service \
       systemd-udevd-control.socket systemd-udevd-kernel.socket \
-      systemd-sysctl.service systemd-modules-load.service
+      systemd-sysctl.service systemd-modules-load.service \
+      watchdog-mux.service pve-ha-lrm.service pve-ha-crm.service
 COPY container-entrypoint.sh /usr/local/sbin/pve-container-entrypoint
 STOPSIGNAL SIGRTMIN+3
 EXPOSE 22 8006
 HEALTHCHECK --interval=30s --timeout=10s --start-period=120s --retries=3 \
   CMD curl --fail --silent --show-error --cacert /etc/pve/pve-root-ca.pem \
-      --resolve "$(hostname):8006:127.0.0.1" "https://$(hostname):8006/api2/json/version" >/dev/null || exit 1
+      --resolve "$(hostname):8006:127.0.0.1" "https://$(hostname):8006/" >/dev/null || exit 1
 ENTRYPOINT ["/usr/local/sbin/pve-container-entrypoint"]

@@ -77,9 +77,13 @@ def main():
                  '--mount',f'type=bind,src={secret},dst=/run/secrets/pve-root,readonly',
                  '-e','PVE_ROOT_PASSWORD_FILE=/run/secrets/pve-root',args.image],stdout=subprocess.DEVNULL)
             wait_api(password)
+            print('PVE authenticated HTTPS/PAM API ready',flush=True)
+            dex('curl','--fail','--silent','--show-error','--cacert','/etc/pve/pve-root-ca.pem',
+                'https://'+name+':8006/',stdout=subprocess.DEVNULL)
             for service in ['pve-cluster','pvedaemon','pveproxy','pvestatd','ssh']:
                 dex('systemctl','is-active','--quiet',service)
-            for service in ['systemd-binfmt','systemd-udevd','systemd-sysctl','systemd-modules-load']:
+            for service in ['systemd-binfmt','systemd-udevd','systemd-sysctl','systemd-modules-load',
+                            'watchdog-mux','pve-ha-lrm','pve-ha-crm']:
                 assert dout('systemctl','show','-p','LoadState','--value',service+'.service')=='masked'
             version=dout('dpkg-query','-W','-f=${Version}','pve-manager')
             assert version.startswith(args.major+'.')
@@ -92,20 +96,24 @@ def main():
             dex('ip','link','add','vmbr0','type','bridge')
             dex('ip','addr','add','10.76.0.1/24','dev','vmbr0')
             dex('ip','link','set','vmbr0','up')
-            run(['docker','cp',str(args.guest),name+':/tmp/guest.qcow2'])
+            guest_path='/var/lib/vz/template/iso/runtime-guest.qcow2'
+            dex('mkdir','-p','/var/lib/vz/template/iso')
+            run(['docker','cp',str(args.guest),name+':'+guest_path])
             dex('qm','create',vmid,'--name','docker-smoke','--memory','512','--cores','1','--kvm','0',
                 '--cpu','x86-64-v2-AES','--machine','q35','--bios','ovmf',
                 '--efidisk0','local:1,efitype=4m,pre-enrolled-keys=0','--agent','enabled=1',
                 '--net0','virtio,bridge=vmbr0','--serial0','socket','--vga','serial0')
-            dex('qm','importdisk',vmid,'/tmp/guest.qcow2','local','--format','qcow2')
+            dex('qm','importdisk',vmid,guest_path,'local','--format','qcow2')
             config=dout('qm','config',vmid)
             volume=next(line.split(': ',1)[1] for line in config.splitlines() if line.startswith('unused0: '))
             dex('qm','set',vmid,'--virtio0',volume,'--boot','order=virtio0','--ide2','local:cloudinit',
                 '--ipconfig0','ip=10.76.0.2/24,gw=10.76.0.1','--nameserver','1.1.1.1')
             dex('qm','start',vmid)
+            print('PVE test VM started; waiting for the guest agent',flush=True)
             boot=wait_guest()
             dex('qm','reboot',vmid,'--timeout','120')
             wait_guest(boot)
+            print('PVE test VM boot and reboot verified',flush=True)
             dex('qm','stop',vmid)
             changed=secrets.token_urlsafe(24)
             run(['docker','exec','-i',name,'chpasswd'],input='root:'+changed+'\n',text=True)
