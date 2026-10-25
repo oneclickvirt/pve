@@ -131,7 +131,10 @@ def main():
         console_path=Path(folder)/'guest-console.log'
         console=None
         try:
-            run(['docker','run','-d','--name',name,'--hostname',name,'--privileged','--cgroupns=private',
+            # Do not inherit a cloud host's potentially overlong DNS suffix:
+            # PVE includes that suffix in its certificate common name (64 bytes).
+            run(['docker','run','-d','--name',name,'--hostname',name,'--dns-search=.',
+                 '--privileged','--cgroupns=private',
                  '--tmpfs','/run','--tmpfs','/run/lock','--tmpfs','/tmp',
                  '--mount',f'type=bind,src={secret},dst=/run/secrets/pve-root,readonly',
                  '-e','PVE_ROOT_PASSWORD_FILE=/run/secrets/pve-root',args.image],stdout=subprocess.DEVNULL)
