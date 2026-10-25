@@ -3,6 +3,7 @@
 
 import hashlib
 import json
+import os
 import re
 import subprocess
 import time
@@ -77,6 +78,17 @@ def unchanged(reference, target):
     return result.returncode == 0 and "sha256:" + hashlib.sha256(result.stdout).hexdigest() == target["digest"]
 
 
+def verify_docker_image(actual, target, destination):
+    # Docker's classic store identifies an image by its config digest; the
+    # containerd store may report its manifest digest instead. Require the
+    # same pulled repository digest and platform in either case.
+    if ((actual.get("Os"), actual.get("Architecture")) != ("linux", target["architecture"])
+            or actual.get("Id") not in (target["image_id"], target["digest"])
+            or destination.rsplit(":", 1)[0] + "@" + target["digest"] not in actual.get("RepoDigests", [])):
+        summary = {key: actual.get(key) for key in ("Id", "Os", "Architecture", "RepoDigests")}
+        raise ValueError("Docker pull differs from validated image: " + json.dumps(summary))
+
+
 def main():
     # Check every source before changing any destination tag. A failed or
     # incomplete upstream publication must not become a new CNB image.
@@ -85,19 +97,20 @@ def main():
     for target in targets:
         inspect(target["source"], target)
     for target in targets:
-        if all(unchanged(DESTINATION + ":" + tag, target) for tag in target["tags"]):
+        current = all(unchanged(DESTINATION + ":" + tag, target) for tag in target["tags"])
+        if current:
             print("Unchanged: " + ", ".join(DESTINATION + ":" + tag for tag in target["tags"]), flush=True)
-            continue
-        for tag in target["tags"]:
+        for tag in ([] if current else target["tags"]):
             destination = DESTINATION + ":" + tag
             subprocess.run(["skopeo", "copy", "--retry-times", "4", "--preserve-digests",
                             "docker://" + target["source"], "docker://" + destination], check=True)
             inspect(destination, target)
+        if current and os.environ.get("CNB_VERIFY_PULLS") != "true":
+            continue
         destination = DESTINATION + ":" + target["tags"][0]
         subprocess.run(["docker", "pull", "--platform=linux/" + target["architecture"], destination], check=True)
         actual = json.loads(subprocess.check_output(["docker", "image", "inspect", destination]))[0]
-        if (actual["Id"], actual["Os"], actual["Architecture"]) != (target["image_id"], "linux", target["architecture"]):
-            raise ValueError("Docker pull did not return the validated image: " + destination)
+        verify_docker_image(actual, target, destination)
         print(json.dumps({"image": destination, "tags": target["tags"], "digest": target["digest"],
                           "image_id": target["image_id"], "architecture": target["architecture"],
                           "docker_pull_verified": True}), flush=True)

@@ -9,6 +9,20 @@ spec.loader.exec_module(publication)
 
 
 class PublicationBoundaryTests(unittest.TestCase):
+    def test_classic_and_containerd_docker_stores(self):
+        target = publication.validated_target(self.metadata(), "9", "arm64")
+        destination = publication.DESTINATION + ":9_aarch64"
+        actual = {"Id": target["image_id"], "Os": "linux", "Architecture": "arm64",
+                  "RepoDigests": [publication.DESTINATION + "@" + target["digest"]]}
+        publication.verify_docker_image(actual, target, destination)
+        actual["Id"] = target["digest"]
+        publication.verify_docker_image(actual, target, destination)
+        for key, value in (("Id", "sha256:" + "c" * 64), ("Architecture", "amd64"), ("RepoDigests", [])):
+            bad = dict(actual)
+            bad[key] = value
+            with self.subTest(field=key), self.assertRaises(ValueError):
+                publication.verify_docker_image(bad, target, destination)
+
     def metadata(self):
         return {"pve_major": "9", "architecture": "arm64", "image": "spiritlhl/pve:9_aarch64",
                 "image_id": "sha256:" + "a" * 64,

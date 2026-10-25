@@ -1,6 +1,9 @@
 main:
   push: &publish-cnb
-    - name: mirror-validated-pve-images
+    - &mirror-job
+      name: mirror-validated-pve-images
+      env:
+        CNB_VERIFY_PULLS: "true"
       services:
         - docker
       docker:
@@ -14,5 +17,8 @@ main:
         - name: copy validated Release images and verify CNB Docker pulls
           script: python3 dockerfiles/publish-cnb.py
           timeout: 2h
-  "crontab: 47 * * * *": *publish-cnb
+  "crontab: 47 * * * *":
+    - <<: *mirror-job
+      env:
+        CNB_VERIFY_PULLS: "false"
   web_trigger_publish_images: *publish-cnb
