@@ -26,11 +26,12 @@ import socket,sys
 host=socket.gethostname()
 base='https://'+host+':8006/api2/json'
 context=ssl.create_default_context(cafile='/etc/pve/pve-root-ca.pem')
+opener=urllib.request.build_opener(urllib.request.ProxyHandler({}),urllib.request.HTTPSHandler(context=context))
 body=urllib.parse.urlencode({'username':'root@pam','password':sys.stdin.read().strip()}).encode()
-with urllib.request.urlopen(urllib.request.Request(base+'/access/ticket',data=body),context=context,timeout=10) as r:
+with opener.open(urllib.request.Request(base+'/access/ticket',data=body),timeout=10) as r:
     ticket=json.load(r)['data']['ticket']
 request=urllib.request.Request(base+'/nodes/'+host+'/status',headers={'Cookie':'PVEAuthCookie='+ticket})
-with urllib.request.urlopen(request,context=context,timeout=10) as r:
+with opener.open(request,timeout=10) as r:
     assert json.load(r)['data']['uptime'] >= 0
 print('PAM_API_LOGIN_OK')
 '''
@@ -87,6 +88,15 @@ def main():
                 # urllib errors contain endpoint/certificate diagnostics, not
                 # the password supplied separately through standard input.
                 print('PVE HTTPS readiness: '+result.stderr[-1500:],flush=True)
+                for options in [[],['--tls-max','1.2']]:
+                    probe=subprocess.run(['docker','exec',name,'curl','--noproxy','*','--verbose',
+                        '--connect-timeout','3','--max-time','10','--cacert','/etc/pve/pve-root-ca.pem',
+                        '--resolve',name+':8006:127.0.0.1',*options,
+                        'https://'+name+':8006/api2/json/version'],
+                        stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,timeout=20)
+                    print('PVE loopback TLS probe '+str(options)+': '+str(probe.returncode)+' '+
+                          probe.stdout[-500:]+' '+probe.stderr[-2000:],flush=True)
+                subprocess.run(['docker','exec',name,'journalctl','--no-pager','-n','15','-u','pveproxy'],timeout=30,check=False)
             time.sleep(10)
         raise RuntimeError('PVE authenticated HTTPS API did not become ready')
     def wait_guest(previous=None):
