@@ -92,6 +92,12 @@ Path('/usr/share/pve-container/build-info.json').write_text(json.dumps(dict(
     packages=packages),indent=2)+'\n')
 PY
 if [[ "$architecture" == arm64 ]]; then
+    # Older PXVIRT CA generators omit keyCertSign, rejected by Python 3.13+
+    # and other clients using strict X.509 validation. Only future CA creation
+    # is amended; existing cluster certificates are never replaced here.
+    if [[ "$major" == 9 ]]; then
+        python3 /usr/local/lib/pve-container/patch-arm-ca.py /usr/share/perl5/PVE/Cluster/Setup.pm
+    fi
     mkdir -p /etc/systemd/system/pveproxy.service.d
     cat > /etc/systemd/system/pveproxy.service.d/container-certificates.conf <<'EOF'
 [Service]
