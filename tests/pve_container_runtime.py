@@ -67,17 +67,26 @@ def main():
     def wait_api(password):
         services=['pve-cluster','pvedaemon','pveproxy','pvestatd','ssh']
         deadline=time.monotonic()+900
+        reported=0
         while time.monotonic()<deadline:
             # A proxy worker can accept requests before systemd finishes the
             # unit's startup hooks. Wait for every required service as well.
             state=subprocess.run(['docker','exec',name,'systemctl','is-active',*services],
                                  stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,text=True,timeout=30)
+            report=time.monotonic()-reported>=60
+            if report:
+                print('PVE service readiness: '+json.dumps(dict(zip(services,state.stdout.split()))),flush=True)
+                reported=time.monotonic()
             if state.stdout.split()!=['active']*len(services):
                 time.sleep(10)
                 continue
             result=subprocess.run(['docker','exec','-i',name,'python3','-c',API_CHECK],input=password,text=True,
-                                  stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,timeout=20)
+                                  stdout=subprocess.PIPE,stderr=subprocess.PIPE,timeout=20)
             if result.returncode==0 and result.stdout.strip()=='PAM_API_LOGIN_OK':return
+            if report:
+                # urllib errors contain endpoint/certificate diagnostics, not
+                # the password supplied separately through standard input.
+                print('PVE HTTPS readiness: '+result.stderr[-1500:],flush=True)
             time.sleep(10)
         raise RuntimeError('PVE authenticated HTTPS API did not become ready')
     def wait_guest(previous=None):
