@@ -16,8 +16,14 @@ case "$major" in
 esac
 publish=${PUBLISH_RELEASE:-false}
 publish_hub=${PUBLISH_DOCKERHUB:-false}
+candidate_dir=${PVE_CANDIDATE_DIR:-}
 [[ "$publish" == true || "$publish" == false ]] || { echo 'Invalid publication mode' >&2; exit 1; }
 [[ "$publish_hub" == true || "$publish_hub" == false ]] || { echo 'Invalid Docker Hub publication mode' >&2; exit 1; }
+if [[ -n "$candidate_dir" ]]; then
+  [[ "$architecture" == arm64 && "$publish" == false && "$publish_hub" == false ]] || {
+    echo 'Candidate preparation is ARM64-only and cannot publish' >&2; exit 1;
+  }
+fi
 if [[ "$publish" == true && -z "${GH_TOKEN:-${GITHUB_TOKEN:-}}" ]]; then
   echo 'GitHub Release publication requires a configured release credential' >&2
   exit 1
@@ -85,6 +91,11 @@ if path.stat().st_size!=asset['size'] or 'sha256:'+digest.hexdigest()!=asset['di
     raise RuntimeError('Runtime test guest checksum mismatch')
 path.with_suffix('.json').write_text(json.dumps({'id':asset['id'],'name':asset['name'],'sha256':digest.hexdigest()},indent=2)+'\n')
 PY
+
+if [[ -n "$candidate_dir" ]]; then
+  python3 "$ROOT_DIR/dockerfiles/arm64-candidate.py" prepare "$work" "$major" "$image" "$candidate_dir"
+  exit 0
+fi
 
 docker build --pull -t "$validator" -f "$ROOT_DIR/dockerfiles/runtime-vm.Dockerfile" "$ROOT_DIR"
 # CNB's Docker daemon uses a separate filesystem. Copy explicit inputs instead
