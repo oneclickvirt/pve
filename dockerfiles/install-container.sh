@@ -91,6 +91,15 @@ Path('/usr/share/pve-container/build-info.json').write_text(json.dumps(dict(
     distribution=sys.argv[1],repository=sys.argv[2],suite=sys.argv[3],architecture=sys.argv[4],
     packages=packages),indent=2)+'\n')
 PY
+if [[ "$architecture" == arm64 ]]; then
+    mkdir -p /etc/systemd/system/pveproxy.service.d
+    cat > /etc/systemd/system/pveproxy.service.d/container-certificates.conf <<'EOF'
+[Service]
+ExecStartPre=
+ExecStartPre=/usr/local/sbin/pve-container-certificates
+TimeoutStartSec=180
+EOF
+fi
 systemctl enable pve-cluster pvedaemon pveproxy pvestatd ssh
 passwd -l root
 rm -f /etc/ssh/ssh_host_*_key /etc/ssh/ssh_host_*_key.pub /etc/machine-id /usr/sbin/policy-rc.d

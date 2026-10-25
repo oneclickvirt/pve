@@ -4,6 +4,7 @@ FROM ${DEBIAN_REGISTRY}/debian:${DEBIAN_RELEASE}
 
 ARG PVE_MAJOR=9
 ENV container=docker
+COPY --chmod=755 container-certificates.sh /usr/local/sbin/pve-container-certificates
 COPY install-container.sh /usr/local/sbin/install-pve-container
 RUN /usr/local/sbin/install-pve-container "$PVE_MAJOR" && rm /usr/local/sbin/install-pve-container
 # Docker supplies devices and kernel settings. Do not let container services
