@@ -62,7 +62,3 @@ VPS融合怪测评脚本
 https://github.com/oneclickvirt/ecs
 
 https://github.com/spiritLHLS/ecs
-
-### 不创建入站端口映射
-
-`buildct.sh`、`buildvm.sh` 的 SSH、HTTP、HTTPS、端口范围起止五个端口参数均设为 `0`，即可只保留内网地址和出网能力，不创建入站端口映射。此时通过宿主机或可达内网连接实例的 SSH 22 端口。端口映射写入失败会使脚本报错，避免把不可连接的实例报告为成功。
