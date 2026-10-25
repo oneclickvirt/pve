@@ -49,7 +49,8 @@ else
         "$repository" "$VERSION_CODENAME" > /etc/apt/sources.list.d/pve-container.list
 fi
 apt-get update -o APT::Update::Error-Mode=any -o Acquire::Retries=3
-if [[ "$architecture:$major" == arm64:8 ]] && ! apt-cache show python3-virt-firmware >/dev/null 2>&1; then
+firmware_candidate=$(LC_ALL=C apt-cache policy python3-virt-firmware | awk '/Candidate:/{print $2}')
+if [[ "$architecture:$major" == arm64:8 && ( -z "$firmware_candidate" || "$firmware_candidate" == '(none)' ) ]]; then
     # PXVIRT's newest bookworm qemu-server requires an unavailable dependency.
     # Select the newest fully installable ARM package without bypassing dpkg.
     compatible=
