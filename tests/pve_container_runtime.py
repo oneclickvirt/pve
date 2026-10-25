@@ -88,6 +88,18 @@ def main():
                 # urllib errors contain endpoint/certificate diagnostics, not
                 # the password supplied separately through standard input.
                 print('PVE HTTPS readiness: '+result.stderr[-1500:],flush=True)
+                if arm:
+                    for command in [
+                        ['ls','-ld','/etc/pve/local','/etc/pve/local/pve-ssl.pem','/etc/pve/local/pve-ssl.key'],
+                        ['openssl','x509','-in','/etc/pve/local/pve-ssl.pem','-noout','-subject','-issuer'],
+                        ['openssl','pkey','-in','/etc/pve/local/pve-ssl.key','-check','-noout'],
+                        ['openssl','verify','-CAfile','/etc/pve/pve-root-ca.pem','/etc/pve/local/pve-ssl.pem'],
+                        ['runuser','-u','www-data','--','test','-r','/etc/pve/local/pve-ssl.key'],
+                    ]:
+                        diagnostic=subprocess.run(['docker','exec',name,*command],stdout=subprocess.PIPE,
+                                                  stderr=subprocess.STDOUT,text=True,timeout=30)
+                        print('PVE certificate check '+json.dumps(command)+': '+str(diagnostic.returncode)+' '+
+                              diagnostic.stdout[-2000:],flush=True)
                 for options in [[],['--tls-max','1.2']]:
                     probe=subprocess.run(['docker','exec',name,'curl','--noproxy','*','--verbose',
                         '--connect-timeout','3','--max-time','10','--cacert','/etc/pve/pve-root-ca.pem',
