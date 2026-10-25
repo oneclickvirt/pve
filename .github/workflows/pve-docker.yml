@@ -1,0 +1,40 @@
+name: Build and validate modern PVE Docker images
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '15 4 * * 1'
+
+permissions:
+  contents: write
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+concurrency:
+  group: pve-docker-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build-validate-publish:
+    if: github.repository == 'oneclickvirt/pve' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        major: ['8', '9']
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Require hardware acceleration for the disposable verification VM
+        run: test -c /dev/kvm
+
+      - name: Build, validate inside a disposable VM and publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PUBLISH_RELEASE: 'true'
+        run: bash dockerfiles/build-modern.sh '${{ matrix.major }}'

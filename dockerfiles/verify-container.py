@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Boot a disposable amd64 VM; never run privileged PVE on the build host."""
 import argparse
+import fcntl
 import hashlib
 import json
 import os
@@ -16,6 +17,16 @@ import uuid
 
 def run(command, **kwargs):
     return subprocess.run(command, check=True, timeout=kwargs.pop('timeout',600),**kwargs)
+
+
+def kvm_available():
+    try:
+        with open('/dev/kvm','rb') as device:
+            descriptor=fcntl.ioctl(device,0xAE01,0)
+            os.close(descriptor)
+        return True
+    except OSError:
+        return False
 
 
 def main():
@@ -58,9 +69,13 @@ def main():
                  '-o','ServerAliveInterval=30','-o','ServerAliveCountMax=4']
         ssh=['ssh','-p',str(port)]+options+['root@127.0.0.1']
         scp=['scp','-P',str(port)]+options
-        # Keep the software-emulated CPU at x86-64-v2. Advertising wide vector
-        # extensions makes nested QEMU and libc select expensive emulated code.
-        qemu=['qemu-system-x86_64','-machine','q35','-accel','tcg,thread=multi','-cpu','Nehalem','-m','6144','-smp','4',
+        accelerated=kvm_available()
+        print('Disposable verification VM acceleration='+('kvm' if accelerated else 'tcg'),flush=True)
+        # Only the outer disposable VM uses KVM. The PVE-managed guest still
+        # uses TCG, so the same VM boot/reboot assertions run in either mode.
+        # Keep the TCG CPU at x86-64-v2 to avoid wide-vector emulation costs.
+        qemu=['qemu-system-x86_64','-machine','q35','-accel','kvm' if accelerated else 'tcg,thread=multi',
+              '-cpu','host' if accelerated else 'Nehalem','-m','4096' if accelerated else '6144','-smp','2' if accelerated else '4',
               '-display','none','-serial','stdio','-no-reboot',
               '-drive',f'file={folder}/disk.qcow2,if=virtio,format=qcow2',
               '-drive',f'file={folder}/seed.img,if=virtio,format=raw,readonly=on',
