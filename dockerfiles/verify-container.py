@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 import shlex
+import shutil
 import socket
 import subprocess
 import tempfile
@@ -29,7 +30,11 @@ def main():
         filename='noble-server-cloudimg-amd64.img'
         base='https://cloud-images.ubuntu.com/noble/current/'
         for name in [filename,'SHA256SUMS']:
-            run(['curl','-fLsS','--retry','3','--connect-timeout','20','--max-time','1200',base+name,'-o',str(folder/name)],timeout=1500)
+            cached=Path('/input')/name
+            if cached.is_file():
+                shutil.copyfile(cached,folder/name)
+            else:
+                run(['curl','-fLsS','--retry','3','--connect-timeout','20','--max-time','1200',base+name,'-o',str(folder/name)],timeout=1500)
         hashes=[line.split()[0] for line in (folder/'SHA256SUMS').read_text().splitlines()
                 if len(line.split())==2 and line.split()[1].lstrip('*./')==filename]
         with (folder/filename).open('rb') as handle:actual=hashlib.file_digest(handle,'sha256').hexdigest()
