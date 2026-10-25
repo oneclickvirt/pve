@@ -152,6 +152,12 @@ def main():
             assert dout('dpkg','--print-architecture')==architecture
             build_info=json.loads(dout('cat','/usr/share/pve-container/build-info.json'))
             assert build_info['distribution']==('pxvirt' if arm else 'proxmox-ve')
+            if arm:
+                sources=dout('cat','/etc/apt/sources.list.d/pve-container.list')
+                assert 'signed-by=/usr/share/keyrings/proxmox-container.gpg' in sources
+                assert build_info['repository']+' '+build_info['suite']+' main' in sources
+                dex('apt-get','update','-o','APT::Update::Error-Mode=any','-o','Acquire::Retries=3',timeout=300)
+                print('PVE signed APT sources updated successfully',flush=True)
             ca=dout('sha256sum','/etc/pve/pve-root-ca.pem').split()[0]
             storages=json.loads(dout('pvesh','get','/storage','--output-format','json'))
             content='images,rootdir,vztmpl,iso,backup'+(',snippets' if arm else '')
@@ -214,7 +220,8 @@ def main():
             print('PVE_DOCKER_RUNTIME_OK '+json.dumps({'major':args.major,'version':version,'architecture':architecture,
                   'distribution':build_info['distribution'],
                   'https_pam':True,'qm_boot_reboot':'tcg','container_restart':True,
-                  'password_change_persistent':True,'host_units_masked':True}),flush=True)
+                  'password_change_persistent':True,'host_units_masked':True,
+                  **({'apt_update':True} if arm else {})}),flush=True)
         except BaseException:
             if console_path.is_file():
                 print('PVE test guest console (last 6000 characters):',flush=True)

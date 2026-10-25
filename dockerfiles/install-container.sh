@@ -74,6 +74,12 @@ if [[ "$major" == 7 ]]; then
     touch /proxmox_install_mode
 fi
 apt-get install -y --no-install-recommends pve-manager
+if [[ "$architecture" == arm64 ]]; then
+    # PXVIRT's manager package adds an unscoped, hard-coded bookworm source,
+    # including on trixie. Keep only the signed source selected above.
+    rm -f /etc/apt/sources.list.d/pxvirt-sources.list
+    apt-get update -o APT::Update::Error-Mode=any -o Acquire::Retries=3
+fi
 if [[ "$major" == 7 ]]; then
     rm -f /proxmox_install_mode /tmp/.ifupdown2-first-install
 fi

@@ -14,7 +14,7 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 FILES = ('image.tar', 'guest.qcow2', 'packages.json', 'guest.json')
 CHECKS = {'https_pam': True, 'qm_boot_reboot': 'tcg', 'container_restart': True,
-          'password_change_persistent': True, 'host_units_masked': True}
+          'password_change_persistent': True, 'host_units_masked': True, 'apt_update': True}
 
 
 def output(command):
