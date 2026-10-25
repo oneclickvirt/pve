@@ -96,10 +96,20 @@ def main():
             try:
                 process=subprocess.Popen(qemu,stdout=serial,stderr=subprocess.STDOUT)
                 deadline=time.monotonic()+1200
+                reported=time.monotonic()
                 while time.monotonic()<deadline:
                     if process.poll() is not None:raise RuntimeError('Verification VM stopped before SSH')
-                    result=subprocess.run(ssh+['test -f /run/cnb-disposable-build'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,timeout=20)
-                    if result.returncode==0:break
+                    try:
+                        result=subprocess.run(ssh+['test -f /run/cnb-disposable-build'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,timeout=20)
+                        if result.returncode==0:break
+                    except subprocess.TimeoutExpired:
+                        # Under TCG, SSH can accept TCP before it can finish a
+                        # handshake. Keep the overall boot deadline and pinned
+                        # host-key check; a single slow probe is not a boot failure.
+                        pass
+                    if time.monotonic()-reported>=60:
+                        print('Waiting for disposable '+arch+' VM:\n'+(folder/'serial.log').read_text(errors='replace')[-1500:],flush=True)
+                        reported=time.monotonic()
                     time.sleep(5)
                 else:raise TimeoutError('Verification VM did not boot')
                 print('PVE verification VM ready; SSH host key verified',flush=True)
