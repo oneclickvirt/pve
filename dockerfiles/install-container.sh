@@ -103,6 +103,27 @@ if [[ "$architecture" == arm64 ]]; then
     # is amended; existing cluster certificates are never replaced here.
     if [[ "$major" == 9 ]]; then
         python3 /usr/local/lib/pve-container/patch-arm-ca.py /usr/share/perl5/PVE/Cluster/Setup.pm
+        # Debian's ARM rrdcached package only supplies a SysV init script.
+        # Use its default paths/options in a native unit for container boots.
+        if [[ ! -f /usr/lib/systemd/system/rrdcached.service ]]; then
+            cat > /etc/systemd/system/rrdcached.service <<'EOF'
+[Unit]
+Description=RRD cache daemon
+After=local-fs.target
+Before=pve-cluster.service
+
+[Service]
+Type=forking
+PIDFile=/run/rrdcached.pid
+ExecStartPre=/usr/bin/install -d /var/lib/rrdcached/db /var/lib/rrdcached/journal
+ExecStart=/usr/bin/rrdcached -B -b /var/lib/rrdcached/db/ -j /var/lib/rrdcached/journal/ -p /run/rrdcached.pid -l unix:/run/rrdcached.sock
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
+EOF
+            systemctl enable rrdcached
+        fi
     fi
     mkdir -p /etc/systemd/system/pveproxy.service.d
     cat > /etc/systemd/system/pveproxy.service.d/container-certificates.conf <<'EOF'

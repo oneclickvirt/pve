@@ -36,6 +36,14 @@ with opener.open(request,timeout=10) as r:
 print('PAM_API_LOGIN_OK')
 '''
 
+RRD_CHECK = API_CHECK + '''request=urllib.request.Request(
+    base+'/nodes/'+host+'/rrddata?timeframe=hour',headers={'Cookie':'PVEAuthCookie='+ticket})
+with opener.open(request,timeout=20) as r:
+    points=json.load(r)['data']
+assert any(isinstance(point.get('cpu'),(int,float)) for point in points), 'No recorded CPU history'
+print('PVE_RRD_HISTORY_OK')
+'''
+
 GUEST_CONSOLE = '''import socket
 s=socket.socket(socket.AF_UNIX,socket.SOCK_STREAM)
 s.settimeout(10)
@@ -67,6 +75,7 @@ def main():
         return output(['docker','exec',name,*command],**kwargs)
     def wait_api(password):
         services=['pve-cluster','pvedaemon','pveproxy','pvestatd','ssh']
+        if arm:services.append('rrdcached')
         deadline=time.monotonic()+900
         reported=0
         while time.monotonic()<deadline:
@@ -214,6 +223,8 @@ def main():
             run(['docker','exec','-i',name,'chpasswd'],input='root:'+changed+'\n',text=True)
             run(['docker','restart',name],stdout=subprocess.DEVNULL)
             wait_api(changed)
+            if arm:
+                run(['docker','exec','-i',name,'python3','-c',RRD_CHECK],input=changed,text=True)
             assert ca==dout('sha256sum','/etc/pve/pve-root-ca.pem').split()[0]
             assert 'name: docker-smoke' in dout('qm','config',vmid)
             dex('qm','destroy',vmid,'--purge','1')
@@ -221,7 +232,7 @@ def main():
                   'distribution':build_info['distribution'],
                   'https_pam':True,'qm_boot_reboot':'tcg','container_restart':True,
                   'password_change_persistent':True,'host_units_masked':True,
-                  **({'apt_update':True} if arm else {})}),flush=True)
+                  **({'apt_update':True,'rrd_history':True} if arm else {})}),flush=True)
         except BaseException:
             if console_path.is_file():
                 print('PVE test guest console (last 6000 characters):',flush=True)

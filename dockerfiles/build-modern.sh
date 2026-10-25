@@ -153,7 +153,8 @@ with image.open('rb') as stream:digest=hashlib.file_digest(stream,'sha256').hexd
     'dockerhub':json.loads((root/'dockerhub.json').read_text()) if (root/'dockerhub.json').is_file() else [],
     'archive':image.name,'size':image.stat().st_size,
     'sha256':digest,'validation':{'https_pam':True,'qm_boot_reboot':'tcg','container_restart':True,
-    'password_change_persistent':True,'host_units_masked':True,**({'apt_update':True} if architecture=='arm64' else {})},
+    'password_change_persistent':True,'host_units_masked':True,
+    **({'apt_update':True,'rrd_history':True} if architecture=='arm64' else {})},
     'test_guest':json.loads((root/'guest.json').read_text())},indent=2)+'\n')
 PY
 if [[ "$publish" == true ]]; then
