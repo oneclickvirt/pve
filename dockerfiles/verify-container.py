@@ -143,6 +143,10 @@ def main():
                 run(ssh+['cloud-init status --wait'],timeout=600)
                 installation='export DEBIAN_FRONTEND=noninteractive; apt-get update && apt-get install -y --no-install-recommends docker.io && modprobe -a fuse tun && test -c /dev/fuse && test -c /dev/net/tun'
                 if arch=='arm64':
+                    # These desktop catalogue hooks dominate apt update under
+                    # TCG. Only this disposable VM needs Docker; retain normal
+                    # signed package indexes without refreshing GUI catalogues.
+                    installation='rm -f /etc/apt/apt.conf.d/50appstream /etc/apt/apt.conf.d/50command-not-found /etc/apt/apt.conf.d/20packagekit; '+installation
                     installation=installation.replace('apt-get ', 'apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 -o Acquire::Languages=none ')
                     monitor_installation(ssh,installation)
                 else:
