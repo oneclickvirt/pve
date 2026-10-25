@@ -2,6 +2,12 @@ name: Build and validate PVE Docker images
 
 on:
   workflow_dispatch:
+    inputs:
+      version:
+        description: PVE version to build and publish
+        type: choice
+        default: all
+        options: ['all', '7', '8', '9']
   schedule:
     - cron: '15 4 * * 1'
 
@@ -11,10 +17,6 @@ permissions:
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
-concurrency:
-  group: pve-docker-${{ github.ref }}
-  cancel-in-progress: false
-
 jobs:
   build-validate-publish:
     if: github.repository == 'oneclickvirt/pve' && github.ref == 'refs/heads/main'
@@ -23,7 +25,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        major: ['7', '8', '9']
+        major: ${{ fromJSON(inputs.version == '7' && '["7"]' || inputs.version == '8' && '["8"]' || inputs.version == '9' && '["9"]' || '["7","8","9"]') }}
+    concurrency:
+      group: pve-docker-${{ github.ref }}-${{ matrix.major }}
+      cancel-in-progress: false
     steps:
       - name: Checkout source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

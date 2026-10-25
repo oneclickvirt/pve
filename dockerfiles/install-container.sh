@@ -8,6 +8,14 @@ case "$major:$VERSION_CODENAME:$(dpkg --print-architecture)" in
     *) echo 'Use Debian 11/12/13 for PVE 7/8/9 respectively on amd64' >&2; exit 1 ;;
 esac
 export DEBIAN_FRONTEND=noninteractive
+if [[ "$major" == 7 ]]; then
+    # Debian 11 security packages moved to the signed Debian archive after LTS.
+    # Keep APT signature and package checksum verification enabled.
+    for source_list in /etc/apt/sources.list /etc/apt/sources.list.d/*.list /etc/apt/sources.list.d/*.sources; do
+        [[ -f "$source_list" ]] || continue
+        sed -E -i 's#https?://(deb|security)\.debian\.org/debian-security#http://archive.debian.org/debian-security#g' "$source_list"
+    done
+fi
 printf '#!/bin/sh\nexit 101\n' > /usr/sbin/policy-rc.d
 chmod 755 /usr/sbin/policy-rc.d
 apt-get update
