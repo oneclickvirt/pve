@@ -55,12 +55,18 @@ path.with_suffix('.json').write_text(json.dumps({'id':asset['id'],'name':asset['
 PY
 
 docker build --pull -t "$validator" -f "$ROOT_DIR/dockerfiles/runtime-vm.Dockerfile" "$ROOT_DIR"
-# No privileged flag, host mounts, host network, Docker socket or credentials
-# enter the launcher. Privileged PVE runs only inside its disposable QEMU VM.
-docker run --name "$container" --rm \
-  --mount "type=bind,src=$work/image.tar,dst=/input/image.tar,readonly" \
-  --mount "type=bind,src=$work/guest.qcow2,dst=/input/guest.qcow2,readonly" \
-  "$validator" "$major" "$image" | tee "$work/validation.log"
+# CNB's Docker daemon uses a separate filesystem. Copy explicit inputs instead
+# of binding paths from the publisher's filesystem into the Docker service.
+# No privileged flag, host network, Docker socket or credentials enter the
+# launcher. Privileged PVE runs only inside its disposable QEMU VM.
+docker create --name "$container" "$validator" "$major" "$image" >/dev/null
+docker cp "$work/image.tar" "$container:/input/image.tar"
+docker cp "$work/guest.qcow2" "$container:/input/guest.qcow2"
+docker start -a "$container" | tee "$work/validation.log"
+[[ "$(docker inspect --format '{{.State.ExitCode}}' "$container")" == 0 ]] || {
+  echo 'Isolated PVE runtime validation failed; previous Release retained' >&2
+  exit 1
+}
 grep -q "PVE_DOCKER_ISOLATED_VERIFICATION_COMPLETE major=$major" "$work/validation.log"
 
 release_image="oneclickvirt/pve:$major"
