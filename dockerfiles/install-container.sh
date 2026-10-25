@@ -37,7 +37,15 @@ printf 'deb [signed-by=/usr/share/keyrings/proxmox-container.gpg] http://downloa
 apt-get update
 # pve-manager includes the VM and CT tools. The proxmox-ve metapackage would
 # additionally install a host kernel, which a Docker container cannot boot.
+if [[ "$major" == 7 ]]; then
+    # PVE 7's ifupdown2 postinst uses this installer marker to defer ifreload.
+    # A Docker image build must not apply network configuration.
+    touch /proxmox_install_mode
+fi
 apt-get install -y --no-install-recommends pve-manager
+if [[ "$major" == 7 ]]; then
+    rm -f /proxmox_install_mode /tmp/.ifupdown2-first-install
+fi
 dpkg-query -W -f='${Status}\n' pve-manager | grep -qx 'install ok installed'
 dpkg-query -W -f='${Version}\n' pve-manager | grep -E "^${major}\."
 test -x /usr/sbin/qm
