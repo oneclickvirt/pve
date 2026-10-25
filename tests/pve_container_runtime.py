@@ -34,6 +34,19 @@ with urllib.request.urlopen(request,context=context,timeout=10) as r:
 print('PAM_API_LOGIN_OK')
 '''
 
+GUEST_CONSOLE = '''import socket
+s=socket.socket(socket.AF_UNIX,socket.SOCK_STREAM)
+s.settimeout(10)
+s.connect('/var/run/qemu-server/900001.serial0')
+while True:
+    try:
+        data=s.recv(65536)
+    except TimeoutError:
+        continue
+    if not data:break
+    print(data.decode(errors='replace'),end='',flush=True)
+'''
+
 
 def main():
     p=argparse.ArgumentParser()
@@ -71,6 +84,8 @@ def main():
     with tempfile.TemporaryDirectory(prefix='pve-auth-') as folder:
         secret=Path(folder)/'root-password';password=secrets.token_urlsafe(24)
         secret.write_text(password);secret.chmod(0o600)
+        console_path=Path(folder)/'guest-console.log'
+        console=None
         try:
             run(['docker','run','-d','--name',name,'--hostname',name,'--privileged','--cgroupns=private',
                  '--tmpfs','/run','--tmpfs','/run/lock','--tmpfs','/tmp',
@@ -109,8 +124,12 @@ def main():
             dex('qm','set',vmid,'--virtio0',volume,'--boot','order=virtio0','--ide2','local:cloudinit',
                 '--ipconfig0','ip=10.76.0.2/24,gw=10.76.0.1','--nameserver','1.1.1.1')
             dex('qm','start',vmid)
+            with console_path.open('wb') as log:
+                console=subprocess.Popen(['docker','exec',name,'python3','-u','-c',GUEST_CONSOLE],
+                                         stdout=log,stderr=subprocess.STDOUT)
             print('PVE test VM started; waiting for the guest agent',flush=True)
             boot=wait_guest()
+            print('PVE test VM reached the Alpine guest agent; requesting reboot',flush=True)
             dex('qm','reboot',vmid,'--timeout','120')
             wait_guest(boot)
             print('PVE test VM boot and reboot verified',flush=True)
@@ -126,10 +145,17 @@ def main():
                   'https_pam':True,'qm_boot_reboot':'tcg','container_restart':True,
                   'password_change_persistent':True,'host_units_masked':True}),flush=True)
         except BaseException:
+            if console_path.is_file():
+                print('PVE test guest console (last 6000 characters):',flush=True)
+                print(console_path.read_text(errors='replace')[-6000:],flush=True)
             subprocess.run(['docker','logs','--tail','100',name],check=False)
             subprocess.run(['docker','exec',name,'systemctl','--failed','--no-pager'],check=False)
             raise
         finally:
+            if console is not None and console.poll() is None:
+                console.terminate()
+                try:console.wait(timeout=10)
+                except subprocess.TimeoutExpired:console.kill();console.wait(timeout=10)
             subprocess.run(['docker','rm','-f',name],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
 
 
