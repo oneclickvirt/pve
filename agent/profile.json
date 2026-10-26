@@ -1,0 +1,45 @@
+{
+  "repository": "oneclickvirt/pve",
+  "branch": "main",
+  "skill_name": "oneclickvirt-pve",
+  "purpose": "Operate and troubleshoot pve instances deployed with the OneClickVirt scripts.",
+  "notes": [
+    "Read the platform precheck and installation pages before changing a host.",
+    "Use the existing host runtime and its credentials. Instance IDs and names remain the native runtime identifiers.",
+    "MCP starts read-only. Set ONECLICKVIRT_MCP_ALLOW_WRITE=1 on the intended host to expose start, graceful stop and restart; deletion, reinstall and arbitrary shell commands are not exposed.",
+    "PVE uses pvesh and the cluster-reported node/type; qemu and lxc guests are kept distinct. ARM64 PVE packages are community PXVIRT."
+  ],
+  "guide": "https://www.spiritlhl.net/guide/agent_integrations.html",
+  "releases": false,
+  "runtime": "pve",
+  "binary": "pvesh",
+  "platform_guide": "https://www.spiritlhl.net/guide/pve/pve_precheck.html",
+  "mcp": true,
+  "source_files": [
+    "dockerfiles/build-modern.sh",
+    "dockerfiles/build.sh",
+    "dockerfiles/container-certificates.sh",
+    "dockerfiles/container-entrypoint.sh",
+    "dockerfiles/install-container.sh",
+    "extra_scripts/check-dns.sh",
+    "extra_scripts/clear_interface_route_cache.sh",
+    "extra_scripts/configure_macos.sh",
+    "extra_scripts/configure_network.sh",
+    "extra_scripts/install_ifupdown2.sh",
+    "extra_scripts/wireless/default.sh",
+    "extra_scripts/wireless/wireless.sh",
+    "patches/apply_patch.sh",
+    "scripts/build_backend.sh",
+    "scripts/build_nat_network.sh",
+    "scripts/buildct.sh",
+    "scripts/buildct_onlyv6.sh",
+    "scripts/buildvm.sh"
+  ],
+  "purpose_zh": "管理和排查由 OneClickVirt 脚本部署的 Proxmox VE 虚拟机与 LXC 容器。",
+  "notes_zh": [
+    "变更宿主机前，先阅读平台准备和安装页。",
+    "使用本机已有运行环境及凭据；实例名称和 ID 保持原运行环境的标识。",
+    "MCP 默认只读。在目标主机设置 ONECLICKVIRT_MCP_ALLOW_WRITE=1 后才提供启动、正常关机和重启；不提供删除、重装或任意 Shell 执行。",
+    "使用集群返回的节点和实例类型调用 pvesh，区分 qemu 与 lxc。ARM64 PVE 使用社区 PXVIRT 软件包。"
+  ]
+}
