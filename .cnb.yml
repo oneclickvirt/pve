@@ -1,24 +1,45 @@
 main:
-  push: &publish-cnb
-    - &mirror-job
-      name: mirror-validated-pve-images
-      env:
-        CNB_VERIFY_PULLS: "true"
-      services:
-        - docker
-      docker:
-        image: cnbcool/default-build-env
-      stages:
-        - name: install registry copy tools
-          script: |
-            set -eu
-            apt-get update
-            apt-get install -y --no-install-recommends python3 skopeo
-        - name: copy validated Release images and verify CNB Docker pulls
-          script: python3 dockerfiles/publish-cnb.py
-          timeout: 2h
-  "crontab: 47 * * * *":
-    - <<: *mirror-job
-      env:
-        CNB_VERIFY_PULLS: "false"
-  web_trigger_publish_images: *publish-cnb
+  push:
+  - &id004
+    name: mirror-validated-pve-images
+    env:
+      CNB_VERIFY_PULLS: 'true'
+    services: &id001
+    - docker
+    docker: &id002
+      image: cnbcool/default-build-env
+    stages: &id003
+    - name: install registry copy tools
+      script: 'set -eu
+
+        apt-get update
+
+        apt-get install -y --no-install-recommends python3 skopeo
+
+        '
+    - name: copy validated Release images and verify CNB Docker pulls
+      script: python3 dockerfiles/publish-cnb.py
+      timeout: 2h
+  - &id005
+    name: index-public-documentation
+    stages:
+    - name: Index public documentation
+      type: knowledge:update
+      options:
+        include:
+        - README*.md
+        - skills/oneclickvirt-pve/SKILL.md
+        - skills/oneclickvirt-pve/SKILL_ZH.md
+        issueSyncEnabled: false
+        ignoreProcessFailures: false
+  'crontab: 47 * * * *':
+  - name: mirror-validated-pve-images
+    env:
+      CNB_VERIFY_PULLS: 'false'
+    services: *id001
+    docker: *id002
+    stages: *id003
+  web_trigger_publish_images:
+  - *id004
+  api_trigger_knowledge:
+  - *id005
