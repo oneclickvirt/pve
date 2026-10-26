@@ -30,7 +30,7 @@ Use `--client claude` or `--client openclaw` for another client. Download and ru
 
 ## MCP
 
-Requires Python 3.9+. The adapter uses existing local commands and their existing permissions; it does not install a virtualization runtime. Merge the installed `mcp.example.json` into the client configuration. For a remote host, run its adapter over noninteractive SSH.
+Requires Python 3.9+. The adapter uses existing local commands and their existing permissions; it does not install a virtualization runtime. Merge the generated `mcp.codex.toml`, `mcp.claude.json`, or `mcp.openclaw.json` into that client's existing configuration. For a remote host, run its adapter over noninteractive SSH.
 
 Call `integration_info` first for capabilities and prerequisites.
 
