@@ -31,7 +31,7 @@ jobs:
         mkdir -p build
         CGO_ENABLED=0 GOARCH=${{ matrix.architecture }} GOOS=linux go build -o build/ndpresponder .
     - name: Upload to GitHub Releases
-      uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
+      uses: softprops/action-gh-release@8a0cd651e5b2365bd640854a3fa5dfc70e4875f3 # v3.0.4
       with:
         files: build/ndpresponder
         tag_name: ${{ matrix.architecture == 'amd64' && 'ndpresponder_x86' || 'ndpresponder_aarch64' }}
@@ -42,7 +42,7 @@ jobs:
         arch_suffix=$([[ "${{ matrix.architecture }}" == "amd64" ]] && echo "x86" || echo "aarch64")
         docker build -t "spiritlhl/ndpresponder_${arch_suffix}:latest" .
     - name: Log in to Docker Hub
-      uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
+      uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
       with:
         username: ${{ secrets.DOCKER_USERNAME }}
         password: ${{ secrets.DOCKER_PASSWORD }}
